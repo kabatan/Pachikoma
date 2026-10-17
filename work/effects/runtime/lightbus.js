@@ -246,7 +246,7 @@
           for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: smooth(lt0 / .25) * fadeEnv(.25, .3), v: w * (isE ? 1.4 : 1) }); break; }
         case 'flash': {
           const hz = Math.min(p.hz || 2, 3), lim = p.limit || 99; const k = Math.floor(lt0 * hz);
-          if (k < lim) { const ph = lt0 * hz - k; const w = Math.exp(-ph * 5.5) * (1 - Math.exp(-ph * 90));
+          if (k < lim) { const ph = lt0 * hz - k; const w = Math.exp(-ph * 5.5) * (1 - Math.exp(-ph * 16));   // 立ち上がりを数フレームに(暗→一気に白、の1コマを作らない)
             for (let i = 0; i < N; i++) if (sel[i]) add(i, colAt(i), w * (isP ? 1.6 : isE ? 3.2 : 1.8)); }
           break; }
         case 'bloom': {

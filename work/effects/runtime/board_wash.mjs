@@ -28,6 +28,7 @@ export function makeBoardWash(geom, adapter, { radius = 640, gain = 2.2, sigma =
         if (navy > 0) { const lum = (R + G + Bc) / 3 * .35; R = R * (1 - navy) + lum * .18 * navy; G = G * (1 - navy) + lum * .45 * navy; Bc = Bc * (1 - navy) + lum * 1.5 * navy; }
         if (sat !== 1) { const lum = (R + G + Bc) / 3; R = Math.max(0, lum + (R - lum) * sat); G = Math.max(0, lum + (G - lum) * sat); Bc = Math.max(0, lum + (Bc - lum) * sat); }   // 白っぽく褪せる場面は、色を濃く(彩度を上げる)
         { const mx = Math.max(R, G, Bc), mn = Math.min(R, G, Bc); if (mx > 1.15) { const f = 1 - (mn / mx) * (1 - 1.15 / mx); R *= f; G *= f; Bc *= f; } }   // 白い閃光で盤面全体が白飛びして玉と釘を隠さない: 白に近い成分だけ上限を設ける(彩度のある色は変えない)
+        { const mx = Math.max(R, G, Bc), mn = Math.min(R, G, Bc); if (mx > .4) { const f = 1 - .6 * (mn / mx); R *= f; G *= f; Bc *= f; } }   // 白に近い光は盤を灰色の膜にして『白く飛ぶ』ので、白っぽいほど弱める(色のついた光は変えない)
         if (red > 0) { const lum = (R + G + Bc) / 3, m2 = Math.min(1, red); R = R * (1 - m2) + lum * 2.3 * m2; G = G * (1 - m2) + lum * .08 * m2; Bc = Bc * (1 - m2) + lum * .22 * m2; }   // 赤の場面は、色をクリムゾンへ寄せる(紫に濁らせない)
         if (rainbow > 0) {   // JP: 8か所の面光源がそれぞれ別の色相で回り、交互に強く点滅する(花びらと縁の色の平均だと灰に混ざって弱いため)
           const hue = ((s / SPOTS.length) + t * .9) % 1, br = .45 + .55 * (.5 + .5 * Math.sin(6.28318 * 5 * t + s * 1.9)), hh = hue * 6, f = hh - Math.floor(hh);

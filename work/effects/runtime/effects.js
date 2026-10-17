@@ -68,6 +68,7 @@
       }
       // 同時に複数の玉が落ちる時(最大3球・0.6秒間隔): 着地の演出は新しい着地を優先して上書きする。前の着地の演出(別の種類)は途中で畳み、1.0秒の山場を重ねない(調整担当メモ 10/17)
       if (['lamp123', 'dup_protect', 'lamp4', 'lamp5'].includes(id)) for (const o of ['lamp123', 'dup_protect', 'lamp4', 'lamp5']) if (o !== id) this.stop(o);
+      if (this.lcdOk && ['lamp123', 'dup_protect', 'lamp4', 'lamp5'].includes(id)) root.LCD.stop(id);   // 同じ種類の着地が続いた時も、前の液晶(たとえば初回の『1灯』)は畳む。新しい着地の灯の数と食い違う絵を残さない(新しい方が液晶を使う種類なら次のフレームに始まる)
       // 1〜3灯の重複ルーレット(約3秒、時計は止めない)の最中に次の玉が着いたら、ルーレットも畳んで新しい着地を優先する(調整担当の条件 10/17)。4灯以上は規則が着地を遅らせるので対象外
       if (['lamp123', 'dup_protect', 'lamp4', 'lamp5'].includes(id) && !this._block) for (const o of ['roulette', 'ascend']) if (this.dir.isActive(o)) this.stop(o);
       if (this.lcdOk) {                                  // 残り時間(右上)は start から timeup/結果まで常設

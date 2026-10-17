@@ -79,11 +79,12 @@
     }
   });
   // 押した後の画面: 「追加! +玉 +秒」だけ(選択画面の文言は出さない)。尺3.0秒。玉は皿へ注がれ、そのあと「スタート!」で時計が動く
-  LCD.scene({ id: 'add100', dur: 3, cover: true,
+  LCD.scene({ id: 'add100', dur: 9.5, cover: true,   // 払い出しが終わって start が引き継ぐまで画面を保つ(通常画面を1コマも出さない)
     assets: [...C.assets, ...C.digitAssets(), 'flip:shock_2'],
     start() { LCD.stop('timeup'); LCD.flash(.4, '#fff1bf', 5); LCD.shake(12, .3); LCD.punch(.04); },
+    update(sc) { if (LCD.active.some((x) => x.id === 'start')) sc.t = 99; },
     draw(c, t, sc) {
-      C.fade(c, t, 3, .3, c => {
+      C.fade(c, Math.min(t, 2.7), 3, .3, c => {
         const R = LCD.rules(), balls = R.loanBalls || 15, sec = R.extraSeconds || 25;
         C.field(c, t, { rank: 3 }); LCD.dim(c, .08, '#420b1f');
         LCD.add(c, 'rays_soft.png', 640, 330, { w: 1540, h: 1100, a: .34, rot: t * .11, tint: '#ffd49a' }); C.confetti(c, t, 80, true);

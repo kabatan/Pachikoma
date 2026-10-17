@@ -252,7 +252,7 @@
       c.fillStyle=sg;c.fillRect(-w/2,-h/2,w,h);c.restore();}
     c.restore();
   };
-  B.scene({id:'ticket',dur:2.8,fade:.08,cover:true,assets:[...B.assets,...B.digits(),...B.titles('get'),'flare_ring.png'],
+  B.scene({id:'ticket',dur:9.5,fade:.08,cover:true,assets:[...B.assets,...B.digits(),...B.titles('get'),'flare_ring.png'],
     start(sc){B.init(sc);sc.S.count=0;sc.S.max=0;},
     update(sc,dt){
       B.step(sc,dt);
@@ -266,7 +266,7 @@
       if(sc.S.count>=tot&&tot>0&&!sc.S.full){sc.S.full=1;LCD.flash(.28,'#fff0c4',9);LCD.shake(7,.25);B.burst(sc,60,640,350,.9);}
     },
     draw(c,t,sc){
-      const a=B.exit(t,2.8,.08),tot=LCD.rules().loanBalls,cnt=sc.S.count,pg=clamp(cnt/tot);
+      const a=B.exit(Math.min(t,2.7),2.8,.08),tot=LCD.rules().loanBalls,cnt=sc.S.count,pg=clamp(cnt/tot);
       // 金の盤面(全面)。上下の帯だけにしない
       LCD.blit(c,'bg_gold.jpg',640,360,{w:1280,h:720});
       LCD.add(c,'rays_soft.png',640,330,{s:2.8,rot:t*.06,a:.4,tint:'#ffe3a0'});

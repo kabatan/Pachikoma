@@ -914,7 +914,7 @@
      "label": "盤面を暗くして溜める(花びらの全消灯の間も暗いまま。枠が白く見えない)",
      "pat": "blackout",
      "p": {
-      "level": 0.12
+      "level": 0.22
      }
     },
     {
@@ -960,7 +960,7 @@
      "label": "白く弾ける",
      "pat": "flash",
      "p": {
-      "color": "#ffffff",
+      "color": "#ffb4d6",
       "hz": 1.5,
       "limit": 1,
       "targets": "all"
@@ -985,7 +985,7 @@
      "label": "全周が白",
      "pat": "flash",
      "p": {
-      "color": "#ffffff",
+      "color": "#ffb4d6",
       "hz": 1.5,
       "limit": 1
      }

@@ -76,7 +76,15 @@
       const pl = touch.plan[sc.id]; if (!pl) continue;
       for (sc.touchI = sc.touchI || 0; sc.touchI < pl.length && pl[sc.touchI].t <= sc.t + TOUCH_LOOK; sc.touchI++) if (pl[sc.touchI].t > sc.t) touchQueue(pl[sc.touchI]);
     }
+    if (!touch.q.length) touchKeep();
     touchStep();
+  }
+  // いつ始まるか分からないシーン(前のシーンから NEXT で呼べない)は、最初の TOUCH_FIRST 秒ぶんの素材を空いたフレームで順番に触り続ける。復号キャッシュから落ちても次の周回で戻る。3フレームに1枚。
+  const KEEP = ['timeup', 'add100', 'finish_count', 'result'];
+  function touchKeep() {
+    if (touch.keepN === undefined) { touch.keepN = 0; touch.keep = KEEP.flatMap((id) => (touch.plan[id] || []).filter((e) => e.t < TOUCH_FIRST)); }
+    if (!touch.keep.length || ++touch.keepN % 3) return;
+    touch.q.push(touch.keep[(touch.keepN / 3) % touch.keep.length | 0]);
   }
   LCD.init = async function (opt = {}) {
     LCD.rootUrl = opt.root || '/';
@@ -149,6 +157,7 @@
   // 全画面の強い明滅は1秒に3回まで(光過敏対策)。超える分は弱める
   LCD.flash = (a, color = '#fff', decay = 6) => {
     const now = LCD.t; LCD.flashLog = LCD.flashLog.filter((x) => now - x < 1);
+    a = Math.min(a, .42);   // 全面の閃光は足し算で白く飛ばない強さまで(監督 10/17: 囲いの内側が1コマ白く飛ぶ)
     if (a > .55) { if (LCD.flashLog.length >= 3) a = .35; else LCD.flashLog.push(now); }
     if (a > LCD.flashA) { LCD.flashA = a; LCD.flashC = color; } LCD.flashDecay = decay;
   };
