@@ -77,3 +77,9 @@ LEDを追加した場合は、12V電源を入れた後、シリアルモニタ�
 ## 動作確認
 
 ブラウザ連携の自動テストは `node work/game_demo/play/cabinet_serial_test.mjs` で実行できます。2026年10月17日、ESP32 DevKit / WROOM-32をPCのUSBに接続し、2個の実ボタンから `BTN,FIRE` / `BTN,CHALLENGE` を受信、Chromeのゲーム画面で勝負と発射が反映されることを確認しました。オプションの12V LEDは未接続のため、点灯動作は未検証です。
+
+## 匿名プレイ履歴
+
+通常のゲーム画面で始めたプレイは、1プレイごとに匿名IDを付けて `work/game_demo/ui/logs/human/YYYYMMDD/<プレイID>.json` に保存します。開始直後から操作・球の結果・最終成績を更新するため、途中で画面を閉じた場合も `in_progress` の履歴が残ります。氏名などの入力はありません。キーボード、画面、ESP32ボタンの操作元も区別します。通信に失敗した更新はブラウザ内に一時保存し、次回起動時に再送します。`?nolog`、`?qa`、`?manual` では収集しません。
+
+一覧をCSVにするには、プロジェクトルートから `node work/game_demo/play/export_human_history.mjs > human_play_history.csv` を実行します。詳細は各JSONファイルの `events` にあります。この履歴はPC内にだけ保存され、GitHubには含めません。

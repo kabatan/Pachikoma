@@ -10,9 +10,9 @@ export class SessionLog {
     this.enabled = enabled; this.endpoint = endpoint; this.sink = sink; this.id = null; this.lines = []; this.httpOk = true;
     this.queue = Promise.resolve(); this.stats = { httpWrites:0,httpFailures:0,localWrites:0,pending:0 };
   }
-  start(rules) {
+  start(rules, { kind = 'simulation', playId = null } = {}) {
     this.id = `${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15)}-${Math.random().toString(16).slice(2, 10)}`;
-    this.write('start', { rules, creditInput: 'PC simulation' });
+    this.write('start', { rules, kind, playId, creditInput: kind === 'human' ? 'ESP32 or operator input' : 'PC simulation' });
   }
   /** game: MedalGame（台帳のスナップショットを一緒に残す） */
   write(kind, detail, game = null) {

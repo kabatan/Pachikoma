@@ -15,18 +15,22 @@ export const KEY_ACTIONS = (ctrl) => ({
   Escape: () => (ctrl.confirmFinish ? 'cancelFinish' : 'quit'),
 });
 
-export function attachInput(ctrl, { target = window, audio = null, overlayRoot = null } = {}) {
+export function attachInput(ctrl, { target = window, audio = null, overlayRoot = null, onInput = null } = {}) {
   const map = KEY_ACTIONS(ctrl);
   const wake = () => { audio?.unlock?.(); };
   const onKey = (e) => {
     if (e.repeat || !(e.code in map)) return;
     e.preventDefault(); wake();
-    ctrl.dispatch(map[e.code]());
+    const phase = ctrl.phase, action = map[e.code]();
+    const accepted = ctrl.dispatch(action);
+    onInput?.({ source: 'keyboard', action, accepted, phase }, ctrl.game);
   };
   target.addEventListener('keydown', onKey);
   const onClick = (e) => {
     const el = e.target.closest?.('[data-action]'); if (!el) return;
-    wake(); ctrl.dispatch(el.dataset.action);
+    const phase = ctrl.phase, action = el.dataset.action;
+    wake(); const accepted = ctrl.dispatch(action);
+    onInput?.({ source: 'pointer', action, accepted, phase }, ctrl.game);
   };
   overlayRoot?.addEventListener('pointerdown', onClick);
   return () => { target.removeEventListener('keydown', onKey); overlayRoot?.removeEventListener('pointerdown', onClick); };

@@ -35,10 +35,11 @@ const setAssemblyBalls = connectAssemblyBalls(hr, pa.transforms);
 const pack = await connectLayerPack(hr, q.has('pack') ? q.get('pack') : DEFAULT_PACK, { dummyEntries: Gen.makeLayerManifest(12, { seed: 1 }) });
 const app = await createMedalApp(document.getElementById('stage'), {
   hooks: { launchBall(shot, aim, dir) { pa.setAim(aim, dir); pa.launch(shot.id); }, cancelFlights() { pa.reset(); }, canReset() { return app.presenter.count.done; } },
-  rulesUrl: config.rules, seed, quiet: q.has('quiet'), music: false, log: !q.has('nolog'), manual: true,
+  rulesUrl: config.rules, seed, quiet: q.has('quiet'), music: false, log: !q.has('nolog'), human: !q.has('nolog') && !q.has('qa') && !q.has('manual'), manual: true,
 });
 const { ctrl, presenter } = app, effects = new EffectsBus();
-const cabinet = new CabinetSerial({ serial: navigator.serial, ctrl, button: document.getElementById('serial-connect'), status: document.getElementById('serial-status') });
+app.history?.setContext({ configName: config.name, stageDir: config.stageDir, rulesUrl: config.rules, seed });
+const cabinet = new CabinetSerial({ serial: navigator.serial, ctrl, button: document.getElementById('serial-connect'), status: document.getElementById('serial-status'), onInput: app.onInput });
 await cabinet.init();
 const howtoDur = await fetch(new URL('../../effects/spec/events.json', import.meta.url)).then(r => r.json()).then(j => j.events.find(e => e.id === 'howto')?.dur).catch(() => null);   // 説明の長さは演出の仕様(events.json)に従う
 ctrl.howtoSeconds = Number(q.get('howto') ?? howtoDur ?? 5.2);   // 開始前のルール説明(時計に含めない・もう一度押すと飛ばせる)。?howto=0 で無効

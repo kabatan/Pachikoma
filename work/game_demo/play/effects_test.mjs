@@ -22,13 +22,16 @@ try {
 } finally { console.error = oldError; }
 
 // キーを保持してrepeatが来ても再発射しない。ポインタも1回の押下だけを配送する。
-const keys = {}, pointers = {}, actions = [];
+const keys = {}, pointers = {}, actions = [], humanInputs = [];
 const surface = handlers => ({ addEventListener(k, fn) { handlers[k] = fn; }, removeEventListener(k) { delete handlers[k]; } });
-const detach = attachInput({ phase: 'Ready', dispatch: a => actions.push(a) }, { target: surface(keys), overlayRoot: surface(pointers) });
+const detach = attachInput({ phase: 'Ready', dispatch: a => { actions.push(a); return true; } }, { target: surface(keys), overlayRoot: surface(pointers), onInput: input => humanInputs.push(input) });
 keys.keydown({ code: 'Space', repeat: false, preventDefault() {} });
 for (let i = 0; i < 10; i++) keys.keydown({ code: 'Space', repeat: true });
 pointers.pointerdown({ target: { closest: () => ({ dataset: { action: 'fire' } }) } });
 assert.deepEqual(actions, ['fire', 'fire']); detach();
+assert.deepEqual(humanInputs.map(input => [input.source, input.action, input.accepted]), [
+  ['keyboard', 'fire', true], ['pointer', 'fire', true],
+]);
 
 const base = JSON.parse(readFileSync(new URL('../rules/medal_game.json', import.meta.url)));
 const events = [];

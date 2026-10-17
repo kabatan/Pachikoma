@@ -2,7 +2,8 @@
 //   node play/serve.mjs [port=8792]   → http://127.0.0.1:8792/game_demo/play/index.html
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFile, appendFile, mkdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile, appendFile, mkdir, writeFile, rename, unlink } from 'node:fs/promises';
 import { extname, join, normalize, resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url))); const LOGS = join(ROOT, 'game_demo', 'ui', 'logs');
@@ -18,15 +19,45 @@ const server = createServer(async (req, res) => {
       await appendFile(join(LOGS, new Date().toISOString().slice(0, 10).replace(/-/g, '') + '.jsonl'), body.replace(/\n/g, ' ') + '\n');
       res.writeHead(204).end(); return;
     }
+    if (req.method === 'POST' && url.pathname === '/api/human-play') {
+      if (!req.headers['content-type']?.startsWith('application/json')) { res.writeHead(415).end(); return; }
+      const chunks = []; let size = 0;
+      for await (const chunk of req) {
+        size += chunk.length;
+        if (size > 2_000_000) { res.writeHead(413).end(); return; }
+        chunks.push(chunk);
+      }
+      const doc = JSON.parse(Buffer.concat(chunks).toString());
+      if (doc.schemaVersion !== 1 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(doc.playId) ||
+          !['in_progress', 'completed'].includes(doc.status) || !Number.isSafeInteger(doc.revision) || doc.revision < 1 ||
+          typeof doc.startedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(doc.startedAt) || !Number.isFinite(Date.parse(doc.startedAt)) ||
+          !Array.isArray(doc.events) || doc.events.length > 2000 || !doc.result || typeof doc.result !== 'object') {
+        res.writeHead(400).end(); return;
+      }
+      const day = doc.startedAt.slice(0, 10).replace(/-/g, '');
+      const dir = join(LOGS, 'human', day), path = join(dir, `${doc.playId}.json`);
+      await mkdir(dir, { recursive: true });
+      let prior = null;
+      try { prior = JSON.parse(await readFile(path, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+      if (!prior || prior.revision <= doc.revision) {
+        const temp = join(dir, `.${doc.playId}.${randomUUID()}.tmp`);
+        try { await writeFile(temp, JSON.stringify(doc) + '\n'); await rename(temp, path); }
+        finally { await unlink(temp).catch(() => {}); }
+      }
+      res.writeHead(204).end(); return;
+    }
     // 規則正本のdocs/も配信する。プロジェクト全体は公開しない。
     // 演出側(work/effects)はプロジェクトルート基準の絶対パス(/work/..., /anim/...)で素材を読む。
     if (process.env.SERVE_LOG) appendFile(process.env.SERVE_LOG, decodeURIComponent(url.pathname) + '\n').catch(() => {});   // 配布物の洗い出し用(読まれたファイルの記録)
     let pathname = decodeURIComponent(url.pathname);
+    if (pathname.startsWith('/game_demo/ui/logs/') || pathname.startsWith('/work/game_demo/ui/logs/')) { res.writeHead(403).end(); return; }
     const anim = pathname.startsWith('/anim/'); if (pathname.startsWith('/work/')) pathname = pathname.slice(5);
     const docs = pathname.startsWith('/docs/');
     const root = docs ? DOCS : anim ? resolve(ROOT, '..') : ROOT;
     const path = normalize(join(root, docs ? pathname.slice(6) : pathname));
     const rel = relative(root, path); if (!rel || rel.startsWith('..') || isAbsolute(rel)) { res.writeHead(403).end(); return; }   // Windowsの区切り文字(\\)でも判定できる
+    const logRel = relative(LOGS, path);
+    if (!logRel.startsWith('..') && !isAbsolute(logRel)) { res.writeHead(403).end(); return; }
     const data = await readFile(path); res.writeHead(200, { 'content-type': TYPES[extname(path)] ?? 'application/octet-stream', 'cache-control': 'no-store' }).end(data);
   } catch (e) { res.writeHead(e.code === 'ENOENT' ? 404 : 500).end(String(e.message)); }
 });

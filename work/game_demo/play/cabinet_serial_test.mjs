@@ -10,7 +10,7 @@ assert.deepEqual(parseCabinetLine('BTN,FIRE'), { type: 'button', name: 'FIRE' })
 assert.deepEqual(parseCabinetLine('BTN,CHALLENGE'), { type: 'button', name: 'CHALLENGE' });
 assert.equal(parseCabinetLine('BTN,RESET'), null);
 
-const actions = [], sent = [];
+const actions = [], sent = [], humanInputs = [];
 const ctrl = { phase: 'Ready', game: { canFire: true, canAdd: false, lampCount: 2, armed: false }, confirmFinish: false,
   dispatch(action) { actions.push(action); return true; } };
 for (const [phase, left, right] of [
@@ -54,7 +54,7 @@ const port = {
 const serial = { async getPorts() { return []; }, async requestPort() { return port; }, addEventListener() {} };
 const button = { textContent: '', disabled: false, addEventListener() {} };
 const status = { textContent: '' };
-const bridge = new CabinetSerial({ serial, ctrl, button, status });
+const bridge = new CabinetSerial({ serial, ctrl, button, status, onInput: input => humanInputs.push(input) });
 await bridge.init();
 await bridge.choosePort();
 assert.ok(sent.includes('PING\n'));
@@ -66,6 +66,10 @@ bridge.accept('BTN,CHALLENGE');
 ctrl.phase = 'Attract';
 bridge.accept('BTN,FIRE');
 assert.deepEqual(actions, ['fire', 'challenge', 'add', 'start']);
+assert.deepEqual(humanInputs.map(input => [input.source, input.action, input.accepted]), [
+  ['cabinet', 'fire', true], ['cabinet', 'challenge', true],
+  ['cabinet', 'add', true], ['cabinet', 'start', true],
+]);
 bridge.tick(2000);
 await bridge.tx;
 assert.ok(sent.includes('LED,1,1\n'));

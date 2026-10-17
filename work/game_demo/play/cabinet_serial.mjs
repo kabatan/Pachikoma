@@ -24,11 +24,12 @@ export function buttonLeds(ctrl, now) {
 }
 
 export class CabinetSerial {
-  constructor({ serial, ctrl, button, status }) {
+  constructor({ serial, ctrl, button, status, onInput = null }) {
     this.serial = serial;
     this.ctrl = ctrl;
     this.button = button;
     this.status = status;
+    this.onInput = onInput;
     this.port = null;
     this.reader = null;
     this.writer = null;
@@ -128,7 +129,11 @@ export class CabinetSerial {
       this.tick(performance.now());
     } else if (this.ready && message?.type === 'button') {
       const action = cabinetButtonAction(this.ctrl, message.name);
-      if (action) this.ctrl.dispatch(action);
+      if (action) {
+        const phase = this.ctrl.phase;
+        const accepted = this.ctrl.dispatch(action);
+        this.onInput?.({ source: 'cabinet', action, accepted, phase }, this.ctrl.game);
+      }
     }
   }
 
