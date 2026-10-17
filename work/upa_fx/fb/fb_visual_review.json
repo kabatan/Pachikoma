@@ -1,0 +1,267 @@
+{
+  "method": "Local view_image: entire decoded WebP sheets and native-size / half-size JPEG frame contact images. Final preview also opened.",
+  "sheet_count": 17,
+  "sheets": [
+    {
+      "id": "fb_impact_1",
+      "sheet_sha256": "4171cbadbd22d380497ef0997e0dd462300b2dc67b5f13c283904fc3893b4aac",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        2,
+        12,
+        21
+      ],
+      "qa_image": "qa_fb_impact_1.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "細い放射線の長さと密度が3種で異なる。白い核、細い十字、後半の収束と減光を確認。"
+    },
+    {
+      "id": "fb_impact_2",
+      "sheet_sha256": "46197922bc9eaf090852f793a9158741d7d5c4417f838f69bc71bffe83a69652",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        2,
+        12,
+        21
+      ],
+      "qa_image": "qa_fb_impact_2.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "細い放射線の長さと密度が3種で異なる。白い核、細い十字、後半の収束と減光を確認。"
+    },
+    {
+      "id": "fb_impact_3",
+      "sheet_sha256": "1ce22260325e24632e9738e7f8063b9bd87fb1f232b75d77f5ab58f2b4e1c1db",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        2,
+        12,
+        21
+      ],
+      "qa_image": "qa_fb_impact_3.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "細い放射線の長さと密度が3種で異なる。白い核、細い十字、後半の収束と減光を確認。"
+    },
+    {
+      "id": "fb_shock_1",
+      "sheet_sha256": "42ab3afe64c2e22a8c8beda944ffa678453e93183875a42320562d51ee4b1ecc",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        6,
+        8,
+        13
+      ],
+      "qa_image": "qa_fb_shock_1.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "二重リング、細い残像、帯の粒状の明暗、内側の光の面を確認。2種で歪みが異なる。"
+    },
+    {
+      "id": "fb_shock_2",
+      "sheet_sha256": "e2906c0db3f3c7e0a8d3dfdf52bf31348e77d513ef92e102d9106ea0edccb6fd",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        6,
+        8,
+        13
+      ],
+      "qa_image": "qa_fb_shock_2.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "二重リング、細い残像、帯の粒状の明暗、内側の光の面を確認。2種で歪みが異なる。"
+    },
+    {
+      "id": "fb_pillar_1",
+      "sheet_sha256": "1b5a06be7eb03222002c56ac525f66f71ac112efcfa592bef203d161fe6a9671",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        2,
+        8,
+        13
+      ],
+      "qa_image": "qa_fb_pillar_1.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "縦の複数の光条、横の細線、斜めの細線、薄い霧と減光を確認。"
+    },
+    {
+      "id": "fb_pillar_2",
+      "sheet_sha256": "cd7b25df37f3bd4c5fe096cdea0b2d1ddfd790436b7ca5888bd1348647a46a69",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        2,
+        8,
+        13
+      ],
+      "qa_image": "qa_fb_pillar_2.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "縦の複数の光条、横の細線、斜めの細線、薄い霧と減光を確認。"
+    },
+    {
+      "id": "fb_digitburst_1",
+      "sheet_sha256": "247c7ab133ac789abb7279f358741bfb3d8105a985eed49e91a8db4b22898668",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        2,
+        10,
+        17
+      ],
+      "qa_image": "qa_fb_digitburst_1.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "横長の放射線と白い核を確認。後半のコマで五弁の花粒が外側に分布する。"
+    },
+    {
+      "id": "fb_digitburst_2",
+      "sheet_sha256": "be76d020382d68bec79725d86f3d5485b3f21538c591acc6371d0c075f38fa3f",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        2,
+        10,
+        17
+      ],
+      "qa_image": "qa_fb_digitburst_2.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "横長の放射線と白い核を確認。後半のコマで五弁の花粒が外側に分布する。"
+    },
+    {
+      "id": "fb_digitburst_3",
+      "sheet_sha256": "67c7f2aa75d01ed02497a2a1da9e1a8402f62d22cbc52e62d52830f90fac357d",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        2,
+        10,
+        17
+      ],
+      "qa_image": "qa_fb_digitburst_3.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "横長の放射線と白い核を確認。後半のコマで五弁の花粒が外側に分布する。"
+    },
+    {
+      "id": "fb_petals_1",
+      "sheet_sha256": "d46f9c92fd1a3dbc09f2ce7a61ff251a78b14083dfe1345a6918e54b9fc594af",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        9,
+        12,
+        21
+      ],
+      "qa_image": "qa_fb_petals_1.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "下部から上へ移る花びらを確認。大きいぼけた形と小さい輪郭のある形が混在する。"
+    },
+    {
+      "id": "fb_petals_2",
+      "sheet_sha256": "e0668aa2e699ed8571a7ce22e82e692743d345c5abf72726034932bfa1500532",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        11,
+        13,
+        21
+      ],
+      "qa_image": "qa_fb_petals_2.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "下部から上へ移る花びらを確認。大きいぼけた形と小さい輪郭のある形が混在する。"
+    },
+    {
+      "id": "fb_twinkle_1",
+      "sheet_sha256": "2b697134dbbcf8fd18498e07eadd1df1ca9dc07e220e706465cdf9211500932b",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        4,
+        6,
+        9
+      ],
+      "qa_image": "qa_fb_twinkle_1.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "4弁・6弁・5弁の異なる核形状、縦横の長い光条と短い斜めの光条を確認。"
+    },
+    {
+      "id": "fb_twinkle_2",
+      "sheet_sha256": "b60b1f083357496c7c51daaf9eb897309b7edc2fc8f34a14e6e664e4b6a8dc35",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        4,
+        6,
+        9
+      ],
+      "qa_image": "qa_fb_twinkle_2.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "4弁・6弁・5弁の異なる核形状、縦横の長い光条と短い斜めの光条を確認。"
+    },
+    {
+      "id": "fb_twinkle_3",
+      "sheet_sha256": "95df60b643f5e76985fe586310b78ab4d367eb57296ae739bcab413c72250fb7",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        4,
+        6,
+        9
+      ],
+      "qa_image": "qa_fb_twinkle_3.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "4弁・6弁・5弁の異なる核形状、縦横の長い光条と短い斜めの光条を確認。"
+    },
+    {
+      "id": "fb_speed_1",
+      "sheet_sha256": "a40ce45a6212ccfc0b64c286e560a636b87220bb4016e220771c4c53ee7ae346",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        7,
+        9,
+        13
+      ],
+      "qa_image": "qa_fb_speed_1.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "中心の暗い空間、長さと明るさが異なる密な細線、左右で異なる線配置を確認。"
+    },
+    {
+      "id": "fb_speed_2",
+      "sheet_sha256": "2052579ed1b155d38e1c290b027480e8655aeb6262c3ba902fb3f82ae4266921",
+      "opened_entire_sheet": true,
+      "reviewed_frame_indices": [
+        1,
+        9,
+        11,
+        13
+      ],
+      "qa_image": "qa_fb_speed_2.jpg",
+      "native_scale": 1.0,
+      "reduced_scale": 0.5,
+      "observation": "中心の暗い空間、長さと明るさが異なる密な細線、左右で異なる線配置を確認。"
+    }
+  ],
+  "loop_behavior": "集中線は近黒まで減光する周期パルス。圧縮後の末尾と先頭の最大画素差は2種とも1/255。",
+  "commit": {
+    "created": false,
+    "reason": ".git/index.lock creation failed: read-only file system. Escalation for staging own files was rejected."
+  },
+  "runtime_integration_performed": false
+}

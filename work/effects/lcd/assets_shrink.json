@@ -1,0 +1,261 @@
+{
+ "note": "work/game_demo/perf/asset_audit.js の全シーン実測。条件: 本番1440x2560の実描画画素の1.5倍以上を残す。t_<key>_{face,glow,shadow} は同じ倍率で重ねて描かれるので3層まとめて(家族の最大必要量で)縮小。tools/shrink_assets.py が適用",
+ "images": {
+  "glint_1.png": {
+   "orig": [
+    256,
+    256
+   ],
+   "new": [
+    178,
+    178
+   ],
+   "need": [
+    0.461,
+    0.461
+   ],
+   "family": null,
+   "factor": 0.6915
+  },
+  "corner_gold_tl.png": {
+   "orig": [
+    600,
+    600
+   ],
+   "new": [
+    334,
+    334
+   ],
+   "need": [
+    0.371,
+    0.371
+   ],
+   "family": null,
+   "factor": 0.5565
+  },
+  "branch_tr.png": {
+   "orig": [
+    1200,
+    900
+   ],
+   "new": [
+    596,
+    448
+   ],
+   "need": [
+    0.331,
+    0.331
+   ],
+   "family": null,
+   "factor": 0.4965
+  },
+  "corner_gold_tr.png": {
+   "orig": [
+    600,
+    600
+   ],
+   "new": [
+    334,
+    334
+   ],
+   "need": [
+    0.371,
+    0.371
+   ],
+   "family": null,
+   "factor": 0.5565
+  },
+  "plate_A.png": {
+   "orig": [
+    2400,
+    420
+   ],
+   "new": [
+    1602,
+    280
+   ],
+   "need": [
+    0.44,
+    0.445
+   ],
+   "family": null,
+   "factor": 0.6675
+  },
+  "branch_tl.png": {
+   "orig": [
+    1200,
+    900
+   ],
+   "new": [
+    596,
+    448
+   ],
+   "need": [
+    0.331,
+    0.331
+   ],
+   "family": null,
+   "factor": 0.4965
+  },
+  "plate_B6.png": {
+   "orig": [
+    2400,
+    420
+   ],
+   "new": [
+    1400,
+    246
+   ],
+   "need": [
+    0.389,
+    0.215
+   ],
+   "family": null,
+   "factor": 0.5835
+  },
+  "mist_tile.png": {
+   "orig": [
+    1024,
+    1024
+   ],
+   "new": [
+    774,
+    774
+   ],
+   "need": [
+    0.504,
+    0.484
+   ],
+   "family": null,
+   "factor": 0.756
+  },
+  "branch_bl.png": {
+   "orig": [
+    1200,
+    900
+   ],
+   "new": [
+    584,
+    438
+   ],
+   "need": [
+    0.324,
+    0.306
+   ],
+   "family": null,
+   "factor": 0.486
+  },
+  "branch_br.png": {
+   "orig": [
+    1200,
+    900
+   ],
+   "new": [
+    584,
+    438
+   ],
+   "need": [
+    0.324,
+    0.306
+   ],
+   "family": null,
+   "factor": 0.486
+  },
+  "rl_dome.png": {
+   "orig": [
+    2048,
+    2048
+   ],
+   "new": [
+    708,
+    708
+   ],
+   "need": [
+    0.23,
+    0.221
+   ],
+   "family": null,
+   "factor": 0.345
+  },
+  "rl_hub.png": {
+   "orig": [
+    512,
+    512
+   ],
+   "new": [
+    62,
+    62
+   ],
+   "need": [
+    0.08,
+    0.077
+   ],
+   "family": null,
+   "factor": 0.12
+  },
+  "rl_shadow.png": {
+   "orig": [
+    2560,
+    2560
+   ],
+   "new": [
+    1018,
+    1018
+   ],
+   "need": [
+    0.265,
+    0.255
+   ],
+   "family": null,
+   "factor": 0.3975
+  },
+  "rl_lamp_on.png": {
+   "orig": [
+    128,
+    128
+   ],
+   "new": [
+    100,
+    100
+   ],
+   "need": [
+    0.361,
+    0.521
+   ],
+   "family": null,
+   "factor": 0.7815
+  },
+  "rl_lamp_off.png": {
+   "orig": [
+    128,
+    128
+   ],
+   "new": [
+    100,
+    100
+   ],
+   "need": [
+    0.361,
+    0.521
+   ],
+   "family": null,
+   "factor": 0.7815
+  },
+  "rl_rim.png": {
+   "orig": [
+    2048,
+    2048
+   ],
+   "new": [
+    904,
+    904
+   ],
+   "need": [
+    0.294,
+    0.282
+   ],
+   "family": null,
+   "factor": 0.441
+  }
+ }
+}

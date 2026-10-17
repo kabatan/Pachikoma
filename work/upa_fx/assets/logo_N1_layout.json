@@ -1,0 +1,37 @@
+{
+  "canvas": {
+    "width": 2000,
+    "height": 1100
+  },
+  "baseline": 910,
+  "digit": {
+    "center": [
+      784.5,
+      542.0
+    ],
+    "bbox": [
+      481,
+      104,
+      1088,
+      980
+    ]
+  },
+  "unit": {
+    "center": [
+      1426.0,
+      708.5
+    ],
+    "bbox": [
+      1066,
+      385,
+      1786,
+      1032
+    ]
+  },
+  "italic_degrees": 10,
+  "unit_to_digit_font_ratio": 0.5601941747572815,
+  "border_thickness_scale": 1,
+  "coordinates": "top-left origin; bbox [left,top,right-exclusive,bottom-exclusive]",
+  "independent_layers": true,
+  "alpha": "straight"
+}

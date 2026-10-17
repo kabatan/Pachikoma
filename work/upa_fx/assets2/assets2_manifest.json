@@ -1,0 +1,328 @@
+{
+  "version": 2,
+  "canvas_reference": [
+    2560,
+    1440
+  ],
+  "color_space": "sRGB, PNG straight/unassociated RGBA",
+  "normal_blend": [
+    "SRC_ALPHA",
+    "ONE_MINUS_SRC_ALPHA"
+  ],
+  "additive_blend": [
+    "SRC_ALPHA",
+    "ONE"
+  ],
+  "note": "Disable premultiplyAlpha on upload or adjust blend factors consistently. No branch glow asset is required.",
+  "generator": "../generate_sakura.py",
+  "assets": {
+    "flower_1.png": {
+      "width": 256,
+      "height": 256,
+      "usage": "5-petal blossom, frontal",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 41097,
+      "sha256": "3d35be25319d51245b1561ca674f10a822c437e7600e91f2f210ccbd48129352"
+    },
+    "flower_2.png": {
+      "width": 256,
+      "height": 256,
+      "usage": "5-petal blossom, frontal",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 40479,
+      "sha256": "c5ea06e722b62a4bfef6b4d8505d27027042598d167abca3220a8c2d68044fe8"
+    },
+    "flower_3.png": {
+      "width": 256,
+      "height": 256,
+      "usage": "5-petal blossom, oblique",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 28925,
+      "sha256": "73dd0d6da217d7664649031571d5c6fa20ad961bf20c18e0ac5a54352bbf9b82"
+    },
+    "flower_4.png": {
+      "width": 256,
+      "height": 256,
+      "usage": "5-petal blossom, oblique",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 29509,
+      "sha256": "e852a1bd08a97af485bd4b298fe98e3fde48e8beab970f15598aa582763da3b1"
+    },
+    "flower_blur_1.png": {
+      "width": 256,
+      "height": 256,
+      "usage": "Foreground defocused blossom",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 25875,
+      "sha256": "bd1e521f3ba025429abb4b0f074d066ba2c3b5da812ab71798d8f4c3ea8b16f6"
+    },
+    "flower_blur_2.png": {
+      "width": 256,
+      "height": 256,
+      "usage": "Foreground defocused blossom",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 25803,
+      "sha256": "40949a7e6998139a138fb8ac4c23a1aa54a5f8b00ef58b0fd93fbac084402499"
+    },
+    "bud_1.png": {
+      "width": 128,
+      "height": 128,
+      "usage": "Closed blossom bud",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 7119,
+      "sha256": "086b2d2c17592a4ede7f656614de5fd15803d521f45a678d018a3fd0030aa439"
+    },
+    "bud_2.png": {
+      "width": 128,
+      "height": 128,
+      "usage": "Closed blossom bud",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 7083,
+      "sha256": "3f46fee818d7b12b2c28e29a3e186a4283a5463050242f01afd24be1a6eb2b09"
+    },
+    "branch_tl.png": {
+      "width": 1200,
+      "height": 900,
+      "usage": "Foreground sakura branch, tl; texture, buds and clustered blossoms",
+      "blend": "normal",
+      "alpha": "straight",
+      "anchor": "tl",
+      "seed": 21,
+      "bytes": 594810,
+      "sha256": "51143b31f009d1ebc6f51ec6930243c85e9aa1013b4bc12c18eceee14adbbc32"
+    },
+    "branch_tr.png": {
+      "width": 1200,
+      "height": 900,
+      "usage": "Foreground sakura branch, tr; texture, buds and clustered blossoms",
+      "blend": "normal",
+      "alpha": "straight",
+      "anchor": "tr",
+      "seed": 37,
+      "bytes": 559810,
+      "sha256": "ac9f9b9bc59bc4a2199b8d30a1649ed569c7178071cec37be950998c9fb7c8a2"
+    },
+    "branch_bl.png": {
+      "width": 1200,
+      "height": 900,
+      "usage": "Foreground sakura branch, bl; texture, buds and clustered blossoms",
+      "blend": "normal",
+      "alpha": "straight",
+      "anchor": "bl",
+      "seed": 53,
+      "bytes": 506628,
+      "sha256": "f1b2048bcd66a888d70ea575dcb04b27041e5ac55a416a42ba200505b7ed6a32"
+    },
+    "branch_br.png": {
+      "width": 1200,
+      "height": 900,
+      "usage": "Foreground sakura branch, br; texture, buds and clustered blossoms",
+      "blend": "normal",
+      "alpha": "straight",
+      "anchor": "br",
+      "seed": 74,
+      "bytes": 598403,
+      "sha256": "915dd72f3dc234d258ffcb0a54d3d4ab6e05e32724c13ed23412081681bb7773"
+    },
+    "ribbon_1.png": {
+      "width": 1600,
+      "height": 500,
+      "usage": "Tapered luminous sakura/gold orbit with internal filaments and dust",
+      "blend": "additive",
+      "alpha": "straight",
+      "blend_factors": [
+        "SRC_ALPHA",
+        "ONE"
+      ],
+      "bytes": 140712,
+      "sha256": "35353b1f91fcbf7923c40c70ad490887ba794fb4922906ad644e65f9f02442e1"
+    },
+    "ribbon_2.png": {
+      "width": 1600,
+      "height": 500,
+      "usage": "Tapered luminous sakura/gold orbit with internal filaments and dust",
+      "blend": "additive",
+      "alpha": "straight",
+      "blend_factors": [
+        "SRC_ALPHA",
+        "ONE"
+      ],
+      "bytes": 167634,
+      "sha256": "d43a17d100e5d92182ca14ed46d2b785f693a04e8cd18a2e0bc6c42d6730e42a"
+    },
+    "ribbon_3.png": {
+      "width": 1600,
+      "height": 500,
+      "usage": "Tapered luminous sakura/gold orbit with internal filaments and dust",
+      "blend": "additive",
+      "alpha": "straight",
+      "blend_factors": [
+        "SRC_ALPHA",
+        "ONE"
+      ],
+      "bytes": 279370,
+      "sha256": "be5afa44a2439071eaf8a2788504fa51d4201f9862194dc4b7df7a79ec306f9e"
+    },
+    "petal_stream_1.png": {
+      "width": 1600,
+      "height": 700,
+      "usage": "Cherry petal current, three depth tiers and foreground lens blur",
+      "blend": "normal",
+      "alpha": "straight",
+      "particle_count": {
+        "far": 135,
+        "middle": 76,
+        "near": 15
+      },
+      "bytes": 211209,
+      "sha256": "cd70ad0af894e59275addff5b344f5e4101defbee53f8cfcbc0bb6f30cd1727f"
+    },
+    "petal_stream_2.png": {
+      "width": 1600,
+      "height": 700,
+      "usage": "Cherry petal current, three depth tiers and foreground lens blur",
+      "blend": "normal",
+      "alpha": "straight",
+      "particle_count": {
+        "far": 135,
+        "middle": 76,
+        "near": 15
+      },
+      "bytes": 213914,
+      "sha256": "0aec03211567a5f4b753a22a9ce1e20c8441bfbc87346b5fc8ee655ceda70ae2"
+    },
+    "petal_stream_3.png": {
+      "width": 1600,
+      "height": 700,
+      "usage": "Cherry petal current, three depth tiers and foreground lens blur",
+      "blend": "normal",
+      "alpha": "straight",
+      "particle_count": {
+        "far": 135,
+        "middle": 76,
+        "near": 15
+      },
+      "bytes": 204789,
+      "sha256": "5eb073ab247e83419cdfd45058d19e5c8316c33731aa8802a6b3d446f83a8654"
+    },
+    "bg_night_sakura.jpg": {
+      "width": 2560,
+      "height": 1440,
+      "usage": "Night sakura orchard, full moon, textured sky, stars and layered mist; quiet upper center",
+      "blend": "normal",
+      "alpha": "opaque",
+      "dither": "triangular, two independent uniforms [-0.65,+0.65] code values",
+      "seed": 9001,
+      "bytes": 330621,
+      "sha256": "db232cf0b9f0390d4de5fc5d2019eb6c8611c5f8d8f7dfc7bad76559e6515f2b"
+    },
+    "corner_gold_tl.png": {
+      "width": 600,
+      "height": 600,
+      "usage": "Beveled cast gold corner; acanthus scrolls, leaves and sakura rosettes",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 182400,
+      "sha256": "da154dc37450a78808a223af5c77e3b5f68ae87a430494c923d06b26f3ac9ac7"
+    },
+    "corner_gold_tr.png": {
+      "width": 600,
+      "height": 600,
+      "usage": "Mirrored top right cast gold corner",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 188124,
+      "sha256": "556a95e19a7181b57f9ea5e1dfda73484b68d4543616ebcf0b33a472173a29c6"
+    },
+    "edge_gold_h.png": {
+      "width": 1280,
+      "height": 120,
+      "usage": "Horizontal periodic sakura/scroll trim; duplicate seam pixels; repeat in X",
+      "blend": "normal",
+      "alpha": "straight",
+      "wrap": "repeat-x",
+      "seam_gutter_pixels": 1,
+      "bytes": 15904,
+      "sha256": "019c4218cb5a3725219131d74444b0d1080f8ef9bf625ac94bacd3fd3ad50b54"
+    },
+    "crest_sakura.png": {
+      "width": 512,
+      "height": 512,
+      "usage": "Cast gold five-petal sakura emblem; beveled rim, engraved veins and raised pollen",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 151786,
+      "sha256": "f6df3b1373af568ab30a72f5c96e0da22672d944be1c28b44c5ebe0aee76d056"
+    },
+    "crest_glow.png": {
+      "width": 512,
+      "height": 512,
+      "usage": "External gold halo for crest, registered to crest_sakura",
+      "blend": "additive",
+      "alpha": "straight",
+      "blend_factors": [
+        "SRC_ALPHA",
+        "ONE"
+      ],
+      "bytes": 45284,
+      "sha256": "edb77f84b1c57719b4752e7968bc94dc51c0c77501c0b0f0e4ee035df2628eaf"
+    },
+    "petal_mini_1.png": {
+      "width": 64,
+      "height": 64,
+      "usage": "Sharp single cherry petal particle; no defocus",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 2242,
+      "sha256": "92a78d56b2573afa74ab0c950aa69933cf9a7dc7d5f8f45edbda8e96633e84dd"
+    },
+    "petal_mini_2.png": {
+      "width": 64,
+      "height": 64,
+      "usage": "Sharp single cherry petal particle; no defocus",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 2178,
+      "sha256": "449915441d78e607dfa4de171e3b7e96e409765a149296c3611f64f234394db0"
+    },
+    "petal_mini_3.png": {
+      "width": 64,
+      "height": 64,
+      "usage": "Sharp single cherry petal particle; no defocus",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 2412,
+      "sha256": "5d2da929bb6bf554e1eeab9d32cf438e2c489ddb2f4e31ec3210c25cceae3242"
+    },
+    "petal_mini_4.png": {
+      "width": 64,
+      "height": 64,
+      "usage": "Sharp single cherry petal particle; no defocus",
+      "blend": "normal",
+      "alpha": "straight",
+      "bytes": 2584,
+      "sha256": "ab9440e8b1f4ebb48e43b10d1eb4a67e0d259dd3ef16097214fc306ecc061402"
+    },
+    "sparkle_sakura.png": {
+      "width": 128,
+      "height": 128,
+      "usage": "Five-lobed sakura light particle with white hot core",
+      "blend": "additive",
+      "alpha": "straight",
+      "blend_factors": [
+        "SRC_ALPHA",
+        "ONE"
+      ],
+      "bytes": 10537,
+      "sha256": "74becffb46713a2d86e3763f4cb8f0dbd26e47eb83c1eff9979282a3085b86a5"
+    }
+  }
+}

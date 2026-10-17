@@ -1,0 +1,92 @@
+{
+  "RapidFire": false,
+  "ClockStopOnReset": true,
+  "ClockStopOnJackpot": true,
+  "ClockStopBudget": 10,
+  "ClockStopBudgetIncludesJackpot": false,
+  "ResetEffectSeconds": 1.4,
+  "ResetEffectSecondsSingle": 0.5,
+  "ResetEffectSecondsByLamps": [
+    0,
+    0.5,
+    0.5,
+    0.5,
+    6,
+    12
+  ],
+  "JackpotEffectSeconds": [
+    14,
+    16,
+    20,
+    24,
+    28
+  ],
+  "LoanBalls": 15,
+  "InitialSeconds": 70,
+  "ExtraSeconds": 30,
+  "ContinueSeconds": 10,
+  "Awards": [
+    0,
+    1,
+    2,
+    3,
+    16,
+    24,
+    100
+  ],
+  "ResetWeights": [
+    90,
+    8,
+    2,
+    0
+  ],
+  "ResetWeightsByLamps": [
+    null,
+    null,
+    null,
+    null,
+    [
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      85,
+      10,
+      5,
+      0
+    ],
+    null
+  ],
+  "JackpotAwards": [
+    24,
+    40,
+    80,
+    160,
+    500
+  ],
+  "JackpotWeights": [
+    55,
+    25,
+    15,
+    4,
+    1
+  ],
+  "PrizeThresholds": [
+    0,
+    6,
+    26,
+    46,
+    165,
+    543
+  ],
+  "PrizeNames": [
+    "参加賞",
+    "C賞",
+    "B賞",
+    "A賞",
+    "S賞",
+    "SS賞"
+  ]
+}

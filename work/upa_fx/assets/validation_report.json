@@ -1,0 +1,565 @@
+{
+  "checks": {
+    "bokeh_disc.png": {
+      "mode": "RGBA",
+      "size": [
+        192,
+        192
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "ember.png": {
+      "mode": "RGBA",
+      "size": [
+        64,
+        64
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "flare_hex.png": {
+      "mode": "RGBA",
+      "size": [
+        256,
+        256
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "flare_ring.png": {
+      "mode": "RGBA",
+      "size": [
+        512,
+        512
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "flare_streak.png": {
+      "mode": "RGBA",
+      "size": [
+        1024,
+        64
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "glint_1.png": {
+      "mode": "RGBA",
+      "size": [
+        256,
+        256
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "glint_2.png": {
+      "mode": "RGBA",
+      "size": [
+        256,
+        256
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "glint_3.png": {
+      "mode": "RGBA",
+      "size": [
+        256,
+        256
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "glow_soft.png": {
+      "mode": "RGBA",
+      "size": [
+        256,
+        256
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "lantern_1.png": {
+      "mode": "RGBA",
+      "size": [
+        320,
+        420
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "lantern_2.png": {
+      "mode": "RGBA",
+      "size": [
+        320,
+        420
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "lantern_3.png": {
+      "mode": "RGBA",
+      "size": [
+        320,
+        420
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "lantern_halo.png": {
+      "mode": "RGBA",
+      "size": [
+        512,
+        512
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N1_digit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N1_glow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N1_shadow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N1_sil.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N1_unit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N2_digit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N2_glow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N2_shadow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N2_sil.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N2_unit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N3_digit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N3_glow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N3_shadow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N3_sil.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N3_unit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N4_digit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N4_glow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N4_shadow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N4_sil.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N4_unit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N5_digit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N5_glow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N5_shadow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N5_sil.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N5_unit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N6_digit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N6_glow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N6_shadow.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N6_sil.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "logo_N6_unit.png": {
+      "mode": "RGBA",
+      "size": [
+        2000,
+        1100
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "mist_tile.png": {
+      "mode": "RGBA",
+      "size": [
+        1024,
+        1024
+      ],
+      "edge_alpha_max_255": 255,
+      "seam_lr_max_255": 0,
+      "seam_tb_max_255": 0,
+      "seam_lr_mean_255": 0.0,
+      "seam_tb_mean_255": 0.0,
+      "edge_alpha_exception": "opaque periodic tile by specification"
+    },
+    "petal_1.png": {
+      "mode": "RGBA",
+      "size": [
+        160,
+        160
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "petal_2.png": {
+      "mode": "RGBA",
+      "size": [
+        160,
+        160
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "petal_3.png": {
+      "mode": "RGBA",
+      "size": [
+        160,
+        160
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "petal_4.png": {
+      "mode": "RGBA",
+      "size": [
+        160,
+        160
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "petal_5.png": {
+      "mode": "RGBA",
+      "size": [
+        160,
+        160
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "petal_6.png": {
+      "mode": "RGBA",
+      "size": [
+        160,
+        160
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "petal_blur_1.png": {
+      "mode": "RGBA",
+      "size": [
+        160,
+        160
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "petal_blur_2.png": {
+      "mode": "RGBA",
+      "size": [
+        160,
+        160
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "plate_A.png": {
+      "mode": "RGBA",
+      "size": [
+        2400,
+        420
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "plate_B5.png": {
+      "mode": "RGBA",
+      "size": [
+        2400,
+        420
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "plate_B6.png": {
+      "mode": "RGBA",
+      "size": [
+        2400,
+        420
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "plate_S.png": {
+      "mode": "RGBA",
+      "size": [
+        2400,
+        420
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "rays_soft.png": {
+      "mode": "RGBA",
+      "size": [
+        2048,
+        2048
+      ],
+      "edge_alpha_max_255": 0
+    },
+    "spark.png": {
+      "mode": "RGBA",
+      "size": [
+        64,
+        16
+      ],
+      "edge_alpha_max_255": 0
+    }
+  },
+  "background_statistics": {
+    "bg_gold.jpg": {
+      "rgb_unique_values_in_128px_patch": [
+        16,
+        51,
+        51
+      ],
+      "luminance_horizontal_step_mean_abs_255": 0.2613704355314958,
+      "luminance_horizontal_step_p99_255": 1.502600000000001,
+      "same_rgb_adjacent_fraction": 0.6880536417322834,
+      "source_dither_uniform_amplitude_255": 0.85,
+      "inspection_crop_xywh": [
+        1712,
+        304,
+        128,
+        128
+      ]
+    },
+    "bg_night.jpg": {
+      "rgb_unique_values_in_128px_patch": [
+        63,
+        66,
+        72
+      ],
+      "luminance_horizontal_step_mean_abs_255": 0.35610098425196846,
+      "luminance_horizontal_step_p99_255": 5.0,
+      "same_rgb_adjacent_fraction": 0.8491018700787402,
+      "source_dither_uniform_amplitude_255": 0.85,
+      "inspection_crop_xywh": [
+        1712,
+        304,
+        128,
+        128
+      ]
+    },
+    "bg_sakura.jpg": {
+      "rgb_unique_values_in_128px_patch": [
+        21,
+        70,
+        47
+      ],
+      "luminance_horizontal_step_mean_abs_255": 0.29998075787401574,
+      "luminance_horizontal_step_p99_255": 1.5026000000000295,
+      "same_rgb_adjacent_fraction": 0.648560531496063,
+      "source_dither_uniform_amplitude_255": 0.85,
+      "inspection_crop_xywh": [
+        1712,
+        304,
+        128,
+        128
+      ]
+    }
+  },
+  "layout_checks": {
+    "1": {
+      "union_silhouette_matches": true,
+      "bbox_matches": true,
+      "baseline": 910
+    },
+    "2": {
+      "union_silhouette_matches": true,
+      "bbox_matches": true,
+      "baseline": 910
+    },
+    "3": {
+      "union_silhouette_matches": true,
+      "bbox_matches": true,
+      "baseline": 910
+    },
+    "4": {
+      "union_silhouette_matches": true,
+      "bbox_matches": true,
+      "baseline": 910
+    },
+    "5": {
+      "union_silhouette_matches": true,
+      "bbox_matches": true,
+      "baseline": 910
+    },
+    "6": {
+      "union_silhouette_matches": true,
+      "bbox_matches": true,
+      "baseline": 910
+    }
+  },
+  "visual_review": {
+    "status": "pending human/model image inspection",
+    "note": "Numerical texture statistics do not prove absence of visible banding or commercial art quality."
+  },
+  "total_bytes": 12105208,
+  "total_decimal_MB": 12.105208,
+  "file_count": 71
+}

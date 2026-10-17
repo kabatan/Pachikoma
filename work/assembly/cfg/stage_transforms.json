@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "coordinate_frame": "assembly",
+  "axes": "X right, Y up, Z toward viewer; window plane Z=0",
+  "created_at": "2026-10-16T01:17:05.546311+00:00",
+  "revision": "sol49-preserve-sol43",
+  "mapping": "p_assembly_m = Rz @ Ry @ Rx @ p_stage_m + translation_mm / 1000; replaces stage1 TRAY_UNIT root; excludes part-local transforms",
+  "stages": {
+    "stage1": {
+      "translation_mm": [
+        56.6,
+        33.1,
+        189.0
+      ],
+      "rotation_euler_rad": [
+        0,
+        0,
+        0
+      ],
+      "rotation_order": "XYZ",
+      "sources": [
+        {
+          "path": "work/assembly/inputs/stage1/export/parts.json",
+          "selector": "roots[id=TRAY_UNIT].transform (replaces root placement, not an extra offset)",
+          "sha256": "38bdc5a941bd2259f40cff58c31eb2529d6fb04a8720dda0063afdf78a3fc7a2"
+        },
+        {
+          "path": "work/assembly/src/build_whole.py",
+          "selector": "section 3: TRAY_UNIT and child VIS/BALL objects",
+          "sha256": "67ca969e7361007144c0763305cb8c144262e4b5df2ca736ba745a47e7d2866b"
+        }
+      ]
+    },
+    "stage2": {
+      "translation_mm": [
+        0,
+        0,
+        0
+      ],
+      "rotation_euler_rad": [
+        0,
+        0,
+        0
+      ],
+      "rotation_order": "XYZ",
+      "sources": [
+        {
+          "path": "work/assembly/src/import_stage2.py",
+          "selector": "OBJ part.transform is already in dims/window axes; no additional stage offset",
+          "sha256": "ff794359c3f7d075d19260d2d5c480ab2321596188d5ce0cf056793d6b26aa45"
+        },
+        {
+          "path": "work/cabinet/stage2/export/parts.json",
+          "selector": "connections + paths; PATH_DROP parent resolved at refill",
+          "sha256": "b54ac84cb84b792aa17dfbe9fef0b5878739bcb4df6a30aad3150375cec4d1bd"
+        }
+      ]
+    },
+    "stage3": {
+      "translation_mm": [
+        0,
+        0,
+        0
+      ],
+      "rotation_euler_rad": [
+        0,
+        0,
+        0
+      ],
+      "rotation_order": "XYZ",
+      "sources": [
+        {
+          "path": "work/assembly/src/build_whole.py",
+          "selector": "section 2: build3.build_all without additional placement",
+          "sha256": "67ca969e7361007144c0763305cb8c144262e4b5df2ca736ba745a47e7d2866b"
+        }
+      ]
+    },
+    "ring": {
+      "translation_mm": [
+        0,
+        0,
+        0
+      ],
+      "rotation_euler_rad": [
+        0,
+        0,
+        0
+      ],
+      "rotation_order": "XYZ",
+      "sources": [
+        {
+          "path": "work/assembly/src/build_whole.py",
+          "selector": "section 1: ring scene produces window/assembly coordinates",
+          "sha256": "67ca969e7361007144c0763305cb8c144262e4b5df2ca736ba745a47e7d2866b"
+        }
+      ]
+    },
+    "cabinet": {
+      "translation_mm": [
+        0,
+        0,
+        0
+      ],
+      "rotation_euler_rad": [
+        0,
+        0,
+        0
+      ],
+      "rotation_order": "XYZ",
+      "sources": [
+        {
+          "path": "work/assembly/src/build_whole.py",
+          "selector": "backdrop_low/display and camera authored in assembly coordinates",
+          "sha256": "67ca969e7361007144c0763305cb8c144262e4b5df2ca736ba745a47e7d2866b"
+        }
+      ]
+    },
+    "connector": {
+      "translation_mm": [
+        0,
+        0,
+        0
+      ],
+      "rotation_euler_rad": [
+        0,
+        0,
+        0
+      ],
+      "rotation_order": "XYZ",
+      "sources": [
+        {
+          "path": "work/cabinet/connector/export/parts.json",
+          "selector": "assembly coordinates baked in OBJ; identity only"
+        }
+      ]
+    }
+  },
+  "connection_decision": {
+    "adopted": "preserve_sol43_placement",
+    "reason": "A single rigid shift cannot keep the existing tray/petal placement and the stage2 muzzle/board alignment while closing the foot gap. Preserve assembly placement; a redesigned connector or stage2 path geometry is required. No artificial physical connection is claimed.",
+    "intake_assembly_mm": [
+      -123.4,
+      -221.70000000000005,
+      74.0
+    ],
+    "foot_assembly_mm": [
+      -180.0,
+      -254.80000000000004,
+      -115.0
+    ],
+    "residual_foot_minus_intake_mm": [
+      -56.6,
+      -33.1,
+      -189.0
+    ],
+    "candidates": [
+      {
+        "id": "move_stage2_to_stage1",
+        "stage": "stage2",
+        "translation_mm": [
+          56.6,
+          33.1,
+          189.0
+        ],
+        "rotation_euler_rad": [
+          0,
+          0,
+          0
+        ],
+        "residual_mm": [
+          0,
+          0,
+          0
+        ],
+        "muzzle_before_mm": [
+          0.0,
+          122.55961745367603,
+          -55.0
+        ],
+        "muzzle_after_mm": [
+          56.6,
+          155.65961745367602,
+          134.0
+        ],
+        "board_misalignment_mm": [
+          56.6,
+          33.1,
+          189.0
+        ],
+        "reason_not_adopted": "Moves muzzle relative to the unchanged board and shifts lift/gutter relative to ring."
+      },
+      {
+        "id": "move_stage1_to_stage2",
+        "stage": "stage1",
+        "translation_mm": [
+          0,
+          0,
+          0
+        ],
+        "rotation_euler_rad": [
+          0,
+          0,
+          0
+        ],
+        "residual_mm": [
+          0,
+          0,
+          0
+        ],
+        "tray_displacement_mm": [
+          -56.6,
+          -33.1,
+          -189.0
+        ],
+        "reason_not_adopted": "Removes the assembly TRAY_UNIT placement; every tray vertex and ball moves relative to the fixed ring/cabinet."
+      }
+    ],
+    "geometry_notes": [
+      "Existing build_whole uses an assembly-authored simplified lift, not the unconnected sol43 stage2 importer. Its placement is preserved.",
+      "Stage2 PATH_LIFT begins 0.2 mm below SOCKET_FOOT. This separate source geometry offset is not hidden by the stage transform."
+    ],
+    "rigid_distance_constraint": {
+      "foot_to_muzzle_mm": 422.3745741457276,
+      "target_intake_to_fixed_muzzle_mm": 387.79278514349824,
+      "interpretation": "Distances differ; no rigid rotation/translation of stage2 can close the foot gap while keeping its muzzle at the existing board input."
+    }
+  },
+  "source_hash_note": "Source hashes capture the inputs immediately before sol49 extraction; they are provenance, not runtime freshness checks."
+}

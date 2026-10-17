@@ -1,0 +1,11 @@
+* text=auto eol=lf
+*.bat -text
+*.ps1 -text
+*.png binary
+*.webp binary
+*.wav binary
+*.ogg binary
+*.ttf binary
+*.wasm binary
+*.pack binary
+*.part* binary

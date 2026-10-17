@@ -1,0 +1,179 @@
+{
+ "gauge": {
+  "gauge/GAUGE_X_100MM": {
+   "extent_xyz_m": [
+    0.1,
+    0.004,
+    0.004
+   ],
+   "min_xyz_m": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "gauge/GAUGE_Y_100MM": {
+   "extent_xyz_m": [
+    0.004,
+    0.1,
+    0.004
+   ],
+   "min_xyz_m": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "gauge/GAUGE_Z_100MM": {
+   "extent_xyz_m": [
+    0.004,
+    0.004,
+    0.1
+   ],
+   "min_xyz_m": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "gauge_defaultaxes/GAUGE_X_100MM": {
+   "extent_xyz_m": [
+    0.1,
+    0.004,
+    0.004
+   ],
+   "min_xyz_m": [
+    0.0,
+    -0.004,
+    0.0
+   ]
+  },
+  "gauge_defaultaxes/GAUGE_Y_100MM": {
+   "extent_xyz_m": [
+    0.004,
+    0.004,
+    0.1
+   ],
+   "min_xyz_m": [
+    0.0,
+    -0.004,
+    0.0
+   ]
+  },
+  "gauge_defaultaxes/GAUGE_Z_100MM": {
+   "extent_xyz_m": [
+    0.004,
+    0.1,
+    0.004
+   ],
+   "min_xyz_m": [
+    0.0,
+    -0.1,
+    0.0
+   ]
+  },
+  "sphere12": {
+   "center_m": [
+    0.03,
+    0.03,
+    0.03
+   ],
+   "radius_min_m": 0.006,
+   "radius_max_m": 0.006,
+   "diameter_extent_xyz_m": [
+    0.012,
+    0.012,
+    0.012
+   ]
+  },
+  "axes_ok_with_forward=Y_up=Z": true,
+  "axes_ok_with_importer_default": false
+ },
+ "sphere12_payout_path": {
+  "samples": 400,
+  "min_gap_mm": 2.957,
+  "at_arclength_mm": 45.1,
+  "nearest_piece": "COL_PAYOUT_12_6",
+  "center_mm": [
+   26.3,
+   -239.83,
+   -141.43
+  ],
+  "negative_samples": 0
+ },
+ "sphere12_path_res_overflow": {
+  "samples": 300,
+  "min_gap_mm": 0.173,
+  "at_arclength_mm": 76.7,
+  "nearest_piece": "COL_OVF_DUCT_FLOOR",
+  "center_mm": [
+   -13.7,
+   -319.86,
+   -156.8
+  ],
+  "negative_samples": 0,
+  "flap_open_deg": -90
+ },
+ "sphere12_path_res_count": {
+  "samples": 300,
+  "min_gap_mm": -4.5,
+  "at_arclength_mm": 4.0,
+  "nearest_piece": "COL_SEP_NEEDLE",
+  "center_mm": [
+   -157.0,
+   -265.25,
+   -86.0
+  ],
+  "negative_samples": 68,
+  "flap_open_deg": -90
+ },
+ "sphere12_gate_path": {
+  "samples": 147,
+  "min_gap_mm": -2.277,
+  "at_index": 65,
+  "nearest_piece": "COL_GATE_SHAFT_BACK",
+  "center_mm": [
+   -180.0,
+   -296.41,
+   -97.2
+  ],
+  "negative_samples": 32,
+  "note": "球中心はパドル弧 r=30 上、パドルは同じ α。出口は開（-16mm）、入口は閉鎖前（開 +16）で測る。ここでの負は 12mm 球が通れない箇所"
+ },
+ "landmarks": {
+  "PAYOUT aperture (liner) center (m)": [
+   0.0263,
+   -0.23938,
+   -0.1385
+  ],
+  "PAYOUT aperture (liner) extent (m)": [
+   0.028,
+   0.019,
+   0.003
+  ],
+  "COL_TRAY_LEFT_B_ABOVE bbox (m)": [
+   [
+    -0.173,
+    -0.2547,
+    -0.093
+   ],
+   [
+    -0.17,
+    -0.24068,
+    -0.077
+   ]
+  ],
+  "COL_TRAY_LEFT_B_BELOW bbox (m)": [
+   [
+    -0.173,
+    -0.345,
+    -0.093
+   ],
+   [
+    -0.17,
+    -0.2707,
+    -0.077
+   ]
+  ]
+ }
+}

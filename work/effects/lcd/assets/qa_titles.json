@@ -1,0 +1,1520 @@
+{
+  "generator": "tools/gen_titles.py",
+  "alpha": "straight RGBA; RGB=0 where alpha=0",
+  "generator_sha256": "533f7cb786fe5008463d0358b32857a74ea45cc3ee236146eae3d07a22b8bb69",
+  "upstream_sha256": "d73cfd911f74d3ae9b1b8db83b5b7fabf4798a52fafd22f10a9f81217f482f8a",
+  "anchor": "canvas center; extrusion compensated (-10,-14)",
+  "draw_order": [
+    "shadow: source-over",
+    "glow: lighter",
+    "face: source-over"
+  ],
+  "randomness": "none",
+  "checks": "RGBA / dimensions / transparent edges / face fit and center passed",
+  "titles": [
+    {
+      "key": "start",
+      "text": "START!",
+      "palette": "gold",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "b5ec7d3d76e5b2194a2033ed5f3c3098f6c4de2ca404c9ba5e95555bb9c5c12b",
+          "bytes": 218086,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "ece677979f579104ae132a2d594b300a00973177dc764d73b584bd470828dfba",
+          "bytes": 157054,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "6edc7ed10fd1ff53c65e6a4864190d6a3711c71f64f8ee01d8b033d4151b2c5f",
+          "bytes": 136071,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "shobu",
+      "text": "勝負",
+      "palette": "hot",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "8e28dcdccb6986ecdc655d18c389854ff8ecd143f2895bee6603942b138a79be",
+          "bytes": 200164,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "35b0d6db4bd39c4cd3c63aa5468a1729149ab6c24d8315d93e1b1ce09c073152",
+          "bytes": 109180,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "81bd8c8ddb7bf4d5cd5d66184d3c3577d4c9d5465c775fa709daae25b8d2f066",
+          "bytes": 73576,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "seikou",
+      "text": "成功",
+      "palette": "success",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "f31b41c785a5d5c277de4036ab18390f734cca872fe9b57117e286e2a30a60d7",
+          "bytes": 196153,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "91e2a0e4416a2060dff421e15b72051997f985e7d26d3b60d3e670ef7486990d",
+          "bytes": 163704,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "9a63c8829acdfbdc25885f262ead07b87919bfd048bf33d3ad5e7607d62a936a",
+          "bytes": 84257,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "daiseikou",
+      "text": "大成功",
+      "palette": "sakura_gold",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "974531f564eb938dbd25b3817cd26f9a67436f6acd0a4dcb2fd418dce6997517",
+          "bytes": 267209,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "9f4f02a61f86dd4c2a7784d48088f5b5063154434b6abd4d3f9639f41884436e",
+          "bytes": 211416,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "007e60c0aa4eeeab80b23c36e12eca2c9c076124bdadabf67237848bf4594cd4",
+          "bytes": 124319,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "shippai",
+      "text": "失敗",
+      "palette": "steel",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "eb9e513ecc9b1ef08ec3548907330be0d08377295a581ce1e261165a32b2068e",
+          "bytes": 196935,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "192a2fc6779f70a4f48f305bff2b9f9767fe380d8b1d19b318b9cdfbfbcf1ffd",
+          "bytes": 94600,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "0ec70167e0239c6431972cc217ca99ad7bc22eecb48bb9e027a19fce1b86d4a9",
+          "bytes": 93523,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "jackpot",
+      "text": "JACKPOT",
+      "palette": "rainbow",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "03304b4d05f41c16a91f10d182ff3db389ec76bf919aaa735088a8449782010a",
+          "bytes": 232762,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "da84c0c86c08336d69cd9f1a469d1250127ec4de062fe603e9dac98e5cddbe2a",
+          "bytes": 199887,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "f214fa08ae3a7995a65a94f4a0770dabcfc90e5ab929f0aadb32f4b4b07d1a77",
+          "bytes": 125235,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "timeup",
+      "text": "TIME UP",
+      "palette": "red",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "cfae1998052a3c7b1deabf086ee4d1a4e37508b4921baa38e0fb17d62312a10e",
+          "bytes": 134416,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "873fb964e82b9c71e3b9ac7e7f0c5eb4626c7a95bd1bc3698e66db81b76cf140",
+          "bytes": 90496,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "dfaa92a10369587603af5719b3553c3d29a3e52bdd86640f684ad48064910f0d",
+          "bytes": 111190,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "tamagire",
+      "text": "玉切れ",
+      "palette": "red",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "da1383ec146c67e7d3241e5af20f79eb0f1b358e1775b16c9391efb5b13d589d",
+          "bytes": 222513,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "4737461e48982f4a9ead56e8042b594344e9ee4267bae075e0dd4821ded399ce",
+          "bytes": 132134,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "9585e5ac4191d4e6c2dc086d4e65038f0d82be6ad83c1528acdde88f8b2b2717",
+          "bytes": 131843,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "lastchance",
+      "text": "LAST CHANCE",
+      "palette": "crimson_gold",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "dd58f58cb05e7be46cd5f9ee126e334e0e23a604d56ce44721fc46b26768b993",
+          "bytes": 172268,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "819bcd1709b8d4ef71a89322d1091868556d847fd0831cbcf3a3a28a91306fbd",
+          "bytes": 127948,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "7f51b8db27b63020b6d46c9ef713626e37f4fd16dcbc1c8568bc8c44e0aa6586",
+          "bytes": 103078,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "rank_sankasho",
+      "text": "参加賞",
+      "palette": "pink",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "abdb14f27c63aa5f417873c4ca0f2f0d3aca5746510dc4c0909a31ad806d0d53",
+          "bytes": 258726,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "2a599db0593e38d9c7cdf391091b07fb3430837ac4aa8255046fbe4d153f159b",
+          "bytes": 199422,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "a8be169c840fbeb6176f189e619c85e90582460a4490e09debf4d7f60854c4ce",
+          "bytes": 109173,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "rank_c",
+      "text": "C",
+      "palette": "copper",
+      "layout": "rank",
+      "layers": {
+        "face": {
+          "sha256": "728378c840df626bb68fe4b757fa62d7889e913b063fee4c3668578f0bdba567",
+          "bytes": 96654,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "2f9d62c56d204c5a9045b2c5b9043af60bfd9218e742063265068037dfef8316",
+          "bytes": 61886,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "b8d934e64f42177615a6ce7f9e4a440c6434b41d4a9d0f9c84d61099304bd8e0",
+          "bytes": 58266,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "rank_b",
+      "text": "B",
+      "palette": "silver",
+      "layout": "rank",
+      "layers": {
+        "face": {
+          "sha256": "c7b258a3bac145cba1878b838404cfa775a0b9cb4eddb110a14610db6eeaf543",
+          "bytes": 80358,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "bc54f2fb1687584a76d5738536b294387bed9b814c5a0ddf3c832bb77c7ed70e",
+          "bytes": 62411,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "72a425b86c7963d256e678ac8a383fbfe56e4c696d7ea145d140a09dabb53f80",
+          "bytes": 47268,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "rank_a",
+      "text": "A",
+      "palette": "gold",
+      "layout": "rank",
+      "layers": {
+        "face": {
+          "sha256": "aa9b9805cb7bb0f51d68f6e2a4ad37442e6b4e7950ea766e4e4d25d4b8cd6b87",
+          "bytes": 100767,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "49c583cfa055e729f6ba9692f2d74357bcd50a0586c2ff81e4bed99737035c1a",
+          "bytes": 63159,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "a7c6a2a0586380c82940de7995e24ecdeaf0026e3c449233716b9429014f561e",
+          "bytes": 57549,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "rank_s",
+      "text": "S",
+      "palette": "rainbow_gold",
+      "layout": "rank",
+      "layers": {
+        "face": {
+          "sha256": "7fee5ca16d5aac804d1378a458a6c830b3b26df6592417e6263aedb62c1b8f27",
+          "bytes": 116261,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "ff6016072e9ada18308b1cb9d220fba2ba634e39988c52c0d32e45718a0d864b",
+          "bytes": 104639,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "2a205dfedbc57d7876165152befd8d4ca95935a1a0cbe4754f73349c7e389d54",
+          "bytes": 57779,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "rank_ss",
+      "text": "SS",
+      "palette": "rainbow",
+      "layout": "rank",
+      "layers": {
+        "face": {
+          "sha256": "b1d09b60f66be590f8694bc634161e66d29af28fd8f26f41c56fa161b91caf37",
+          "bytes": 228778,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "5a0c38038bb0fd4f6dfc4bf3b194f93845d946097c596a63948ddb18bb32cb5c",
+          "bytes": 183351,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "92924be417dcc3949f27723ccf5098cbff4511c490dd8644806c261ed319b25d",
+          "bytes": 82192,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "arigato",
+      "text": "ありがとう",
+      "palette": "pink",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "30dc0ca098f81557c8211b6c5c4e086ad7b65e94d5c52edbf2515d4cca139f16",
+          "bytes": 289588,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "b9ab84ebb17f98907bb0ea329ae8567f96f34d3122f318583633a0f6dbd1f255",
+          "bytes": 207061,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "ae4c31fbf835c125d390c402d240cad5660720123fbbfa550e79e1317f23d3f1",
+          "bytes": 134743,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "tsuzukeru",
+      "text": "つづける?",
+      "palette": "gold",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "d40a00b4603d2e299984f5831d09d8cde1145e47118a12566e0712d81ad3c204",
+          "bytes": 268819,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "4421f9a81532545779e965313e9ddeaca2fcb76540134cf7cf6c6a9168214ae8",
+          "bytes": 173555,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "d3cd23cb0403d3008901398c5f07ab5a2cabbd6f192b3334cd520912a6cb2386",
+          "bytes": 137582,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "tutorial_goal",
+      "text": "玉をふやそう!",
+      "palette": "sakura_gold",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "a8acf53d5e5dd56bc9dc1aa633cf7e0fe2b4a1b940c29cdbef96047264493fbe",
+          "bytes": 253926,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "c0c43d079bca500155ada6118ffdf6d6871ff881640693a7e4a76ff53d9fe9fe",
+          "bytes": 194679,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "6b788fe8aa7c384f35236595037385cfea0eb06fcf5a25e7c495c1e79a372ac9",
+          "bytes": 120490,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "logo",
+      "text": "パチコマ",
+      "palette": "logo_blue",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "0a59c877eff5ea0c652ffc78a83360b073a48c57026f9b8b3c4db91e792fd04c",
+          "bytes": 215681,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "c78f20034bf8708a10079b43047e2dffcfd7dd062b572d17ba077a6c6fba3602",
+          "bytes": 169191,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "6509c4734b2c38f390b4f4f77e149f079ab70a3fcb507177afe1c6c698e20577",
+          "bytes": 131602,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "get",
+      "text": "GET!",
+      "palette": "gold",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "e98b9b9983862b6972938d23d6d6177afb75de607220ce810cbc13b763f8347a",
+          "bytes": 154284,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "657865e6b6f64cd7e37d3e84f5ff0bc2a18bcae6d33ea2a2b1dac085fe0e2cb5",
+          "bytes": 117481,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "bdf1a7d7c34397212112e58412d6600316f059ae45dc35e8bbcdb13a7c348433",
+          "bytes": 117882,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "jpchance",
+      "text": "JPチャンス!",
+      "palette": "rainbow_gold",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "3cfc270b6a78e22493e4c6774eb9453c93927ebab16f361683e60a2b97589379",
+          "bytes": 215869,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "dfefeb8e8f9a761d584bb1949458e97284240142bf28c09946bd1b73839fec46",
+          "bytes": 193261,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "20d0b91b7791ee848018cd5ce2a61145fe5de478727d901b11cbcd34467b86e2",
+          "bytes": 124032,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "ready",
+      "text": "さあ、いこう!",
+      "palette": "sakura_gold",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "05812f4a107529ba29c9a8609467b91a62da456c06077cff79d7bf92a246333b",
+          "bytes": 218331,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "d3fcc4959727d5eb11ff7b569779a0293cd0c1ce3e79f39a01f1dbc9343237e1",
+          "bytes": 173690,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "b4662b4bb69af40400c2420cf6d6154f1805058d9ab6c10743a1d68259d3907d",
+          "bytes": 117381,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "sutato",
+      "text": "スタート!",
+      "palette": "hot",
+      "layout": "title",
+      "layers": {
+        "face": {
+          "sha256": "bb2573342e725309d78e474f0ca6ad64a8d90a05a8c41c92b2526625bc54226c",
+          "bytes": 182725,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "740b7a1c35eb0ac558086d9c00f524c397e9a672488f131f1bb12285e75f2c12",
+          "bytes": 122166,
+          "size": [
+            1800,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "6696a744300734e3b259aa95e1fd13743568989e38ac55244132291f547355e1",
+          "bytes": 120709,
+          "size": [
+            1800,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg0",
+      "text": "0",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "08debac95cc890b210b64539c407c4c22a6d5c85d307d42332f18183cd881fe4",
+          "bytes": 77866,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "8c28b82d05eb810e84b5d29305f5915a6e1876e315a374a4811ddfd9864e9c54",
+          "bytes": 44687,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "b37caf2ab3ddb6adef99c7db813610d3313a0514c629b7ffdd58fb07680c7e88",
+          "bytes": 39628,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg1",
+      "text": "1",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "eac6d2696725e1305fb3a2389e9098276ba9bc4e98838d655598e33a19935ae0",
+          "bytes": 22538,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "7ac06ec8e4baffc22e2f659f337de7d874bd2473ace63968e7ed7f590e85d9c2",
+          "bytes": 23307,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "7412bd5f2644fb1b4a12345956b0d9ad96816e7d86e40262b9a62a8e5ec4a919",
+          "bytes": 29935,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg2",
+      "text": "2",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "12e959e167fc5ed449ca71c4fef310257a4b0e2aa51026e190967a33bbe15329",
+          "bytes": 62531,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "da0fc4d1eac4ebb074459561e2e4fb089f3148f1c40d7e497e441c3568564179",
+          "bytes": 41782,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "7e0372539efb045906a67c5ac529b86778471bcaff0a0583d24083aaf367db5f",
+          "bytes": 37922,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg3",
+      "text": "3",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "f6f0ce7e043dbdd5eafbe7b56d907da0538343135d007554472d72e08467c858",
+          "bytes": 83989,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "67a78471c910f5a53e5a1c1adbb97d1628cfcaa5f8e2fb27aab0785aaaf11a2a",
+          "bytes": 52331,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "965470294956a3a5790d3f1464f8395152ee096c1bc5ba68585d541349eface9",
+          "bytes": 40064,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg4",
+      "text": "4",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "99a183b2f529110ce97a081559fab3da983367c000c4108fbb9facc75e492958",
+          "bytes": 39945,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "6c69d9b05ebbd2ff8eccbc22c4f6f9283515222bc04e1d5984f741038eed20b1",
+          "bytes": 32087,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "3657412f4164dc3797bce8ca1190cc7394efea00786ec6fddddd5c05495b90d9",
+          "bytes": 33750,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg5",
+      "text": "5",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "f01381bfbd6cdd249cb3d55bdbfa59a82dc1057f7a36665ef75b0037e85e0ccb",
+          "bytes": 68049,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "35c02848d2995f6f581e094585508623029dd62a331d7169890187e074af6341",
+          "bytes": 44867,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "1ab23a9b76a917723790c4fe5602010a64aef791c53b6de9d2f602e428b7f026",
+          "bytes": 38112,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg6",
+      "text": "6",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "4d17ed53026859c650c937ee02ab45744c3ea1f0d0394c4648c56d463fb89486",
+          "bytes": 88414,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "9b75651fa79ee5fb18098895862e75c4827ebaf0286c627db026ba7429ef22fa",
+          "bytes": 52681,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "756747d30673b4ee28b662296264e811aa515f223a338645f6ba59cd3a883115",
+          "bytes": 41101,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg7",
+      "text": "7",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "70f7231dd4c7f9709f5a9041d668bd4ab345df4b99f74104c7245429d6075c26",
+          "bytes": 40494,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "36789dbedc160b55214498aff52e280fab88e3b882b7176076b53454f0e4a7cf",
+          "bytes": 29142,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "11d38b33542028a00139a68f7297701061711778d1b4a7aa1e6969345142de9d",
+          "bytes": 32674,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg8",
+      "text": "8",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "d18a5484163d991fe1c298c5bdfc3aae2b2329d23b0eae67927f07728059421f",
+          "bytes": 96430,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "3213b96ed478c39eb7ae384551640d7a9cfbdd99553a5c7e611894237813a3c9",
+          "bytes": 54144,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "62aad430368211d36bde4aa7a0d81a56bad62c8781af0670f7ae2db21b1ebf32",
+          "bytes": 41118,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg9",
+      "text": "9",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "8d32ffc5a4bedb10c24547218d73a767c2776e9d26c3d17f7109dfbbb2d63848",
+          "bytes": 88917,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "4e84d0c9f9bf7c16690c9656ee9970ebae76eabb783531caa66e6bbe3764e7a6",
+          "bytes": 52560,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "e3863732e20bac121316fc05dde9930d58957dac2ccb1f2ef749548cadf803ec",
+          "bytes": 40943,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg_comma",
+      "text": ",",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "526eb00f4b172104c8f557335933bc068a7253a1e76ebe44d380f06ce1cec9ad",
+          "bytes": 35849,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "9ba59f25f94b9cd628e4e6b632caafba3dd8c836e1a60edc3c12333f50dcc7c1",
+          "bytes": 25267,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "3f943b78b2cda57c7735d61aba3abdac2b4b077da79e86a9b9f541740b5b7662",
+          "bytes": 23200,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg_plus",
+      "text": "+",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "b1bb5cbf02ca46d309f8a69af228d608e123ae4866657694d32e2726c5cd4acb",
+          "bytes": 17073,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "773162a81e12575013a223113659b8a75b53bdf228ddc46f2fa41968ce20dbd8",
+          "bytes": 23940,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "ba827d9ddd10c8ee1d5b86ccd26f7456b2c39bc57724990e6a99004a7949b264",
+          "bytes": 32114,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dg_x",
+      "text": "x",
+      "palette": "gold",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "6da7f461e8e5f4f8101991c7b1c897606d2aab385674cd11821644188200c6a4",
+          "bytes": 61776,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "67a483fb04753dd04dc4d96731082b2994e29ca9265c654c0d0747ad0e63e700",
+          "bytes": 44060,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "799e7397bfde7dd11ca4d48dae4ab5d7938a7819f8ecfd3d55450fd3805bac63",
+          "bytes": 37735,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr0",
+      "text": "0",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "26b363861487966538759e0d8f895c8679b3a59d5a4b8bb152a1d4307ccabab7",
+          "bytes": 90398,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "c7a4c02a63c6f5002dc78a9e3157f2458e066d74ae29a3ecc8c1a4da2afb9e01",
+          "bytes": 61125,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "b37caf2ab3ddb6adef99c7db813610d3313a0514c629b7ffdd58fb07680c7e88",
+          "bytes": 39628,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr1",
+      "text": "1",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "fd5790a47e0e65305a9dbb617757388ddbfdcea338000815c3c19848dbbb39f6",
+          "bytes": 32372,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "6b81320b91d7d4ccc53007de449c3f544fb3b8b9f7d3fd8c4ca257b0bb468bda",
+          "bytes": 33272,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "7412bd5f2644fb1b4a12345956b0d9ad96816e7d86e40262b9a62a8e5ec4a919",
+          "bytes": 29935,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr2",
+      "text": "2",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "117936358874b5557d5f83dc2a33e7e35a51e8d43a9499c85f6ee8d658a8297f",
+          "bytes": 76970,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "778245d272fe731b5d68917d669ce3e1642d23ec18a4b4bf81e5acd37f128071",
+          "bytes": 59920,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "7e0372539efb045906a67c5ac529b86778471bcaff0a0583d24083aaf367db5f",
+          "bytes": 37922,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr3",
+      "text": "3",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "8e6cb192201742de52eb68d7deb96ede38530bc268175bb7fad320db57121c0d",
+          "bytes": 99705,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "81dfdc0d426f1d7bf5dec8481c9769ab45539f721cf6131a73b448f3fb5f1c0d",
+          "bytes": 71081,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "965470294956a3a5790d3f1464f8395152ee096c1bc5ba68585d541349eface9",
+          "bytes": 40064,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr4",
+      "text": "4",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "320acad7713e5b1db80c1ac8b894272ba24b0f830877f22d3dc82ed86257c447",
+          "bytes": 50071,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "784779ed2dcf757d45fbeae601eae6dea88f7be4608602d19da8c46c3f85e162",
+          "bytes": 47710,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "3657412f4164dc3797bce8ca1190cc7394efea00786ec6fddddd5c05495b90d9",
+          "bytes": 33750,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr5",
+      "text": "5",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "0430ffbff80409d58196698604c7db8f5bf5ea9de342538fcde650b2315c525c",
+          "bytes": 82427,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "4c0e00f745b137a27c53db8da1a03ad0f577019318734ce53199e720818c42d4",
+          "bytes": 61720,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "1ab23a9b76a917723790c4fe5602010a64aef791c53b6de9d2f602e428b7f026",
+          "bytes": 38112,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr6",
+      "text": "6",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "099f402adccef71543040357a77144a6141da619f01bbb1635228e9e6124d5ef",
+          "bytes": 102753,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "54661786b123eb0d089d0a7ab426e0db72690f393b9788dcd1fb46eefb0b3326",
+          "bytes": 71217,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "756747d30673b4ee28b662296264e811aa515f223a338645f6ba59cd3a883115",
+          "bytes": 41101,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr7",
+      "text": "7",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "8a77a2a46354f992342daef152f0984865a25873980c3c4853dcf7299b95f0a5",
+          "bytes": 49680,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "317394dadc19b23a3cddbd7e13d499ea3ce91e8334c4fa9837c6aff905d49788",
+          "bytes": 43053,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "11d38b33542028a00139a68f7297701061711778d1b4a7aa1e6969345142de9d",
+          "bytes": 32674,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr8",
+      "text": "8",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "1d047e301defdc8568c401167c202585acc1a0c144b753d3bf7ab53e4f38390a",
+          "bytes": 112100,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "f02ca5316eee00d5891db8cd05263333c9a173a10336339e4a49d46494871d4a",
+          "bytes": 72665,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "62aad430368211d36bde4aa7a0d81a56bad62c8781af0670f7ae2db21b1ebf32",
+          "bytes": 41118,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr9",
+      "text": "9",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "8ef57f6d9f50f49e4c98f3b1461c3586c7a358d1e2fc0f9cbbc2fe61aa70cdb1",
+          "bytes": 104816,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "a6f1074981df2e1a7a8e15adb739d71fb15a293d8b140981f27d279bbeedf1f9",
+          "bytes": 70797,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "e3863732e20bac121316fc05dde9930d58957dac2ccb1f2ef749548cadf803ec",
+          "bytes": 40943,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    },
+    {
+      "key": "dr_plus",
+      "text": "+",
+      "palette": "rainbow",
+      "layout": "digit",
+      "layers": {
+        "face": {
+          "sha256": "1acc11df44dc1a3e0e131494cc196ec033e914247bb3bc3d0db725edaebbfdd5",
+          "bytes": 22909,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "glow": {
+          "sha256": "25349eccf2277fe58ba16c45bd6e4e90a40e6479ac9ba5d6a7efce9e783a7772",
+          "bytes": 33384,
+          "size": [
+            640,
+            640
+          ]
+        },
+        "shadow": {
+          "sha256": "ba827d9ddd10c8ee1d5b86ccd26f7456b2c39bc57724990e6a99004a7949b264",
+          "bytes": 32114,
+          "size": [
+            640,
+            640
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>パチコマ UI 動作確認</title>
+<style>
+ html,body{margin:0;height:100%;background:#05040f;overflow:hidden}
+ #stage{position:relative;height:100vh;aspect-ratio:1080/1920;margin:0 auto;background:radial-gradient(ellipse at 50% 55%,#1b2a5a 0,#0a0a22 70%)}
+ #board{position:absolute;left:150px;top:520px;width:780px;height:900px;border:2px dashed #3b4a8a;color:#3b4a8a;font:28px sans-serif;display:flex;align-items:center;justify-content:center;text-align:center;transform-origin:0 0}
+ #start{position:fixed;left:8px;top:8px;z-index:9;padding:6px 12px;font:14px sans-serif}
+</style></head>
+<body data-demo>
+<button id="start">音を有効にする(クリック)</button>
+<div id="stage"></div>
+<script type="module" src="./demo_host.mjs"></script>
+</body></html>

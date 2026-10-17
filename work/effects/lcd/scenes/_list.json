@@ -1,0 +1,14 @@
+[
+  "b_common.js",
+  "b_entry.js",
+  "b_tutorial.js",
+  "b_challenge.js",
+  "b_success.js",
+  "c_common.js",
+  "c_fail.js",
+  "c_jp.js",
+  "c_time.js",
+  "c_end.js",
+  "start.js",
+  "m_monolith.js"
+]

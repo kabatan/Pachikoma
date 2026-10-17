@@ -1,0 +1,15 @@
+{
+  "schema": "stage2_feed_candidate_v1",
+  "enabled_in_standard_COL": false,
+  "geometry_sha256": "dcd19181145700228c0dbe37cb114654480d1ba66a59bcc939fe747082e42ce1",
+  "parts": 280,
+  "obj": "feed_candidate.obj",
+  "units": "m",
+  "issues": "foot arrivals 0/3; dog overlap max 1.00705mm; centreline ball / shutter overlap 3.04483mm",
+  "reproduce": [
+    "blender -b --python-exit-code 1 --python src/s2feed_trial.py -- jobs/sol40_feed.json",
+    "python3 -B src/s2audit.py logs/sol40/feed --every 3 --include-feeder",
+    "python3 -B src/s2feed_check.py logs/sol40/feed",
+    "python3 -B src/s2interf.py logs/sol40/interf_feed.json --include-feeder"
+  ]
+}
