@@ -216,13 +216,13 @@
   function swimNew(i, enter) {
     const w = 46 * swim.sc, u = { i, w, h: 21 * swim.sc, x: swRnd(.2, .8) * W, y: swRnd(.3, .85) * H, ang: swRnd(0, TAU), tang: 0, sp: 0, base: swRnd(.85, 1.15), phase: Math.random(), freq: swRnd(.9, 1.1), mode: 'swim', t: 0, dur: swRnd(1, 3), kk: 0, wob: Math.random() * 10, sx: 1, sy: 1, tilt: 0, enter: 0, leaving: false };
     u.tang = u.ang;
-    if (enter) { const side = Math.random() < .5 ? -1 : 1; u.x = side < 0 ? -w * .6 : W + w * .6; u.y = swRnd(.35, .8) * H; u.ang = u.tang = side < 0 ? swRnd(-.3, .3) : Math.PI + swRnd(-.3, .3); u.enter = 2.2; u.mode = 'swim'; u.dur = 2.2; }
+    if (enter) { const side = Math.random() < .5 ? -1 : 1; u.x = side < 0 ? -w * .6 : W + w * .6; u.y = (swim.list.length ? swRnd(.35, .8) : swRnd(.3, .5)) * H; u.ang = u.tang = side < 0 ? swRnd(-.3, .3) : Math.PI + swRnd(-.3, .3); u.enter = 2.2; u.mode = 'swim'; u.dur = 2.2; }
     return u;
   }
   swim.sync = (n) => {
     const want = clamp(Math.round(n), 0, 6); swim.n = want;   // 0灯はウパ0匹(最初の1灯で1匹目が出る)
     const alive = swim.list.filter((u) => !u.leaving);
-    for (let k = alive.length; k < want; k++) swim.list.push(swimNew(k, swim.list.length > 0));
+    for (let k = alive.length; k < want; k++) swim.list.push(swimNew(k, true));
     for (let k = alive.length - 1; k >= want; k--) { alive[k].leaving = true; alive[k].tang = alive[k].x < W / 2 ? Math.PI : 0; }
     alive.forEach((u, k) => { u.i = k; });
   };

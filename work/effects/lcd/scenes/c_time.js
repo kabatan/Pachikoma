@@ -24,7 +24,7 @@
       c.save(); c.strokeStyle = `rgba(255,91,100,${a})`; c.lineWidth = weak ? 9 : 5; c.strokeRect(3, 3, 1274, 714); c.restore();
       LCD.hud(c, { sec: Math.max(0, 10 - t) });
       const wa = LCD.env(t, .15, 4.2, .3, .6);
-      if (wa > 0) { LCD.text(c, 'もうすぐ おわり!', 400, 660, { size: 66, a: wa, fill1: '#fff3ea', fill2: '#ff8a8a', glow: '#ff2a44' }); }
+      if (wa > 0) { LCD.text(c, 'もうすぐ おわり!', 400, 175, { size: 72, a: wa, fill1: '#fff3ea', fill2: '#ff8a8a', glow: '#ff2a44' }); }
       if (last && sec > 0) {
         // 5→1だけ中央へ。各秒の後半で薄くして、プレイ中の視界を戻す。
         const age = t % 1, alpha = .88 * (1 - smooth((age - .55) / .32)), h = 250 + beat * 30;

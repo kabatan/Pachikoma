@@ -66,6 +66,8 @@
         params = Object.assign({}, params, { rate, scale: 1 / rate });
         this._asc = false; this._k = params.k; this._rate = rate; this._block = n >= 4;   // 時計を止めるのは4灯以上
       }
+      // 同時に複数の玉が落ちる時(最大3球・0.6秒間隔): 着地の演出は新しい着地を優先して上書きする。前の着地の演出(別の種類)は途中で畳み、1.0秒の山場を重ねない(調整担当メモ 10/17)
+      if (['lamp123', 'dup_protect', 'lamp4', 'lamp5'].includes(id)) for (const o of ['lamp123', 'dup_protect', 'lamp4', 'lamp5']) if (o !== id) this.stop(o);
       if (this.lcdOk) {                                  // 残り時間(右上)は start から timeup/結果まで常設
         if (id === 'start' || id === 'add100') root.LCD.setState({ hudOn: true });
         if (id === 'add100') this._pendingStart = { params: { duration: 0 }, t: this.dir.t };   // 追加も ticket と同じ順: 玉が皿に注がれたあと「スタート!」(時計が動く)
@@ -97,6 +99,7 @@
       }
       // 勝負の暗い液晶・赤い花びらは、宣言(1.6秒)のあとも発射して入賞するまで保つ。結果が出たら外す。
       if (['success_small', 'success_big', 'jp', 'fail', 'lamp123', 'lamp4', 'lamp5', 'lamp6', 'dup_protect', 'roulette', 'challenge_cancel', 'timeup', 'finish_count', 'result', 'attract', 'ticket'].includes(id)) this.stop('challenge_flight');
+      if (id === 'add100' || id === 'finish_count') this.stop('timeup');   // 継続の選択が済んだら、TIME UP の金の電飾(最大10秒)を続けない。追加後は ticket と同じ紺の盤に戻す
       // 6灯は次の1球が自動でJPチャンス(ゲーム側は armed のまま宣言の合図を出さない)。灯の演出(JPチャンスの知らせ)のあと、自分で宣言を出して暗い液晶・赤い花びらの保持へつなぐ
       if (id === 'lamp6') this._later(3.3, () => { if (d.state.declared && !d.isActive('challenge_declare') && !d.isActive('challenge_flight')) this.notify('challenge_declare', { jp: true }); });
       if (id === 'challenge_flight') {
@@ -107,7 +110,7 @@
         const tbl = [14, 16, 20, 24, 28], full = params.duration > 0 ? params.duration : tbl[Math.max(0, Math.min(4, params.tier ?? 2))];
         params = Object.assign({}, params, { scale: full / 20 });
       }
-      if (id === 'challenge_declare') this._later(1.6, () => { if (d.state.declared && !d.isActive('challenge_flight')) this.notify('challenge_flight', { jp: d.state.n >= 6, armed: true }); });
+      if (id === 'challenge_declare') this._later(1.4, () => { if (d.state.declared && !d.isActive('challenge_flight')) this.notify('challenge_flight', { jp: d.state.n >= 6, armed: true }); });
       if (id === 'challenge_declare' && d.state.n >= 6) params = Object.assign({}, params, { jp: true });   // 6灯の勝負は『JPチャンス』
       return d.start(id, Object.assign({ once: true }, params));
     }

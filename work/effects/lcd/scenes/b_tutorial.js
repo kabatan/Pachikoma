@@ -19,8 +19,12 @@
   const drop=(c,x,y0,y1,u,a)=>{if(u<=0||u>=1)return false;const y=lerp(y0,y1,u*u*.5+u*.5);for(let k=1;k<5;k++)LCD.add(c,'glow_soft.png',x,y-k*13,{w:30,h:30,a:.22*a*(1-k/5),tint:'#cfe0ff'});LCD.ball(c,x,y,15,{gold:false,a});return true;};
 
   LCD.scene({id:'tut_launch',dur:0,hold:true,assets:[...B.assets],
-    draw(c,t){
-      const a=smooth(t/.3),idle=smooth((t-12)/.6);
+    draw(c,t,sc){
+      // 当たり・失敗・皿のあふれなど、ほかの演出が出ている間は案内を引っ込める(文字の重なりを作らない)。0.15秒でフェード。
+      const busy=LCD.active.some(o=>o!==sc&&!o.def.hold);
+      const dtt=Math.max(0,Math.min(.1,t-(sc.gt??t)));sc.gt=t;
+      sc.gf=clamp((sc.gf??1)+(busy?-1:1)*dtt/.15,0,1);
+      const a=smooth(t/.3)*sc.gf,idle=smooth((t-12)/.6);
       // STARTから発射待ちへ移っても、同じ案内を続ける(筐体の左下のボタンを指す)。12秒で一度指し直し、その後も呼吸する。
       E.launchGuide(c,t,{a,s:1+idle*.1,y:628-idle*6});
       if(t>=12&&t<13.4) LCD.add(c,'flare_ring.png',128,640,{w:150+100*smooth((t-12)/1.4),h:80+60*smooth((t-12)/1.4),a:.45*(1-smooth((t-12)/1.4))});
@@ -91,7 +95,7 @@
       LCD.text(c,'おなじ あな! まだ セーフ!',860,ty+6,{size:62,weight:900,a:a*.8,fill1:'#10182a',fill2:'#10182a',stroke:17,strokeColor:'#10182a'});
       LCD.text(c,'おなじ あな! まだ セーフ!',856,ty,{size:62,weight:900,a,fill1:'#f2fbff',fill2:'#8ccff2',stroke:13,strokeColor:'#24527a'});
       LCD.text(c,'おなじ あな! まだ セーフ!',856,ty,{size:62,weight:900,a,fill1:'#ffffff',fill2:'#cfeeff',stroke:5,strokeColor:'#eaf8ff'});
-      if(first) LCD.text(c,'ふえると 同じ穴で ランプが 消えるかも',850,606,{size:42,a,fill1:'#f4fbff',fill2:'#b9e2fa',stroke:8,strokeColor:'#24527a'});
+      if(first) LCD.text(c,'ふえると 同じ穴で ランプが 消えるかも',700,608,{size:52,weight:900,a,fill1:'#ffffff',fill2:'#c8ecff',stroke:11,strokeColor:'#1c4468'});
       LCD.add(c,'flare_ring.png',330,566,{w:100+300*smooth(t/.8),h:80+200*smooth(t/.8),a:.35*a*(1-smooth(t/.9)),tint:'#bfe6ff'});
     }
   });

@@ -120,7 +120,8 @@
       LCD.vignette(c,.5+beat*.2,'160,10,40');
       const jp=sc.params.jp===true;
       LCD.text(c,jp?'JPチャンス!':'しょうぶの 1球',jp?330:340,92,{size:52,stroke:10,fill1:jp?'#ffe08a':'#ffd0c0',fill2:jp?'#ffb000':'#ff8a78',strokeColor:'#2a0008'});
-      LCD.text(c,'たまを おいかけよう',340,152,{size:36,stroke:8,a:.9,fill1:'#ffe6d0',strokeColor:'#2a0008'});
+      const JA=LCD.rules().jackpotAwards||[];
+      LCD.text(c,jp&&JA.length?`JPで ${Math.min(...JA)}〜${Math.max(...JA)}玉!`:'たまを おいかけよう',340,152,{size:36,stroke:8,a:.9,fill1:jp?'#fff0b8':'#ffe6d0',strokeColor:'#2a0008'});
       const lit=mouths(sc.params);
       for(let i=1;i<=7;i++)column(c,t,i,lit.has(i));
       banners(c,t,lit);

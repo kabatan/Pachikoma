@@ -224,6 +224,21 @@
     LCD.text(c, 'のこり', x - 160, y + 4, { size: 40, stroke: 4, fill1: '#ffffff', fill2: danger ? '#ffb3bd' : '#d9ebfa' });
     LCD.text(c, String(sec), x + 30, y - 2, { size: 114, weight: 900, stroke: 6, fill1: danger ? '#fff0e8' : '#f4fbff', fill2: danger ? '#ff5265' : '#c8e9ff', glow: danger ? '#de1c47' : '#5c9ccf' });
     LCD.text(c, '秒', x + 160, y + 20, { size: 52, stroke: 4, fill2: danger ? '#ffa1ad' : '#d9ebfa' });
+    C.prizeChip(c);
+  };
+  // 常設: いま勝負で当たると何玉か(灯の数ごと。数は規則から)と、いまの灯の数。旧UIの賞玉パネルの代わり(左側に小さく)。0灯と時間切れ後は出さない
+  C.prizeChip = (c) => {
+    const n = clamp(Math.floor(LCD.state.nDisp ?? LCD.state.n ?? 0), 0, 7), AW = LCD.rules().awards || [0, 1, 2, 3, 12, 30, 80];
+    if (n < 1 || LCD.state.hudChip === false) return;
+    if (LCD.active.some((sc) => /^(challenge_|success|jp|fail|lamp[456]|dup_protect|roulette|ascend|timeup|add100|finish|result|ticket|start|howto|title|attract)/.test(sc.id))) return;   // 勝負・当たり・結果などの演出中は、その演出の邪魔をしない
+    const x = 24, y = 112, w = 400, h = 150, jp = n >= 6, big = n >= 4;
+    c.save();
+    c.fillStyle = 'rgba(6,20,52,.74)'; c.strokeStyle = jp ? '#ffe27a' : big ? '#ffb347' : '#9fd0ff'; c.lineWidth = 4;
+    c.beginPath(); c.roundRect(x, y, w, h, 20); c.fill(); c.stroke();
+    LCD.text(c, 'しょうぶで あたると', x + w / 2, y + 30, { size: 42, stroke: 4, fill1: '#ffffff', fill2: '#cfe6ff' });
+    LCD.text(c, jp ? 'JP!' : `+${AW[Math.min(n, 5)]}玉`, x + w / 2, y + 88, { size: 84, stroke: 7, fill1: '#fff6c8', fill2: jp ? '#ffd04a' : big ? '#ffb21e' : '#bfe3ff', glow: jp ? '#ff9a1a' : big ? '#ff8a1a' : '#5c9ccf' });
+    for (let i = 0; i < 7; i++) { const dx = x + 38 + i * 54, on = i < Math.min(n, 7); c.fillStyle = on ? (jp ? '#ffd04a' : big ? '#ff9ac0' : '#ffe27a') : 'rgba(255,255,255,.22)'; c.beginPath(); c.arc(dx, y + h - 15, 11, 0, TAU); c.fill(); }
+    c.restore();
   };
   C.benefitAssets = ['rl_rim.png', 'rl_dome.png', 'rl_lamp_on.png', 'rl_lamp_off.png', ...LCD.hudAssets];
   // 継続の価値をひとつのまとまりに。玉の山はこの小さな説明アイコンの中だけ。

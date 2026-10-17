@@ -27,6 +27,7 @@ export function makeBoardWash(geom, adapter, { radius = 640, gain = 2.2, sigma =
         // 0〜3灯は「照らさない/紺ベース」(監督 10/17): 色の明るさだけ残して紺へ寄せ、灰色の膜にならないよう弱める
         if (navy > 0) { const lum = (R + G + Bc) / 3 * .35; R = R * (1 - navy) + lum * .18 * navy; G = G * (1 - navy) + lum * .45 * navy; Bc = Bc * (1 - navy) + lum * 1.5 * navy; }
         if (sat !== 1) { const lum = (R + G + Bc) / 3; R = Math.max(0, lum + (R - lum) * sat); G = Math.max(0, lum + (G - lum) * sat); Bc = Math.max(0, lum + (Bc - lum) * sat); }   // 白っぽく褪せる場面は、色を濃く(彩度を上げる)
+        { const mx = Math.max(R, G, Bc), mn = Math.min(R, G, Bc); if (mx > 1.15) { const f = 1 - (mn / mx) * (1 - 1.15 / mx); R *= f; G *= f; Bc *= f; } }   // 白い閃光で盤面全体が白飛びして玉と釘を隠さない: 白に近い成分だけ上限を設ける(彩度のある色は変えない)
         if (red > 0) { const lum = (R + G + Bc) / 3, m2 = Math.min(1, red); R = R * (1 - m2) + lum * 2.3 * m2; G = G * (1 - m2) + lum * .08 * m2; Bc = Bc * (1 - m2) + lum * .22 * m2; }   // 赤の場面は、色をクリムゾンへ寄せる(紫に濁らせない)
         out.push({ x: SPOTS[s][0], y: SPOTS[s][1], rgb: [R, G, Bc], radius, gain: 1 });
       }

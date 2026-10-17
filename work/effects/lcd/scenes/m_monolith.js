@@ -53,10 +53,11 @@
   };
   // 6灯: 「JPチャンス!」の知らせ。タイトル→あと1つでJP(7つ目の穴が金に脈打つ)。灯が増えた映像の上に重ねる
   const jpNotice = (c, t) => {
-    const { smooth, easeOut, lerp, clamp } = LCD, B = LCD.B, q = clamp((t - .75) / .35), a = smooth(q);
+    const { smooth, easeOut, lerp, clamp } = LCD, B = LCD.B, q = clamp((t - .95) / .3), a = smooth(q), d = smooth(clamp((t - .75) / .15));
+    if (d <= 0) return;
+    // 下の「6灯」の映像を深い琥珀色に先に沈め(0.75〜0.9秒)、沈みきってから文字を出す(0.95秒〜)。「6灯」とJPチャンスが同じコマに写らない
+    c.save(); c.globalAlpha = .9 * d; c.fillStyle = '#1c0a00'; c.fillRect(0, 0, W, H); c.restore();
     if (a <= 0) return;
-    // 下の「6灯」の映像を深い琥珀色に沈めてから文字を出す(6灯の大きな「6」とJPチャンスが重ならないように)
-    c.save(); c.globalAlpha = .9 * a; c.fillStyle = '#1c0a00'; c.fillRect(0, 0, W, H); c.restore();
     LCD.rays(c, 640, 300, { n: 28, a: .2 * a, rot: t * .25, color: '255,176,0', len: 900 });
     LCD.add(c, 'glow_soft.png', 640, 300, { w: 1300 * a, h: 460 * a, a: .36 * a, tint: '#ffa800' });   // 金は #ffb000 付近の高彩度のまま。足し算を強くすると白く飛ぶので控える
     const z = t < 1.1 ? lerp(1.9, 1, easeOut(q)) : 1 + .05 * Math.sin((t - 1.1) * 9) * Math.exp(-(t - 1.1) * 2);
@@ -66,7 +67,9 @@
     if (sa > 0 && B && B.holes) {
       B.holes(c, 640, 470, t, { lit: [1, 2, 3, 4, 5, 6] }, { step: 100, r: 28, a: sa });
       const beat = .5 + .5 * Math.sin(t * 9); LCD.add(c, 'glow_soft.png', 640 + 300, 470, { w: 170 + 60 * beat, h: 170 + 60 * beat, a: sa * (.4 + .5 * beat), tint: '#ffd24a' });
-      LCD.text(c, 'あと 1つ そろえば JP!', 640, 560, { size: 56, weight: 900, a: sa, fill1: '#fff9e0', fill2: '#ffd24a', stroke: 10, strokeColor: '#6e3f18', glow: '#d98a3a' });
+      LCD.text(c, 'あと 1つ そろえば JP!', 640, 548, { size: 56, weight: 900, a: sa, fill1: '#fff9e0', fill2: '#ffd24a', stroke: 10, strokeColor: '#6e3f18', glow: '#d98a3a' });
+      const JA = LCD.rules().jackpotAwards || [], lo = Math.min(...JA), hi = Math.max(...JA);   // JPの配当は規則から読む(固定値にしない)
+      if (JA.length) LCD.text(c, `JPで ${lo}〜${hi}玉!`, 640, 626, { size: 50, weight: 900, a: smooth((t - 1.6) / .3), fill1: '#fff9e0', fill2: '#ffe08a', stroke: 9, strokeColor: '#6e3f18', glow: '#d98a3a' });
     }
   };
   const lampScene = (id, fixed, dur) => LCD.scene({ id, dur, hold: false, cover: true, assets: fixed === 6 ? ['t_jpchance_face.png', 't_jpchance_glow.png', 't_jpchance_shadow.png', 'flare_streak.png', 'rays_soft.png'] : [],

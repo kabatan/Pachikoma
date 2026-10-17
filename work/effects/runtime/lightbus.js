@@ -236,8 +236,8 @@
             add(i, colAt(i), w * depth * fadeEnv(.06, .15) * (isP ? .9 : isE ? 1.6 : 1.2));
           } break; }
         case 'stutter': {   // 点く前の明滅: 花びらが勝手にチカチカ(消灯と点灯が入れ替わる。だんだん速く)。一斉に点く前の予感
-          const rate = 7 + 14 * u, bin = Math.floor(lt0 * rate), e = smooth(lt0 / .08);
-          for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: e, v: hash(i, bin + 5) > .5 ? 1.35 : .06 }); break; }
+          const rate = 5 + 7 * u, bin = Math.floor(lt0 * rate), e = smooth(lt0 / .06), allOff = hash(77, bin) > .55;   // 離れた塊ごと(6枚単位)に消灯/点灯が入れ替わり、ときどき全消灯。映像でも消えたと分かる
+          for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: e, v: allOff ? .02 : hash(Math.floor(i / 6), bin + 5) > .45 ? 1.4 : .02 }); break; }
         case 'breathe': {
           const per = p.period || 3; const w = lerp(.55, 1.15, .5 + .5 * Math.sin(TAU * lt0 / per - Math.PI / 2)) * smooth(lt0 / .25);
           for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: smooth(lt0 / .25) * fadeEnv(.25, .3), v: w * (isE ? 1.4 : 1) }); break; }

@@ -12,7 +12,7 @@ import * as THREE from '../../game_demo/web/vendor/three/three.module.js';
 import { Stage2cLightAdapter } from '../../assembly/sol61_v36_pack/stage2c/cabinet_adapter.mjs';   // LightAdapter + 筐体の7セグ/ロゴ/ボタン(setCabinet)
 import { ballCountToDigits } from '../../assembly/pack_envcheck/seg_digits.mjs';
 import { makeBoardWash } from './board_wash.mjs';
-import { installBallLights } from '../../assembly/pack_envcheck/ball_light.mjs';
+import { installBallLights } from './ball_light.mjs';
 
 const here = new URL('.', import.meta.url);
 const RANKS = { participation: 0, C: 1, B: 2, A: 3, S: 4, SS: 5 };
@@ -117,6 +117,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   let BL = null; try { BL = installBallLights(hr, { max: 36 }); } catch (err) { console.warn('ballLights', err.message); }
   const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   if (BL && BL.setMask) BL.setMask([150, 760, 1330, 1445], Number(qs.get('lcdmask') ?? .12), 30);   // 液晶の面は盤面の照射を弱める(通常画面の純青を紫・ピンクに染めない。点検 新e09)
+  if (BL && BL.setClip && !qs.has('noclip')) BL.setClip([140, 650, 1345, 2020], Number(qs.get('clipsoft') ?? 22));   // 盤の洗いは囲い(ガラス窓の内側)だけ。外の枠・花びら周りは照らさない(10/17 ディレクター)
   const wash = BL && !qs.has('nowash') ? makeBoardWash(geom, adapter, { gain: Number(qs.get('washgain') ?? 2.2) }) : null;   // 盤面全体の電飾(花びら・縁の色を盤へ)
   const _v = new THREE.Vector3();
   const trail = new Map(), TRAIL = [[.05, .5], [.1, .4], [.17, .28], [.26, .17], [.38, .09]], BALL_R = Number(qs.get('ballr') ?? 34), BALL_G = Number(qs.get('ballg') ?? 3.5);
@@ -125,7 +126,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
     const act = (last && last.active) || [], nl = last ? last.n ?? fx.dir.state.n : 0;
     const hot = act.some((id) => /^(roulette|ascend|challenge_|success|jp|fail|lamp[456]|warn10|timeup|add100|finish_count|result|attract|title|howto|ticket|start)/.test(id));
     const redHot = act.some((id) => /^(roulette|challenge_declare|challenge_flight)$/.test(id));
-    const list = wash && last ? wash.compute(last, clock, { ambientMin: redHot ? .8 : 0, red: redHot ? 1 : 0, navy: nl <= 3 && !hot ? 1 : 0, k: act.some((id) => id === 'jp' || id === 'success_big') ? .5 : act.includes('fail') ? .6 : act.includes('timeup') ? .45 : act.some((id) => id === 'result' || id === 'finish_count') ? .55 : 1, sat: act.some((id) => id === 'result' || id === 'finish_count') ? Number(new URLSearchParams(location.search).get('sat') ?? 2.4) : 1 }) : [];   // 大成功・JPは液晶が主役。盤面の照射が液晶をかすませないよう半分に
+    const list = wash && last ? wash.compute(last, clock, { ambientMin: redHot ? .8 : 0, red: redHot ? 1 : 0, navy: nl <= 3 && !hot ? 1 : 0, k: act.some((id) => id === 'jp' || id === 'success_big') ? .85 : act.includes('fail') ? .6 : act.includes('timeup') ? .45 : act.some((id) => id === 'lamp4' || id === 'lamp5' || id === 'lamp6') ? .7 : act.some((id) => id === 'result' || id === 'finish_count') ? .55 : 1, sat: act.some((id) => id === 'result' || id === 'finish_count') ? Number(new URLSearchParams(location.search).get('sat') ?? 2.4) : act.includes('lamp6') ? 2.1 : act.includes('lamp5') ? 1.7 : act.includes('lamp4') ? 1.5 : 1 }) : [];   // 大成功・JPは液晶が主役。盤面の照射が液晶をかすませないよう半分に
     // 重複ルーレット: 針の位置(花びらの輪)に追従する赤いスポット
     if (act.includes('roulette') && last && last.__needle != null) {
       const th = last.__needle, P = fx.dir.pAng, G = geom.petals; let sx = 0, sy = 0, sw = 0;
@@ -141,10 +142,10 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
         const x = (_v.x * .5 + .5) * 1440, y = (.5 - _v.y * .5) * 2560, id = snap.ids ? snap.ids[i] : i;
         seen.add(id); let h = trail.get(id); if (!h) trail.set(id, h = []);
         if (!h.length || clock - h[h.length - 1].t >= .025) { h.push({ x, y, t: clock }); if (h.length > 24) h.shift(); }
-        list.push({ x, y, rgb: [1, .86, .62], radius: BALL_R, gain: BALL_G });
+        list.push({ x, y, rgb: [1, .86, .62], radius: BALL_R, gain: BALL_G, nomask: true });
         for (const [age, k] of TRAIL) {   // 尾: age秒前の位置(今の位置とほぼ同じなら出さない)
           let q = null; for (let j = h.length - 1; j >= 0; j--) if (clock - h[j].t >= age) { q = h[j]; break; }
-          if (q && Math.hypot(q.x - x, q.y - y) > 14) list.push({ x: q.x, y: q.y, rgb: [1, .8, .55], radius: BALL_R * .75, gain: BALL_G * k });
+          if (q && Math.hypot(q.x - x, q.y - y) > 14) list.push({ x: q.x, y: q.y, rgb: [1, .8, .55], radius: BALL_R * .75, gain: BALL_G * k, nomask: true });
         }
         nb++;
       }
