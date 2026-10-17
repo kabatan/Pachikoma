@@ -73,6 +73,14 @@ export class PhysicsAdapter {
   }
   beginGame(loanBalls) { this.reset(); this.stock = STOCK0 - 1; this.shuttleHas = true; this.skipPayout = Math.min(STOCK0, loanBalls); this.stockOnTray = 0; }
 
+  /** 追加の貸し玉: 昇降管の予備球(最大 STOCK0 個)を最初の貸しと同じく物理側へ直ちに用意し、その分は払い出しで二重に数えない。
+   *  皿から昇降管を上る玉は遅く、持ち玉が尽きた直後の追加では最初の1球が6秒以上待たされる(実測)。 */
+  reserveForLoan(n) {
+    const have = (this.shuttleHas ? 1 : 0) + this.stock + this.travel.length;
+    const k = Math.max(0, Math.min(n | 0, STOCK0 - have)); if (!k) return 0;
+    let r = k; if (!this.shuttleHas) { this.shuttleHas = true; this.refillAt = null; r--; }
+    this.stock += r; this.skipPayout += k; return k;
+  }
   setAim(aim, dir) { this.aim = aim; this.dir = dir; }
   launch(shotId) {
     if (this.shuttleHas) this._release(shotId); else this.pendingLaunch.push(shotId);

@@ -13,6 +13,7 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
         config:pa.playConfig ?? null, stageDir:pa.stageDir, pinCount:pa.board.layout.pins.length, jitter:pa.jitter, rules:ctrl.rules,
         board:{ model:pa.board.model, layout:pa.board.layout } });
     }
+    if (action === 'add') pa.reserveForLoan(ctrl.rules.LoanBalls);   // 追加100円: 最初の1球を待たせない(貸しの予備球を直ちに用意)
     log?.write('input', { tick: pa.tick + 1, action, aim: ctrl.aim, dir: ctrl.aimDir }, ctrl.game);
   });
   function advance(dt) {
