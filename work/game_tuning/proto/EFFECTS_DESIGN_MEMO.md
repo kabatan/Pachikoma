@@ -62,7 +62,7 @@
 - `fail`: `near_miss`(R-22: 未点灯口の入口線を内向きに通過してから仕切りを跨いで別の口へ落ちた時だけ true) / `target` / `unlit`。
 - `result` / `finish_count`: `to_next`, `next_rank`, `next_threshold`。`to_next>27` では表示しない。
 - 皿への注ぎ: `awardToTray(count,{rate})`。`setAwardHold(true, 秒)` の上限は秒数どおり。Result/Continueに入ると自動解放。JPは14秒まで。
-- 賞閾値は C7 / B29 / A47 / S165 / SS543、基本時間72秒、追加22秒、継続選択8秒、同時発射 MaxInFlight=3 / FireInterval=0.6秒（`rules_final.json`）。表示に使う数字は規則から読む。
+- 賞閾値は C9 / B35 / A51 / S165 / SS543、基本時間72秒、追加22秒、継続選択8秒、同時発射 MaxInFlight=3 / FireInterval=0.6秒（`rules_final.json`）。表示に使う数字は規則から読む。
 
 ## 演出側への依頼
 1. 上の最短/最長に収める。ロックが終わったら次の操作を必ず受け付ける。

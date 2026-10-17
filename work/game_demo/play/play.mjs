@@ -30,6 +30,7 @@ const pa = await PhysicsAdapter.create(RAPIER, {
 pa.playConfig = { ...config, seed, pinCount: pa.board.layout.pins.length };
 const hr = new HybridRenderer({ canvas: document.getElementById('c'), maxBalls: 700, lutUrl: new URL('../web/assets/lut/pbrneutral_lg2_57_lin', import.meta.url).href });
 await hr.init();
+hr.setBallBounce(Number(q.get('ballbounce') ?? 0));   // 玉の下半球の照り返し（0=従来。0.4〜0.6で銀色に見える）
 const setAssemblyBalls = connectAssemblyBalls(hr, pa.transforms);
 const pack = await connectLayerPack(hr, q.has('pack') ? q.get('pack') : DEFAULT_PACK, { dummyEntries: Gen.makeLayerManifest(12, { seed: 1 }) });
 const app = await createMedalApp(document.getElementById('stage'), {

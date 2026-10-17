@@ -6,8 +6,8 @@ import { PhysicsAdapter } from './adapter.mjs';
 await RAPIER.init();
 const CAB = new URL('../../cabinet/', import.meta.url);
 const config = await loadPlayConfig(new URL('../../game_tuning/proto/config.json', import.meta.url).href, async p => readFileSync(new URL(p), 'utf8'));
-export async function supply({ interval, seconds = 40, reloadSeconds, feedGap, liftSpeed, stockMax, balls = 15 }) {
-  const pa = await PhysicsAdapter.create(RAPIER, { readText: async (p) => readFileSync(new URL(p, CAB), 'utf8'), importModule: (p) => import(new URL(p, CAB).href), seed: 7, stageDir: config.stageDir, jitter: config.jitter, boardTimeScale: 0.35, reloadSeconds, feedGap, liftSpeed, stockMax });
+export async function supply({ interval, seconds = 40, reloadSeconds, feedGap, liftSpeed, stockMax, stock0, balls = 15 }) {
+  const pa = await PhysicsAdapter.create(RAPIER, { readText: async (p) => readFileSync(new URL(p, CAB), 'utf8'), importModule: (p) => import(new URL(p, CAB).href), seed: 7, stageDir: config.stageDir, jitter: config.jitter, boardTimeScale: 0.35, reloadSeconds, feedGap, liftSpeed, stockMax, stock0 });
   pa.beginGame(balls); pa.payout(balls, true);
   const req = new Map(), waits = []; let id = 0, next = 0, landed = 0, aim = 0;
   for (let i = 0; i < 480 * seconds; i++) {

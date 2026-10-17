@@ -251,7 +251,7 @@ export class HybridRenderer {
         }`,
       fragmentShader: /* glsl */`
         uniform highp sampler2D uAtlas; uniform vec3 uPPos[${N_PROBES}];
-        uniform vec3 uBoxMin, uBoxMax, uF0; uniform float uFill;
+        uniform vec3 uBoxMin, uBoxMax, uF0; uniform float uFill, uBounce;
         uniform highp sampler2D uOcc; uniform int uOccOn;
         varying vec3 vN; varying vec3 vWorld; varying float vViewDepth;
         flat varying vec3 vPI; flat varying vec3 vPW;
@@ -277,7 +277,7 @@ export class HybridRenderer {
           vec3 R = reflect(-V, N);
           vec3 env = vec3(0.0);
           for (int k = 0; k < 3; k++) { if (vPW[k] > 0.0) env += vPW[k] * probeRadiance(int(vPI[k] + 0.5), R); }
-          env += uFill * studioEnv(R);
+          env += uFill * studioEnv(R) + uBounce * vec3(0.9, 0.92, 1.0) * smoothstep(0.0, -0.85, R.y);   // 下半球の照り返し(床の反射)。既定0=従来どおり
           float cs = clamp(dot(N, V), 0.0, 1.0);
           vec3 F = uF0 + (1.0 - uF0) * pow(1.0 - cs, 5.0);
           // 静的な前景（釘頭など）の奥行きより手前なら alpha=1: 合成で前景 F と τ をこの画素では使わない（玉が上に出る）。奥なら通常どおり τ で隠れる
@@ -290,7 +290,7 @@ export class HybridRenderer {
         }`,
       uniforms: { uAtlas: { value: null }, uPPos: { value: PROBES.map(q => new THREE.Vector3(...q.pos)) }, uPZone: { value: PROBES.map(q => q.zone) },
         uBoxMin: { value: new THREE.Vector3(-0.17, -0.30, -0.12) }, uBoxMax: { value: new THREE.Vector3(0.17, 0.30, 0.05) },
-        uF0: { value: new THREE.Vector3(0.95, 0.93, 0.88) }, uFill: { value: 1.0 }, uOcc: { value: null }, uOccOn: { value: 1 } },
+        uF0: { value: new THREE.Vector3(0.95, 0.93, 0.88) }, uFill: { value: 1.0 }, uBounce: { value: 0.0 }, uOcc: { value: null }, uOccOn: { value: 1 } },
       ...NOBLEND, depthTest: true, depthWrite: true,
     });
     this.balls = new THREE.InstancedMesh(geo, mat, this.opts.maxBalls);
@@ -301,6 +301,8 @@ export class HybridRenderer {
 
   /** 玉の環境の下限（studioEnv）の強さ。0=無効、既定1。 */
   setBallFill(v) { this.ballMat.uniforms.uFill.value = v; }
+  /** 玉の下半球の照り返しの強さ。0=無効(既定)。 */
+  setBallBounce(v) { this.ballMat.uniforms.uBounce.value = v; }
 
   /** プローブ基底（既定はダミー）。sourceIds の各 source_id に基底を 1 つ割り当て、環境 16 基底と合わせて線形合成する。 */
   useDummyProbeBases(sourceIds) { this.probes.makeDummyBases(sourceIds); }

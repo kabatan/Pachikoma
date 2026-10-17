@@ -19,8 +19,8 @@ import { loadStageTransforms } from './stage_transforms.mjs';
 export const KIND = { board: 0, ret: 1, tray: 2, lift: 3, shuttle: 4 };
 const HZ = 480, DT = 1 / HZ;
 export const STOCK0 = 5, STOCK_MAX = 4, DISH_CAP = 125;
-/** 同時発射(MaxInFlight>1)用の補給: 装填・取込を0.45秒、昇降管を0.25m/s、予備球を最大9個。0.6秒間隔の連射でも射出待ちが出ない(physics/rapid_supply_test.mjs)。 */
-export const RAPID_SUPPLY = Object.freeze({ reloadSeconds: 0.45, feedGap: 0.45, liftSpeed: 0.25, stockMax: 9 });
+/** 同時発射(MaxInFlight>1)用の補給: 装填・取込を0.45秒、昇降管を0.4m/s、予備球は開始時4個(シャトル含む)・以後最大3個で、皿に玉が11個ほど見える。0.6秒間隔の連射でも射出待ちが出ない(physics/rapid_supply_test.mjs)。 */
+export const RAPID_SUPPLY = Object.freeze({ reloadSeconds: 0.45, feedGap: 0.45, liftSpeed: 0.4, stockMax: 3, stock0: 4 });
 
 function polyline(pts) { const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2])); return { pts, L, len: L[L.length - 1] }; }
 function at(poly, s) {
@@ -31,12 +31,12 @@ function at(poly, s) {
 
 export class PhysicsAdapter {
   static async create(RAPIER, opts) { const pa = new PhysicsAdapter(RAPIER, opts); await pa.init(); return pa; }
-  constructor(RAPIER, { readText, importModule, seed = 1, overflow = 'open', maxBalls = 700, loadTransforms = loadStageTransforms, stageDir = 'stage3', jitter = {}, boardTimeScale = 1, reloadSeconds = 1.0, feedGap = 0.9, liftSpeed = 0.09, stockMax = STOCK_MAX } = {}) {
+  constructor(RAPIER, { readText, importModule, seed = 1, overflow = 'open', maxBalls = 700, loadTransforms = loadStageTransforms, stageDir = 'stage3', jitter = {}, boardTimeScale = 1, reloadSeconds = 1.0, feedGap = 0.9, liftSpeed = 0.09, stockMax = STOCK_MAX, stock0 = STOCK0 } = {}) {
     this.stageDir = (stageDir.startsWith('work/') ? new URL('../../' + stageDir.slice(5), import.meta.url).href : stageDir).replace(/\/$/, ''); this.jitter = normalizeJitter(jitter);
     this.loadTransforms = loadTransforms;
     this.R = RAPIER; this.readText = readText; this.importModule = importModule; this.maxBalls = maxBalls; this.overflowPolicy = overflow;
     this.seed = seed >>> 0; this.s = this.seed; this.rng = () => { this.s = (this.s + 0x6D2B79F5) >>> 0; let t = this.s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-    this.reloadSeconds = reloadSeconds; this.feedGap = feedGap; this.liftSpeed = liftSpeed; this.stockMax = stockMax;   // 連射用: 射出器の装填間隔 / 皿から昇降管への取込間隔 / 昇降管の速さ(m/s)
+    this.reloadSeconds = reloadSeconds; this.feedGap = feedGap; this.liftSpeed = liftSpeed; this.stockMax = stockMax; this.stock0 = stock0;   // stock0: 開始時に昇降管側へ用意する予備球(シャトル含む)   // 連射用: 射出器の装填間隔 / 皿から昇降管への取込間隔 / 昇降管の速さ(m/s)
     this.events = []; this.acc = 0; this.tick = 0; this.boardAcc = 0; this.boardTimeScale = Math.min(1, Math.max(0.05, Number(boardTimeScale) || 1));
   }
   async init() {
@@ -74,13 +74,13 @@ export class PhysicsAdapter {
     this.pendingLaunch = []; this.pendingAim?.clear(); this.aim = 0; this.dir = 1; this.counting = null; this.stored = { overflow: 0, count: 0, returned: 0 }; this.evIdx = 0; this.t = 0; this.tick = 0; this.acc = 0; this.boardAcc = 0; this.seq = 0; this.events = []; this.inputs = new Map(); this.dryFor = 0; this.shots = 0; this.valve = 0;
     this.tray.tick = 0; this.tray.blockSince = this.tray.idleSince = null; this.tray.ovfWant = false;
   }
-  beginGame(loanBalls) { this.reset(); this.stock = STOCK0 - 1; this.shuttleHas = true; this.skipPayout = Math.min(STOCK0, loanBalls); this.stockOnTray = 0; }
+  beginGame(loanBalls) { this.reset(); this.stock = this.stock0 - 1; this.shuttleHas = true; this.skipPayout = Math.min(this.stock0, loanBalls); this.stockOnTray = 0; }
 
   /** 追加の貸し玉: 昇降管の予備球(最大 STOCK0 個)を最初の貸しと同じく物理側へ直ちに用意し、その分は払い出しで二重に数えない。
    *  皿から昇降管を上る玉は遅く、持ち玉が尽きた直後の追加では最初の1球が6秒以上待たされる(実測)。 */
   reserveForLoan(n) {
     const have = (this.shuttleHas ? 1 : 0) + this.stock + this.travel.length;
-    const k = Math.max(0, Math.min(n | 0, STOCK0 - have)); if (!k) return 0;
+    const k = Math.max(0, Math.min(n | 0, this.stock0 - have)); if (!k) return 0;
     let r = k; if (!this.shuttleHas) { this.shuttleHas = true; this.refillAt = null; r--; }
     this.stock += r; this.skipPayout += k; return k;
   }
