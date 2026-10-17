@@ -44,7 +44,13 @@
       if (this.lcdOk) root.LCD.setState({ hold: s.hold, sec: s.sec, rank: s.rank, ...(s.rules ? { rules: s.rules } : {}) });   // rules: {loanBalls, extraSeconds, thresholds, jackpotAwards}
     }
     // ゲームの出来事を通知。params: payout,k,n_from,rank,pocket,total,reason,first
+    // 払い出し(ticket)が終わるまで「スタート!」を出さない(チケット→GET→皿が満ちる→スタート。点検 △11)。上限6秒で出す
+    _ticketBusy() {
+      const th = this._trayHandle;
+      return this.dir.inst.some((x) => x.id === 'ticket') || !!(th && this._trayPay && th.done && !th.done());
+    }
     notify(id, params = {}) {
+      if (id === 'start' && !params.__late && this._ticketBusy()) { this._pendingStart = { params, t: this.dir.t }; return; }
       const d = this.dir;
       const M = this.lcdOk && root.LCD.mono && root.LCD.mono.ready ? root.LCD.mono : null;
       // 毎球の演出は短い版で出す(調整側の尺の上限: 入賞0.6s/重複0.3s/5〜6灯1.5s)。初回(first)だけ説明つきの通常の長さ。
@@ -134,6 +140,7 @@
       } catch (e) { console.warn('tray handler', e.message); }
     }
     frame(dt) {
+      if (this._pendingStart && (!this._ticketBusy() || this.dir.t - this._pendingStart.t > 6)) { const q = this._pendingStart; this._pendingStart = null; this.notify('start', Object.assign({}, q.params, { __late: true })); }
       const F = this.dir.step(dt); this._last = F;
       if (this._laterQ && this._laterQ.length) { const due = this._laterQ.filter((q) => q.at <= this.dir.t); this._laterQ = this._laterQ.filter((q) => q.at > this.dir.t); for (const q of due) { try { q.fn(); } catch (e) { console.warn('later', e.message); } } }
       { const why = this.clockStopReason(); if (why) { const S = this.clockStats; S.total += dt; S.byReason[why] = (S.byReason[why] || 0) + dt; } }   // 止めた累積秒(最終検証用)

@@ -13,10 +13,10 @@ export function makeBoardWash(geom, adapter, { radius = 640, gain = 2.2, sigma =
   return {
     SPOTS,
     /** F: Director のフレーム、t: 秒。戻り: BL.set 用の配列(盤面照射) */
-    compute(F, t, { k = 1, navy = 0 } = {}) {
+    compute(F, t, { k = 1, navy = 0, ambientMin = 0, red = 0 } = {}) {
       if (!F || !F.edge || !F.petal) return [];
       for (let i = 0; i < geom.edge.length; i++) { const c = adapter.edgeColor(F, i, t); ec[i * 3] = c[0]; ec[i * 3 + 1] = c[1]; ec[i * 3 + 2] = c[2]; }
-      const A = F.ambient ?? 1, out = [];
+      const A = Math.max(F.ambient ?? 1, ambientMin), out = [];   // ambientMin: 重複ルーレット・勝負の暗転中も、盤面は深紅に照らす
       for (let s = 0; s < SPOTS.length; s++) {
         let r = 0, g = 0, b = 0;
         for (let i = 0; i < ec.length / 3; i++) { const w = wE[s][i] / sE[s]; r += ec[i * 3] * w; g += ec[i * 3 + 1] * w; b += ec[i * 3 + 2] * w; }
@@ -26,6 +26,7 @@ export function makeBoardWash(geom, adapter, { radius = 640, gain = 2.2, sigma =
         let R = (r * .9 + pr * .7) * m, G = (g * .9 + pg * .7) * m, Bc = (b * .9 + pb * .7) * m;
         // 0〜3灯は「照らさない/紺ベース」(監督 10/17): 色の明るさだけ残して紺へ寄せ、灰色の膜にならないよう弱める
         if (navy > 0) { const lum = (R + G + Bc) / 3 * .35; R = R * (1 - navy) + lum * .18 * navy; G = G * (1 - navy) + lum * .45 * navy; Bc = Bc * (1 - navy) + lum * 1.5 * navy; }
+        if (red > 0) { const lum = (R + G + Bc) / 3, m2 = Math.min(1, red); R = R * (1 - m2) + lum * 2.3 * m2; G = G * (1 - m2) + lum * .08 * m2; Bc = Bc * (1 - m2) + lum * .22 * m2; }   // 赤の場面は、色をクリムゾンへ寄せる(紫に濁らせない)
         out.push({ x: SPOTS[s][0], y: SPOTS[s][1], rgb: [R, G, Bc], radius, gain: 1 });
       }
       return out;

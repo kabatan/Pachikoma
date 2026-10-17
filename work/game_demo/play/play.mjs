@@ -10,6 +10,7 @@ import { createRuntime } from './runtime.mjs';
 import { EffectsBus } from './effects_bus.mjs';
 import { loadPlayConfig, loadPlayRules } from './config.mjs';
 import { prewarm } from './prewarm.mjs';
+import { createLauncherBody } from './launcher_body.mjs';
 
 async function main() {
 const q = new URLSearchParams(location.search);
@@ -49,11 +50,12 @@ if (!q.has('nofx')) {
 // 初回だけ重い処理(画像デコード・GPUアップロード・シェーダ)を遊技の前に済ませる。?prewarm=0 で無効
 if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi });
 const stats = runtime.stats;
+const launcherBody = q.has('nolauncher') ? null : createLauncherBody({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) });   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
   const s = pa.snapshot(); setAssemblyBalls(s); if (fxApi) fxApi.ballLights(s);   // 勝負中の玉をピンポイントで照らす(演出側)
   const lf = pack.lighting.frame(presenter.lightingInputs(), pa.tick); if (fxApi) fxApi.applyLights(lf);   // 演出の光(花びら・縁)が最終の書き手
   hr.setLightingFrame(lf);
-  hr.render(); app.overlay.render(presenter.view());
+  hr.render(); launcherBody?.update(s.shuttle); app.overlay.render(presenter.view());
   if (fxApi) app.overlay.screen.style.display = ctrl.howto ? 'none' : '';   // ルール説明(howto)中は待機画面のDOMを消して、液晶の説明を見せる
   return s;
 }

@@ -174,7 +174,7 @@
   };
 
   // ---- 通常画面のウパ: 色とりどりの大きなウパが灯の数だけ泳ぐ(元の計画 anim/upa_swim の動き: ひとかき→滑走、休み、ダッシュ、壁で反射、近づくと離れる) ----
-  const swim = LCD.swim = { list: [], sc: 7, n: 1 };
+  const swim = LCD.swim = { list: [], sc: 7, n: -1 };
   const swRnd = (a, b) => a + Math.random() * (b - a), swAng = (a, b) => { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
   function swimNew(i, enter) {
     const w = 46 * swim.sc, u = { i, w, h: 21 * swim.sc, x: swRnd(.2, .8) * W, y: swRnd(.3, .85) * H, ang: swRnd(0, TAU), tang: 0, sp: 0, base: swRnd(.85, 1.15), phase: Math.random(), freq: swRnd(.9, 1.1), mode: 'swim', t: 0, dur: swRnd(1, 3), kk: 0, wob: Math.random() * 10, sx: 1, sy: 1, tilt: 0, enter: 0, leaving: false };
@@ -183,7 +183,7 @@
     return u;
   }
   swim.sync = (n) => {
-    const want = clamp(Math.round(n), 1, 6); swim.n = want;
+    const want = clamp(Math.round(n), 0, 6); swim.n = want;   // 0灯はウパ0匹(最初の1灯で1匹目が出る)
     const alive = swim.list.filter((u) => !u.leaving);
     for (let k = alive.length; k < want; k++) swim.list.push(swimNew(k, swim.list.length > 0));
     for (let k = alive.length - 1; k >= want; k--) { alive[k].leaving = true; alive[k].tang = alive[k].x < W / 2 ? Math.PI : 0; }
@@ -337,7 +337,7 @@
     k.pv += (-k.punch * 220 - k.pv * 16) * dt; k.punch += k.pv * dt;   // ばね
     LCD.flashA = Math.max(0, LCD.flashA - (LCD.flashDecay || 6) * dt);
     if (LCD.base) { LCD.base.update(dt); }
-    if (LCD.state.swimOn !== false && LCD.base) { const sn = Math.max(1, Math.round(LCD.state.nDisp ?? LCD.state.n ?? 0)); if (swim.n !== sn || !swim.list.length) swim.sync(sn); swim.update(dt); }
+    if (LCD.state.swimOn !== false && LCD.base) { const sn = Math.max(0, Math.round(LCD.state.nDisp ?? LCD.state.n ?? 0)); if (swim.n !== sn) swim.sync(sn); swim.update(dt); }
     for (const sc of LCD.active) { sc.dt = dt / sc.scale; sc.t += sc.dt; if (sc.def.update) sc.def.update(sc, sc.dt); }
     LCD.active = LCD.active.filter((s) => s.def.hold || s.t <= s.def.dur + .05);
   };
