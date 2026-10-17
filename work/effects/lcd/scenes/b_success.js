@@ -1,7 +1,7 @@
 /* 結果が決まってから再生する増幅演出。玉を積む場所は液晶外の受け皿。 */
 (function () {
   'use strict';
-  const {B,clamp,smooth,easeOut,easeOutBack,lerp,TAU}=LCD;
+  const {B,clamp,smooth,easeOutBack,lerp,TAU}=LCD;
   const extras=['petal_5.png','petal_6.png','ribbon_3.png','flip:impact_2','flip:shock_2'];
   function init(sc,big){
     B.init(sc);sc.S.P=LCD.particles(big?900:280,81);sc.S.Q=LCD.particles(big?550:120,92);
@@ -19,13 +19,13 @@
   }
   function step(sc,dt){
     sc.S.P.step(dt);sc.S.Q.step(dt);sc.S.drop=Math.max(0,sc.S.drop-dt*2.8);
-    const live=sc.t>.48&&sc.t<(sc.S.big?(sc.S.D||6.6)-.3:3.1),rate=sc.S.big?110:22;
+    const live=sc.t>.48&&sc.t<(sc.S.big?6.65:3.45),rate=sc.S.big?110:22;
     sc.S.acc+=live?dt*rate:0;
     while(sc.S.acc>=1){
       sc.S.acc--;const x=sc.rand()*1400-60,y=sc.rand()*800-40;
       sc.S.P.emit({x,y,vx:(sc.rand()-.5)*80,vy:-25-sc.rand()*100,life:Math.min(.3+sc.rand()*.6,(sc.S.big?7:3.8)-sc.t),s0:.1+sc.rand()*.18,s1:.01,img:'glint_1.png',tint:'#ffe7ac'});
     }
-    const pourAt=sc.S.big?3.4:1.4,pourDur=sc.S.big?Math.max(1.2,sc.S.payout/10):.8;
+    const pourAt=sc.S.big?3.4:1.4,pourDur=sc.S.big?3:1.2;
     if(sc.t>=pourAt){
       const amount=LCD.landed(sc.S.payout,Math.min(sc.S.payout,Math.ceil(sc.S.payout*clamp((sc.t-pourAt)/pourDur))));
       if(amount>sc.S.land){
@@ -88,120 +88,87 @@
       if(q>0&&q<1)LCD.add(c,'glint_1.png',x,yy-22,{w:36,h:36,a:a*(1-q)});
     }
   }
-  // ───────── 成功(小): 回収できた。小さく、でも当たりの語彙で ─────────
-  const HS_S=[[.46,.06]];
-  LCD.scene({id:'success_small',dur:3.4,assets:[...B.assets,...extras,...B.titles('seikou'),...B.digits(),'sprite_happy.png'],
-    start(sc){init(sc,false);sc.S.payout=clamp(Math.round(sc.params.payout??1),1,3);burst(sc,38,17,640,275,.6);LCD.shake(6,.2);},
-    update(sc,dt){
-      if(!B.frozen(sc.t,HS_S))step(sc,dt);else sc.S.drop=sc.S.drop;
-      B.at(sc,.2,()=>{LCD.flash(.6,'#ffc43a',8);LCD.shake(14,.3);LCD.punch(.04);burst(sc,60,20,640,270,.8);});
-      B.at(sc,.46,()=>{LCD.shake(10,.2);burst(sc,40,10,640,270,.7);});
-      B.at(sc,.95,()=>{LCD.flash(.4,'#ffb000',9);LCD.punch(.02);burst(sc,38,14,640,280,.65);});
-    },
+  LCD.scene({id:'success_small',dur:3.8,assets:[...B.assets,...extras,...B.titles('seikou'),...B.digits()],
+    start(sc){init(sc,false);sc.S.payout=clamp(Math.round(sc.params.payout??1),1,3);burst(sc,38,17,640,275,.6);LCD.shake(5,.18);},
+    update(sc,dt){step(sc,dt);B.at(sc,.95,()=>{LCD.flash(.22,'#ffe6ba',8);LCD.punch(.02);burst(sc,38,14,640,280,.65);});},
     draw(c,t,sc){
-      const T=B.hs(t,HS_S),p=sc.S.payout;
-      B.layer(c,B.exit(t,3.4,.3),c=>{
-        const pre=smooth(T/.2);
-        LCD.dim(c,.72*pre,'#0a0830');
-        // 金の面+周回する光。彩度を落とさない
-        const pulse=T>.2&&T<1.3?Math.max(0,Math.sin((T-.2)*TAU*2.4)):0;
-        B.blink(c,'#ff8a00',.2*pulse);
-        LCD.add(c,'crest_glow.png',640,290,{w:700,h:700,a:.3,tint:'#ffb000'});
-        LCD.rays(c,640,275,{n:21,len:980,rot:T*.2,a:.22,color:'255,180,40'});B.stream(c,T,640,275,{n:22,a:.4,speed:.9});
-        B.confetti(c,T,{t0:.2,n:70,a:.9,spread:.5});
-        swirl(c,T,26,.7);sc.S.Q.draw(c);orbit(c,T,.45,.8);
-        if(T>=.2){
-          const u=T-.2,e=easeOut(u/.4),fade=1-smooth((T-1.2)/.18),zoom=lerp(.2,1,easeOutBack(clamp(u/.36)));
-          if(fade>0){
-            LCD.add(c,'glow_soft.png',640,265,{w:980,h:420,a:.45*fade,tint:'#ff9a00'});
-            B.titleSpin(c,'seikou','成功!',640,265,{w:740,h:225,zoom,ry:(1-e)*TAU*1,rz:(1-e)*.3,a:fade});
-          }
-        }
-        if(T>=.95){
-          const u=T-.95,show=smooth(u/.13),z=(.45+.55*easeOutBack(u/.34))*(1+.08*sc.S.drop),y=281+Math.sin(u*4)*4-sc.S.drop*7;
-          LCD.radial(c,640,280,390,'7,15,33',.5*show,'source-over');
-          LCD.number(c,'+'+p,605,y,{w:680,h:235,zoom:z,a:show});
-          B.shine(c,u,g=>LCD.number(g,'+'+p,605,y,{w:680,h:235,zoom:z,shadowA:0,glowA:0}),{a:show*.6,speed:.9});
-          LCD.text(c,'玉',852,y+44,{size:62,a:show,stroke:9,fill1:'#ffdfa1'});
-        }
-        if(T<1.45)team(c,T,p,517,6,1,235);else toTray(c,T-1.45,p,517,6,1,235);
-        sc.S.P.draw(c);
-        receiving(c,T,smooth((T-1.25)/.25),Math.max(sc.S.drop,.25+.25*Math.sin(T*9)));
-        if(sc.params.first===true)LCD.text(c,'玉が ふえた!',640,426,{size:40,a:smooth((T-1)/.2),stroke:8,fill1:'#ffe5b2'});
-      });
+      const a=B.exit(t,3.8,.3),p=sc.S.payout;
+      LCD.dim(c,.65*a,'#08132d');LCD.add(c,'crest_glow.png',640,290,{w:610,h:610,a:.18*a});
+      LCD.rays(c,640,275,{n:17,len:900,rot:t*.05,a:.13*a,color:'255,210,136'});B.stream(c,t,640,275,{n:18,a:.3*a,speed:.8});
+      swirl(c,t,28,a*.6);sc.S.Q.draw(c);orbit(c,t,a*.4,.8);
+      if(t<1.1){
+        const fade=1-smooth((t-.9)/.2),z=.7+.3*easeOutBack(t/.22);
+        LCD.titleFit(c,'seikou','成功!',640,265,{w:740,h:225,a:a*fade,zoom:z});
+      }
+      if(t>=.95){
+        const u=t-.95,show=smooth(u/.13)*a,z=(.45+.55*easeOutBack(u/.34))*(1+.03*sc.S.drop),y=281+Math.sin(u*4)*4-sc.S.drop*7;
+        LCD.radial(c,640,280,390,'7,15,33',.5*show,'source-over');
+        LCD.number(c,'+'+p,605,y,{w:680,h:235,zoom:z,a:show});
+        B.shine(c,u,g=>LCD.number(g,'+'+p,605,y,{w:680,h:235,zoom:z,shadowA:0,glowA:0}),{a:show*.6,speed:.9});
+        LCD.text(c,'玉',852,y+44,{size:56,a:show,stroke:8,fill1:'#ffdfa1'});
+      }
+      if(t<1.45)team(c,t,p,517,6,a,235);
+      else toTray(c,t-1.45,p,517,6,a,235);
+      sc.S.P.draw(c);
+      receiving(c,t,smooth((t-1.25)/.25)*a,Math.max(sc.S.drop,.25+.25*Math.sin(t*9)));
+      if(sc.params.first===true)LCD.text(c,'玉が ふえた!',640,426,{size:36,a:a*smooth((t-1)/.2),stroke:7,fill1:'#ffe5b2'});
     }
   });
-
-  // ───────── 大成功: 虹の点滅・回転して飛び込む立体文字・光の筋・金の花吹雪・弾む数字 ─────────
-  const HS_B=[[.62,.1],[1.9,.08]];
-  LCD.scene({id:'success_big',dur:6.6,cover:true,assets:[...B.assets,...extras,...B.titles('daiseikou'),...B.digits(),...B.digitsR(),'sprite_happy.png'],
-    start(sc){
-      init(sc,true);const pay=Math.round(sc.params.payout??12);sc.S.payout=pay>=24?pay:12;
-      sc.S.extra=pay>=24;sc.S.D=sc.S.extra?6.6:4.8;LCD.shake(4,.3);
-    },
+  B.scene({id:'success_big',dur:7,cover:true,assets:[...B.assets,...extras,...B.titles('daiseikou'),...B.digits()],
+    start(sc){init(sc,true);sc.S.payout=sc.params.payout===30?30:12;LCD.shake(3,.42);},
     update(sc,dt){
-      const D=sc.S.D;if(sc.t>D+.02){sc.t=1e9;return;}   // 賞12玉は4.8秒、24/30玉は6.6秒で終える
-      if(!B.frozen(sc.t,HS_B))step(sc,dt);
-      const x=sc.S.extra;
-      B.at(sc,.3,()=>{LCD.flash(.75,'#ffb21a',8);LCD.shake(x?24:20,.4);LCD.punch(.05);burst(sc,130,60,640,300,x?1.4:1.1);});
-      B.at(sc,.62,()=>{LCD.flash(.7,'#ff4fa8',9);LCD.shake(x?26:22,.36);LCD.punch(.06);burst(sc,150,70,640,300,1.3);});
-      B.at(sc,1.15,()=>{LCD.flash(.45,'#36d6ff',10);burst(sc,60,30,640,300,1);});
-      B.at(sc,1.55,()=>{LCD.flash(.5,'#ffd23a',10);LCD.shake(10,.25);burst(sc,60,30,640,300,1);});
-      B.at(sc,1.9,()=>{LCD.flash(.75,'#ffc01a',9);LCD.shake(x?24:19,.38);LCD.punch(.06);burst(sc,160,70,640,320,x?1.4:1.15);});
-      B.at(sc,2.5,()=>{LCD.flash(.4,'#ff6ad0',10);burst(sc,50,25,640,300,.9);});
-      B.at(sc,3.4,()=>{LCD.shake(8,.25);burst(sc,40,15,640,705,.7);});
+      step(sc,dt);const extra=sc.S.payout===30;
+      B.at(sc,.5,()=>{LCD.flash(.82,'#ffe1c4',9);LCD.shake(extra?24:18,.4);LCD.punch(.06);burst(sc,140,65,640,310,extra?1.4:1.1);});
+      B.at(sc,.82,()=>{LCD.flash(.58,'#ffd1e9',10);burst(sc,75,40,640,310,1.25);});
+      B.at(sc,1.4,()=>{LCD.flash(.75,'#fff0c6',9);LCD.shake(extra?21:16,.34);LCD.punch(.05);burst(sc,180,90,640,280,extra?1.45:1.15);});
+      B.at(sc,1.72,()=>LCD.flash(.42,'#ffc7e2',11));
+      B.at(sc,2.15,()=>{LCD.flash(.58,'#ffedb9',10);burst(sc,55,30,640,285,1);});
+      B.at(sc,3.4,()=>{LCD.flash(.86,'#fff0cb',10);LCD.shake(extra?25:18,.36);LCD.punch(.065);burst(sc,170,70,640,300,1.25);});
+      B.at(sc,3.83,()=>LCD.flash(.44,'#ffd4eb',10));
+      B.at(sc,4.1,()=>{LCD.flash(.58,'#ffe9ae',11);burst(sc,60,30,640,280,.9);});
+      B.at(sc,6.4,()=>{LCD.flash(.35,'#ffe5b9',9);burst(sc,40,15,640,705,.55);});
     },
     draw(c,t,sc){
-      const x=sc.S.extra,D=sc.S.D,T=B.hs(t,HS_B);
-      B.layer(c,B.exit(t,D,.3),c=>{
-        const open=smooth((T-.28)/.12),pre=1-open;
-        // タメ: 暗い画面に集中線が吸い込まれる
-        if(T<.3)c.translate(Math.sin(T*83)*2.5*pre,Math.cos(T*61)*2*pre);
-        c.fillStyle='#14042e';c.fillRect(-128,-72,1536,864);
-        LCD.blit(c,'bg_night_sakura.jpg',640,360,{w:1536,h:864,a:.9});
-        LCD.blit(c,'bg_sakura.jpg',640,360,{w:1536,h:864,a:open*.55});
-        LCD.dim(c,.35*pre,'#10001c');
-        // 全画面の虹の点滅(強い点滅は1秒3回まで: 2.5回/秒 → 後半はゆっくり)
-        const fast=T>.3&&T<1.8,pulse=fast?Math.max(0,Math.sin((T-.3)*TAU*2.5))**.7:T>=1.8&&T<3.4?.5+.5*Math.sin((T-1.8)*TAU*1.2):.35;
-        if(T>=.3)B.rainbow(c,T,(fast?.3+.5*pulse:.2+.25*pulse)*(T<D-.5?1:.5),{speed:150});
-        LCD.add(c,'crest_glow.png',640,300,{w:450+open*850,h:450+open*850,a:.1+open*.32,tint:'#ffb000'});
-        if(T<.3){
-          B.speed(c,T,640,300,{n:40,a:.8,color:'255,200,60',inward:true,rate:3,r0:60,reach:700});
-          LCD.add(c,'flare_ring.png',640,300,{w:620-T*1600,h:620-T*1600,a:.5*(T/.3),tint:'#ffcf4a'});
-        }
-        if(T>=.3){
-          LCD.rays(c,640,300,{n:x?39:31,len:1250,rot:T*.14,a:x?.4:.34,color:'255,196,60'});
-          LCD.rays(c,640,300,{n:17,len:1100,rot:-T*.2,a:.28,color:'255,120,210'});
-          B.stream(c,T,640,300,{n:x?70:50,a:.9,speed:1.9});
-          orbit(c,T,x?1:.85);
-          swirl(c,T,x?140:100,.85);sc.S.Q.draw(c);
-          B.confetti(c,T,{t0:.3,n:x?170:130,a:.95,spread:1.4,seed:31});
-          if(T<2.9)B.fire(c,T,x?1.6:1.2,.5*(1-smooth((T-2.2)/.7)));
-        }
-        // 立体の「大成功!」が回りながら飛び込む → 数字が出る頃に左上へ移る
-        if(T>=.3){
-          const u=T-.3,e=easeOut(u/.5),zb=easeOutBack(clamp(u/.42)),shift=smooth((T-1.72)/.2);
-          const zoom=lerp(.12,1.05,zb)*(1+.025*Math.sin(u*5))*lerp(1,.5,shift);
-          const tx=lerp(640,x?390:370,shift),ty=lerp(300+Math.sin(u*3)*5,96,shift);
-          if(shift<1)LCD.radial(c,tx,ty,520*lerp(1,.5,shift),'28,2,40',.5*(1-shift),'source-over');
-          LCD.add(c,'glow_soft.png',tx,ty,{w:1500*zoom,h:620*zoom,a:.5,tint:'#ffa000'});
-          const o={w:x?1160:1080,h:x?350:320,zoom,ry:(1-e)*TAU*1.25,rz:(1-e)*.55};
-          B.titleSpin(c,'daiseikou','大成功!',tx,ty,o);
-          B.shine(c,u,g=>B.titleSpin(g,'daiseikou','大成功!',tx,ty,{...o,glowA:0,ry:0,rz:0}),{a:.7*e,speed:1.05});
-          if(T<1.95)team(c,u,7,575,x?5:4,1,153);
-        }
-        if(T>=1.9){
-          const u=T-1.9,show=smooth(u/.06),z=(lerp(2.2,1,easeOut(u/.16)))*(1+.14*sc.S.drop+.02*Math.sin(u*4)),count=sc.S.payout;
-          LCD.radial(c,640,330,560,'23,2,32',.75*show,'source-over');
-          B.numberR(c,'+'+count,590,335,{w:x?900:840,h:x?330:300,zoom:z,a:show});
-          B.shine(c,u,g=>B.numberR(g,'+'+count,590,335,{w:x?900:840,h:x?330:300,zoom:z,shadowA:0,glowA:0}),{a:show*.6,speed:1.1});
-          LCD.text(c,'玉',1062,392,{size:104,a:show,stroke:14,fill1:'#fffbe0',fill2:'#ffb000',glow:'#ff9a00',strokeColor:'#3a1060'});
-          if(T<3.6)team(c,T,7,575,3,1,153);else toTray(c,T-3.6,7,575,3,1,153);
-        }
-        sc.S.P.draw(c);
-        if(T>=3.4)receiving(c,T,smooth((T-3.4)/.2),sc.S.drop);
-        LCD.vignette(c,.25);
-      });
+      const extra=sc.S.payout===30,a=B.exit(t,7,.35),open=smooth((t-.47)/.2),pre=1-open;
+      // 圧縮するタメ。全画面を空にせず、暗い桜の紋だけを震わせる。
+      if(t<.5)c.translate(Math.sin(t*83)*2*pre,Math.cos(t*61)*pre);
+      c.fillStyle='#19081b';c.fillRect(-128,-72,1536,864);
+      LCD.blit(c,'bg_night_sakura.jpg',640,360,{w:1536,h:864});
+      LCD.blit(c,'bg_sakura.jpg',640,360,{w:1536,h:864,a:open*.76});LCD.dim(c,.4+.5*pre,'#16071c');
+      LCD.blit(c,'crest_sakura.png',640,300,{w:lerp(235,630,open),h:lerp(235,630,open),a:pre*.5+open*.2,rot:t>.5?t*.12:0});
+      LCD.add(c,'crest_glow.png',640,300,{w:450+open*650,h:450+open*650,a:.12+open*.3,tint:'#ffcc78'});
+      if(t<.5)LCD.add(c,'flare_ring.png',640,300,{w:290,h:290,a:.25,tint:'#d2a24c'});
+      if(t>=.5){
+        LCD.rays(c,640,300,{n:extra?39:29,len:1250,rot:t*.11,a:(extra?.36:.29)*a,color:'255,207,124'});
+        B.stream(c,t,640,300,{n:extra?66:46,a:.85*a,speed:1.8});
+        orbit(c,t,a*(extra?1:.8));
+        impact(c,'impact_2',t-.5,640,300,3.1,.55*a);
+        impact(c,'shock_2',t-.5,640,300,3.3,.75*a);
+        if(t<1.4)impact(c,'pillar_1',t-.5,640,330,3,.6*a);
+        swirl(c,t,extra?145:105,.8*a);sc.S.Q.draw(c);
+        B.fire(c,t,extra?1.6:1.15,.65*a*(1-smooth((t-2.6)/.8)));
+      }
+      if(t>=1.4&&t<3.45){
+        const u=t-1.4,fade=1-smooth((t-3.28)/.17),zoom=(.58+.42*easeOutBack(u/.25))*(1+.02*Math.sin(u*5)),y=279+Math.sin(u*3)*4;
+        LCD.radial(c,640,280,540,'32,4,27',.66*fade,'source-over');
+        impact(c,'digitburst_1',u,640,y,1.9,.55*a);
+        LCD.titleFit(c,'daiseikou','大成功!',640,y,{w:extra?1160:1080,h:extra?350:320,zoom,a:fade*a});
+        B.shine(c,u,g=>LCD.titleFit(g,'daiseikou','大成功!',640,y,{w:extra?1160:1080,h:extra?350:320,zoom,shadowA:0,glowA:0}),{a:fade*a*.85,speed:1.05});
+        if(t<3.4)team(c,u,7,555,extra?5:4,a,153);
+      }
+      if(t>=3.4){
+        const u=t-3.4,show=smooth(u/.08)*a,z=1+.13*Math.exp(-u*4)*Math.sin(u*18)+.015*Math.sin(u*4),count=sc.S.land;
+        LCD.radial(c,640,290,530,'23,4,25',.88*show,'source-over');
+        LCD.titleFit(c,'daiseikou','大成功!',640,87,{w:560,h:90,a:show,glowA:.65});
+        LCD.number(c,'+'+count,595,302,{w:extra?900:840,h:extra?330:300,zoom:z,a:show});
+        B.shine(c,u,g=>LCD.number(g,'+'+count,595,302,{w:extra?900:840,h:extra?330:300,zoom:z,shadowA:0,glowA:0}),{a:show*.85,speed:1.1});
+        LCD.text(c,'玉',1030,364,{size:72,a:show,stroke:10,fill1:'#fff1ba',fill2:'#efb947'});
+        if(t<4.65)team(c,t,7,537,3,a,153);
+        else toTray(c,t-4.65,7,537,3,a,153);
+      }
+      if(t>.5)swirl(c,t,extra?65:40,a,true);sc.S.P.draw(c);
+      if(t>=3.4)receiving(c,t,smooth((t-3.4)/.2)*a,sc.S.drop);
+      LCD.vignette(c,.25);
     }
   });
 })();

@@ -55,10 +55,9 @@
   const jpNotice = (c, t) => {
     const { smooth, easeOut, lerp, clamp } = LCD, B = LCD.B, q = clamp((t - .75) / .35), a = smooth(q);
     if (a <= 0) return;
-    // 下の「6灯」の映像を深い琥珀色に沈めてから文字を出す(6灯の大きな「6」とJPチャンスが重ならないように)
-    c.save(); c.globalAlpha = .9 * a; c.fillStyle = '#1c0a00'; c.fillRect(0, 0, W, H); c.restore();
-    LCD.rays(c, 640, 300, { n: 28, a: .2 * a, rot: t * .25, color: '255,176,0', len: 900 });
-    LCD.add(c, 'glow_soft.png', 640, 300, { w: 1300 * a, h: 460 * a, a: .22 * a, tint: '#ff9a00' });   // 金は #ffb000 付近の高彩度のまま。足し算を強くすると白く飛ぶので控える
+    c.save(); c.globalAlpha = .55 * a; const g = c.createLinearGradient(0, 120, 0, 600); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(.3, 'rgba(8,4,24,.9)'); g.addColorStop(.7, 'rgba(8,4,24,.9)'); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(0, 120, W, 480); c.restore();
+    LCD.rays(c, 640, 300, { n: 28, a: .26 * a, rot: t * .25, color: '255,214,120', len: 900 });
+    LCD.add(c, 'glow_soft.png', 640, 300, { w: 1300 * a, h: 460 * a, a: .5 * a, tint: '#ffb23a' });
     const z = t < 1.1 ? lerp(1.9, 1, easeOut(q)) : 1 + .05 * Math.sin((t - 1.1) * 9) * Math.exp(-(t - 1.1) * 2);
     LCD.titleFit(c, 'jpchance', 'JPチャンス!', 640, 280, { w: 1120, h: 240, zoom: z, a, glowA: .9 + .5 * Math.sin(t * 10) });
     if (B && B.shine) B.shine(c, t, (gg) => LCD.titleFit(gg, 'jpchance', 'JPチャンス!', 640, 280, { w: 1120, h: 240, zoom: z, shadowA: 0, glowA: 0 }), { a: .8 * a, speed: 1.1 });

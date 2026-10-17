@@ -113,7 +113,6 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   // 勝負の玉をピンポイントで照らす(盤の釘・枠だけが光る点光源。勝負中の飛行中だけ)。玉の位置を画面座標へ射影して渡す
   let BL = null; try { BL = installBallLights(hr, { max: 36 }); } catch (err) { console.warn('ballLights', err.message); }
   const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
-  if (BL && BL.setMask) BL.setMask([150, 760, 1330, 1445], Number(qs.get('lcdmask') ?? .12), 30);   // 液晶の面は盤面の照射を弱める(通常画面の純青を紫・ピンクに染めない。点検 新e09)
   const wash = BL && !qs.has('nowash') ? makeBoardWash(geom, adapter, { gain: Number(qs.get('washgain') ?? 2.2) }) : null;   // 盤面全体の電飾(花びら・縁の色を盤へ)
   const _v = new THREE.Vector3();
   const trail = new Map(), TRAIL = [[.05, .5], [.1, .4], [.17, .28], [.26, .17], [.38, .09]], BALL_R = Number(qs.get('ballr') ?? 34), BALL_G = Number(qs.get('ballg') ?? 3.5);
@@ -121,14 +120,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
     if (!BL) return;
     const act = (last && last.active) || [], nl = last ? last.n ?? fx.dir.state.n : 0;
     const hot = act.some((id) => /^(roulette|ascend|challenge_|success|jp|fail|lamp[456]|warn10|timeup|add100|finish_count|result|attract|title|howto|ticket|start)/.test(id));
-    const redHot = act.some((id) => /^(roulette|challenge_declare|challenge_flight)$/.test(id));
-    const list = wash && last ? wash.compute(last, clock, { ambientMin: redHot ? .8 : 0, red: redHot ? 1 : 0, navy: nl <= 3 && !hot ? 1 : 0, k: act.some((id) => id === 'jp' || id === 'success_big') ? .5 : act.includes('fail') ? .6 : act.includes('timeup') ? .45 : 1 }) : [];   // 大成功・JPは液晶が主役。盤面の照射が液晶をかすませないよう半分に
-    // 重複ルーレット: 針の位置(花びらの輪)に追従する赤いスポット
-    if (act.includes('roulette') && last && last.__needle != null) {
-      const th = last.__needle, P = fx.dir.pAng, G = geom.petals; let sx = 0, sy = 0, sw = 0;
-      for (let i = 0; i < P.length; i++) { const d = Math.abs(P[i] - th), dd = Math.min(d, 1 - d), w = Math.exp(-Math.pow(dd / .05, 2)); sx += G[i].u * w; sy += G[i].v * w; sw += w; }
-      if (sw > .01) list.push({ x: sx / sw * 1440, y: sy / sw * 2560, rgb: [1, .05, .07], radius: 460, gain: 3.4 });
-    }
+    const list = wash && last ? wash.compute(last, clock, { navy: nl <= 3 && !hot ? 1 : 0, k: act.some((id) => id === 'jp' || id === 'success_big') ? .5 : act.includes('fail') ? .6 : act.includes('timeup') ? .45 : 1 }) : [];   // 大成功・JPは液晶が主役。盤面の照射が液晶をかすませないよう半分に
     // 盤の上の玉すべてに「玉を照らす光」: 玉の位置の小さな暖色の光(縁の反射が立つ)と、直前の位置に淡い尾。暗い紺の盤で黒い輪に沈まない
     if (snap && snap.count > 0 && !qs.has('noballglow')) {
       hr.camera.updateMatrixWorld(); const seen = new Set(); let nb = 0;

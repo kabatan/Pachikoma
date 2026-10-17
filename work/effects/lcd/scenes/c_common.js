@@ -153,77 +153,18 @@
     C.title(c, key, fallback, 0, 0, w, h, { a: o.a, glowA: .65 });
     LCD.blit(c, `t_${key}_face.png`, ox, oy, { s, a: (o.a ?? 1) * .21, blend: 'screen', tint: '#a1d6f6' }); c.restore();
   };
-  // ---- 10/17 作り直し用の共通部品(JP・結果) ----
-  const maskCache = new WeakMap();
-  const tintMask = (im, color) => {
-    let per = maskCache.get(im); if (!per) maskCache.set(im, per = new Map()); if (per.has(color)) return per.get(color);
-    const cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height; const g = cv.getContext('2d');
-    g.drawImage(im, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = color; g.fillRect(0, 0, cv.width, cv.height); per.set(color, cv); return cv;
-  };
-  // 立体の文字(奥行き)。面素材を濃色で斜め下へ積み、金の縁を回す。o: depth, near, far, rim, dir(-1..1 横ずれ)
-  C.extrude = (c, key, fallback, x, y, w, h, o = {}) => {
-    const im = LCD.img[`t_${key}_face.png`];
-    if (!im) { C.title(c, key, fallback, x, y, w, h, o); return; }
-    const b = C.bounds(im), s = Math.min(w / b.w, h / b.h) * (o.zoom ?? 1), ox = (im.width / 2 - b.cx) * s, oy = (im.height / 2 - b.cy) * s;
-    const depth = (o.depth ?? .075) * b.h * s, steps = Math.max(4, Math.round(depth / 2)), dir = o.dir ?? .28;
-    const near = tintMask(im, o.near || '#8a2a10'), far = tintMask(im, o.far || '#2a0612'), rimM = tintMask(im, o.rim || '#ffd35a');
-    c.save(); c.translate(x, y); c.rotate(o.rot || 0); c.globalAlpha = o.a ?? 1;
-    for (let i = steps; i >= 1; i--) {
-      const d = i / steps * depth, m = i > steps * .45 ? far : near;
-      c.drawImage(m, ox - im.width * s / 2 + d * dir, oy - im.height * s / 2 + d, im.width * s, im.height * s);
-    }
-    const rs = s * 1.03; c.drawImage(rimM, ox - im.width * rs / 2, oy - im.height * rs / 2, im.width * rs, im.height * rs);
-    C.title(c, key, fallback, 0, 0, w, h, { a: 1, zoom: o.zoom, glowA: o.glowA ?? .9 });
-    LCD.blit(c, `t_${key}_face.png`, ox, oy, { s, a: .16, blend: 'screen' });
-    c.restore();
-  };
-  // 数字(3層)に奥行きを足す。rainbow=true で虹数字。
-  C.numberDepth = (c, n, x, y, height, rainbow, o = {}) => {
-    const str = String(C.total(n)), prefix = rainbow ? 'dr' : 'dg';
-    if (![...str].every(d => LCD.hasTitle(prefix + d))) { C.number(c, n, x, y, height, rainbow, o); return; }
-    const ims = [...str].map(d => LCD.img[`t_${prefix + d}_face.png`]), bs = ims.map(C.bounds);
-    const rawW = bs.reduce((v, b) => v + (b.w / b.h + .045) * height, 0), fit = Math.min(1, (o.maxW || 900) / rawW), depth = height * fit * (o.depth ?? .07);
-    const widths = bs.map(b => (b.w / b.h + .045) * height * fit), total = widths.reduce((v, w) => v + w, 0);
-    c.save(); c.globalAlpha = o.a ?? 1;
-    for (let k = 10; k >= 1; k--) {
-      let left = x - total / 2; const d = k / 10 * depth;
-      [...str].forEach((ch, i) => { const s = height / bs[i].h * fit, im = ims[i], m = tintMask(im, k > 4 ? (o.far || '#2a0612') : (o.near || '#8a2a10'));
-        c.drawImage(m, left + widths[i] / 2 + (im.width / 2 - bs[i].cx) * s - im.width * s / 2 + d * .3, y + (im.height / 2 - bs[i].cy) * s - im.height * s / 2 + d, im.width * s, im.height * s); left += widths[i]; });
-    }
-    c.restore();
-    C.number(c, n, x, y, height, rainbow, o);
-  };
-  // 高彩度の放射(白っぽくしない)。hue: 数値(度)なら単色、null なら虹が回る
-  C.sunburst = (c, t, cx, cy, o = {}) => {
-    const n = o.n ?? 20, len = o.len ?? 1500, a = o.a ?? .5, rot = o.rot ?? t * .12, sat = o.sat ?? 100, light = o.light ?? 52;
-    c.save(); c.globalCompositeOperation = o.blend ?? 'lighter'; c.translate(cx, cy); c.rotate(rot);
-    for (let i = 0; i < n; i += 2) {
-      const hue = o.hue == null ? (i * 360 / n + t * (o.spin ?? 110)) % 360 : (o.hue + (i % 4 ? 14 : -14));
-      const g = c.createRadialGradient(0, 0, 40, 0, 0, len); g.addColorStop(0, `hsla(${hue},${sat}%,${light}%,${a})`); g.addColorStop(1, `hsla(${hue},${sat}%,${light - 14}%,0)`);
-      c.fillStyle = g; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, len, i / n * TAU, (i + 1) / n * TAU); c.closePath(); c.fill();
-    }
-    c.restore();
-  };
-  // 画面全体を虹に染める(色相をなめらかに回す。強い白フラッシュではない)。
-  C.rainbowWash = (c, t, a = .3, speed = 260, y0 = 0, y1 = 720) => {
-    const h = (t * speed) % 360; c.save(); c.globalCompositeOperation = 'lighter';
-    const g = c.createLinearGradient(0, y0, 1280, y1); g.addColorStop(0, `hsla(${h},100%,48%,${a})`); g.addColorStop(.5, `hsla(${h + 70},100%,48%,${a * .85})`); g.addColorStop(1, `hsla(${h + 140},100%,48%,${a})`);
-    c.fillStyle = g; c.fillRect(-60, -60, 1400, 840); c.restore();
-  };
-  // 深い色の全面背景。内側が c0、外側が c1。
-  C.deepBg = (c, c0, c1, cy = 330, r = 980) => { const g = c.createRadialGradient(640, cy, 20, 640, cy, r); g.addColorStop(0, c0); g.addColorStop(1, c1); c.fillStyle = g; c.fillRect(-120, -120, 1520, 960); };
   // 常設用。ホストが毎フレーム LCD.hud(ctx, {sec}) を呼ぶ。未接続時に時刻を捏造しない。
   // LCD.initのシーン絞り込み時には、この配列も LCD.load する。
   LCD.hudAssets = ['plate_A.png', 'glow_soft.png'];
   LCD.hud = (c, params = {}) => {
     if (typeof params.sec !== 'number' || !Number.isFinite(params.sec)) return;
-    const sec = Math.ceil(Math.max(0, params.sec)), danger = sec <= 10, x = params.x ?? 1030, y = params.y ?? 84;
-    // 遠くからでも読める大きさ(27型の縦画面では液晶全体が小さい。筐体全体の画で「のこり」まで読めること): 板 470x150、数字 112px
-    LCD.blit(c, 'plate_A.png', x, y, { w: 470, h: 150, a: .96 });
-    if (danger) LCD.add(c, 'glow_soft.png', x, y, { w: 520, h: 210, a: .3 + .14 * Math.sin((LCD.t || 0) * 12), tint: '#ff4260' });
-    LCD.text(c, 'のこり', x - 160, y + 4, { size: 40, stroke: 4, fill1: '#ffffff', fill2: danger ? '#ffb3bd' : '#d9ebfa' });
-    LCD.text(c, String(sec), x + 30, y - 2, { size: 114, weight: 900, stroke: 6, fill1: danger ? '#fff0e8' : '#f4fbff', fill2: danger ? '#ff5265' : '#c8e9ff', glow: danger ? '#de1c47' : '#5c9ccf' });
-    LCD.text(c, '秒', x + 160, y + 20, { size: 52, stroke: 4, fill2: danger ? '#ffa1ad' : '#d9ebfa' });
+    const sec = Math.ceil(Math.max(0, params.sec)), danger = sec <= 10, x = params.x ?? 1100, y = params.y ?? 66;
+    // 遠くからでも読める大きさ(27型の縦画面の液晶は小さい): 板 320x112、数字 82px
+    LCD.blit(c, 'plate_A.png', x, y, { w: 330, h: 116, a: .94 });
+    if (danger) LCD.add(c, 'glow_soft.png', x, y, { w: 360, h: 160, a: .3 + .14 * Math.sin((LCD.t || 0) * 12), tint: '#ff4260' });
+    LCD.text(c, 'のこり', x - 118, y + 4, { size: 26, stroke: 3, fill2: danger ? '#ffb3bd' : '#d9ebfa' });
+    LCD.text(c, String(sec), x + 20, y, { size: 84, weight: 900, stroke: 5, fill1: danger ? '#fff0e8' : '#f4fbff', fill2: danger ? '#ff5265' : '#c8e9ff', glow: danger ? '#de1c47' : '#5c9ccf' });
+    LCD.text(c, '秒', x + 118, y + 14, { size: 38, stroke: 3, fill2: danger ? '#ffa1ad' : '#d9ebfa' });
   };
   C.benefitAssets = ['rl_rim.png', 'rl_dome.png', 'rl_lamp_on.png', 'rl_lamp_off.png', ...LCD.hudAssets];
   // 継続の価値をひとつのまとまりに。玉の山はこの小さな説明アイコンの中だけ。
