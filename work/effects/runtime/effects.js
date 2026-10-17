@@ -44,7 +44,14 @@
       if (this.lcdOk) root.LCD.setState({ hold: s.hold, sec: s.sec, rank: s.rank, ...(s.rules ? { rules: s.rules } : {}) });   // rules: {loanBalls, extraSeconds, thresholds, jackpotAwards}
     }
     // ゲームの出来事を通知。params: payout,k,n_from,rank,pocket,total,reason,first
+    // 払い出し(ticket)が終わるまで「スタート!」を出さない(チケット→GET→皿が満ちる→スタート。点検 △11)。上限6秒で出す
+    _ticketBusy() {
+      const th = this._trayHandle;
+      return this.dir.inst.some((x) => x.id === 'ticket' || x.id === 'add100') || !!(th && this._trayPay && th.done && !th.done());
+    }
     notify(id, params = {}) {
+      if (id === 'tray_overflow' && (this._ticketBusy() || this.dir.isActive('start') || this.dir.isActive('ticket'))) return -1;   // 払い出しの最中・スタート表示中は『皿のあふれ』を重ねない
+      if (id === 'start' && !params.__late && this._ticketBusy()) { this._pendingStart = { params, t: this.dir.t }; return; }
       const d = this.dir;
       const M = this.lcdOk && root.LCD.mono && root.LCD.mono.ready ? root.LCD.mono : null;
       // 毎球の演出は短い版で出す(調整側の尺の上限: 入賞0.6s/重複0.3s/5〜6灯1.5s)。初回(first)だけ説明つきの通常の長さ。
@@ -61,8 +68,10 @@
       }
       if (this.lcdOk) {                                  // 残り時間(右上)は start から timeup/結果まで常設
         if (id === 'start' || id === 'add100') root.LCD.setState({ hudOn: true });
+        if (id === 'add100') this._pendingStart = { params: { duration: 0 }, t: this.dir.t };   // 追加も ticket と同じ順: 玉が皿に注がれたあと「スタート!」(時計が動く)
         else if (['attract', 'title', 'howto', 'ticket', 'timeup', 'finish_count', 'result'].includes(id)) root.LCD.setState({ hudOn: false });
       }
+      if (typeof params.rank === 'number') d.state.rank = params.rank;   // 結果・計数の光(ランク色)は、通知のランクで決める
       if (params.hit !== undefined) d.state.hitPocket = params.hit;
       if (params.target !== undefined) d.state.targetPocket = params.target;
       if ((id === 'howto' || id === 'ticket' || id === 'start') && this.lcdOk) { this.stop('title'); this.stop('attract'); }   // 入口の待機画面は、遊技が始まったら止める
@@ -130,10 +139,11 @@
       try {
         if (c.pat === 'payout' && h.award) this._trayHandle = h.award(n, { eventId: c.event, duration: dur, rate: n / dur, origin: 'payoutPort' }) || null;
         else if (c.pat === 'collect' && h.collect) this._trayHandle = h.collect({ eventId: c.event, duration: dur }) || null;
-        this._trayTotal = n; this._trayPay = c.pat === 'payout';
+        this._trayTotal = n; this._trayPay = c.pat === 'payout'; this._trayJustDone = false;
       } catch (e) { console.warn('tray handler', e.message); }
     }
     frame(dt) {
+      if (this._pendingStart && (!this._ticketBusy() || this.dir.t - this._pendingStart.t > 6)) { const q = this._pendingStart; this._pendingStart = null; this.notify('start', Object.assign({}, q.params, { __late: true })); }
       const F = this.dir.step(dt); this._last = F;
       if (this._laterQ && this._laterQ.length) { const due = this._laterQ.filter((q) => q.at <= this.dir.t); this._laterQ = this._laterQ.filter((q) => q.at > this.dir.t); for (const q of due) { try { q.fn(); } catch (e) { console.warn('later', e.message); } } }
       { const why = this.clockStopReason(); if (why) { const S = this.clockStats; S.total += dt; S.byReason[why] = (S.byReason[why] || 0) + dt; } }   // 止めた累積秒(最終検証用)
@@ -143,7 +153,7 @@
         this.dir.state.needle = M && M.kind === 'roulette' && M.needle != null ? M.needle : null;
         if (M && M.phase === 'ascend' && !this._asc) { this._asc = true; this.dir.start('ascend', { once: true, k: this._k, scale: 1 / (this._rate || 1) }); }
         const th = this._trayHandle;                       // 皿に着いた玉の数 → 液晶の数字
-        if (th && th.landed) { root.LCD.setState({ trayLanded: th.landed() }); if (th.done && th.done()) this._trayHandle = null; } else if (root.LCD.state.trayLanded !== undefined) root.LCD.setState({ trayLanded: undefined });
+        if (th && th.landed) { root.LCD.setState({ trayLanded: th.landed() }); if (th.done && th.done()) { this._trayHandle = null; this._trayJustDone = true; } } else if (root.LCD.state.trayLanded !== undefined) root.LCD.setState({ trayLanded: undefined });
         for (const c of F.cues) if (c.lane === 'lcd' && root.LCD.defs[c.event] && !(Effects.QUIET.has(c.event) && c.scale < 1)) root.LCD.cue(c);   // 毎球の入賞/重複は、液晶を占有せず光と通常画面のウパだけ(初回は説明つきで全編)   // 液晶シーンの無いイベント(ambient等)は土台のまま
         root.LCD.setState({ n: F.n, nDisp: F.nDisp }); root.LCD.update(dt); root.LCD.render(null, 0, 0);
         F.lcd = root.LCD.cv;

@@ -46,6 +46,7 @@ if (!q.has('nofx')) {
   const { connectPlayEffects } = await import('../../effects/runtime/play_fx.mjs');
   fxApi = await connectPlayEffects({ hr, bus: effects, getSnapshot: () => effects.snapshot(), lightingSources: pack.lighting.sources, rules: app.rules, lcdGain: Number(q.get('lcdgain') ?? 1), tray: q.has('notray') ? null : { ...runtime, displayWallet: () => presenter.displayWallet() } });
   app.overlay.fx.style.display = 'none';   // 旧ダミーの帯・カットイン・ルーレット・JPは液晶演出に置き換え
+  if (!q.has('oldui')) app.overlay.setBare(true);   // 旧UI(上の帯・持ち玉・口の番号・キー表示・待機/時間切れ/結果の画面)は出さない。液晶と7セグが正式。?oldui で旧表示(デバッグ用)
 }
 // 初回だけ重い処理(画像デコード・GPUアップロード・シェーダ)を遊技の前に済ませる。?prewarm=0 で無効
 if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi });
@@ -53,10 +54,10 @@ const stats = runtime.stats;
 const launcherBody = q.has('nolauncher') ? null : createLauncherBody({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) });   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
   const s = pa.snapshot(); setAssemblyBalls(s); if (fxApi) fxApi.ballLights(s);   // 勝負中の玉をピンポイントで照らす(演出側)
-  const lf = pack.lighting.frame(presenter.lightingInputs(), pa.tick); if (fxApi) fxApi.applyLights(lf);   // 演出の光(花びら・縁)が最終の書き手
+  const lf = pack.lighting.frame(presenter.lightingInputs(), pa.tick); if (fxApi) { try { fxApi.applyLights(lf); } catch (e) { if (!window.__lightError) { window.__lightError = e.message; console.error('[lights]', e); } } }   // 演出の光(花びら・縁)が最終の書き手。範囲外などの異常は、その場の光だけ飛ばして遊技を止めない
   hr.setLightingFrame(lf);
   hr.render(); launcherBody?.update(s.shuttle); app.overlay.render(presenter.view());
-  if (fxApi) app.overlay.screen.style.display = ctrl.howto ? 'none' : '';   // ルール説明(howto)中は待機画面のDOMを消して、液晶の説明を見せる
+  if (fxApi && !app.overlay.bare) app.overlay.screen.style.display = ctrl.howto ? 'none' : '';   // ルール説明(howto)中は待機画面のDOMを消して、液晶の説明を見せる
   return s;
 }
 function frame(dt, render = true) {
@@ -87,12 +88,18 @@ window.__play = { app, pa, hr, stats, fxApi, runtime, awardToTray: runtime.award
   pause: (value) => { paused = value; last = null; },
 };
 document.addEventListener('visibilitychange', () => { last = null; app.log.write('visibility', { tick: pa.tick, hidden: document.hidden }); });
-document.getElementById('start').addEventListener('click', async () => {
+// 音: ブラウザは最初の操作まで鳴らせない。ボタンは見せず、最初のキー/クリックで有効にして読み込む(?oldui のときだけボタンも見せる)
+let audioStarted = false;
+async function startAudio() {
+  if (audioStarted) return; audioStarted = true;
   await app.audio.unlock();
   const files = JSON.parse(await readText(new URL('./audio_files.json', import.meta.url)));
   await app.audio.preload({ files, music: false });
-  document.getElementById('start').remove();
-});
+  document.getElementById('start')?.remove();
+}
+window.addEventListener('keydown', startAudio, { once: true }); window.addEventListener('pointerdown', startAudio, { once: true });
+document.getElementById('start').addEventListener('click', startAudio);
+if (q.has('oldui')) document.body.classList.add('oldui');
 const fsButton = document.getElementById('fullscreen');
 fsButton.addEventListener('click', async () => { await document.documentElement.requestFullscreen(); });
 document.addEventListener('fullscreenchange', () => { fsButton.hidden = !!document.fullscreenElement; });

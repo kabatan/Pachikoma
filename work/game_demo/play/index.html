@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>パチコマ 通しプレイ</title><link rel="icon" href="data:,">
+<title>パチコマ</title><link rel="icon" href="data:,">
 <style>
  html,body{margin:0;height:100%;background:#05040f;overflow:hidden}
  #stage{position:relative;width:min(100vw,56.25vh);height:min(100vh,177.777778vw);margin:auto;background:#000}
  #c{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
- #start{position:fixed;left:8px;top:8px;z-index:9;padding:6px 12px;font:14px sans-serif}
+ #start{position:fixed;left:8px;top:8px;z-index:9;padding:6px 12px;font:14px sans-serif;opacity:0;width:1px;height:1px;overflow:hidden}
+ .oldui #start,.oldui #fullscreen{opacity:1;width:auto;height:auto}
  #hud{display:none;position:fixed;right:8px;top:8px;z-index:9;color:#9fd;font:12px monospace;white-space:pre;text-align:right;pointer-events:none}
- #fullscreen{position:fixed;right:8px;bottom:8px;z-index:9;padding:8px 16px;font:16px sans-serif}
+ #fullscreen{position:fixed;right:8px;bottom:8px;z-index:9;padding:8px 16px;font:16px sans-serif;opacity:0;width:1px;height:1px;overflow:hidden}
  #config-debug{position:fixed;left:8px;bottom:8px;z-index:9;color:#bde;background:#000b;font:12px monospace;white-space:pre-wrap;pointer-events:none;max-width:75vw}
  #config-error{position:fixed;inset:60px 12px auto;z-index:20;padding:16px;background:#300;color:#fff;font:16px sans-serif;white-space:pre-wrap;overflow-wrap:anywhere}
 </style></head>

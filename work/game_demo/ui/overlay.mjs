@@ -13,6 +13,7 @@ const CSS = (fontBase) => `
 .medal-ui .big{font-family:"DelaGothic","MPlus",sans-serif;font-weight:400}
 .medal-ui [data-action]{pointer-events:auto;cursor:pointer}
 .medal-ui .hud{position:absolute;left:0;top:0;width:100%}
+
 .medal-ui .timebar{position:absolute;left:230px;top:44px;width:620px;height:46px;background:rgba(15,14,41,.8);border:4px solid var(--edge);display:flex;gap:6px;padding:6px;transform:skewX(-8deg)}
 .medal-ui .timebar i{flex:1;background:var(--mint)}.medal-ui .timebar i.off{background:#252050}.medal-ui .timebar.low i:not(.off){background:var(--coral)}
 .medal-ui .secs{position:absolute;right:36px;top:14px;font-size:104px;line-height:1;text-align:right}
@@ -82,12 +83,14 @@ export class MedalOverlay {
     for (const k of ['hud', 'fx', 'screen']) { const d = document.createElement('div'); d.dataset.sec = k; d.style.cssText = 'position:absolute;inset:0;pointer-events:none'; this.root.appendChild(d); this[k] = d; }
     this.fit(); this._ro = new ResizeObserver(() => this.fit()); this._ro.observe(parent);
   }
+  /** 液晶・7セグ・筐体の3Dが正式な表示を持つとき: 旧UIの帯・計数・結果などを描かない(ボタンの絵も当たり判定も出さない。入力はキー)。 */
+  setBare(on) { this.bare = !!on; this.root.classList.toggle('bare', this.bare); this.cache.clear(); }
   fit() { const s = Math.min(this.parent.clientWidth / this.dw, this.parent.clientHeight / this.dh); this.root.style.transform = `scale(${s})`; this.scale = s; }
   _set(key, el, html) { if (this.cache.get(key) !== html) { this.cache.set(key, html); el.innerHTML = html; } }
 
   render(v) {
     const playing = !['Attract', 'Result'].includes(v.phase);
-    this._set('hud', this.hud, playing ? this._hud(v) : '');
+    this._set('hud', this.hud, playing ? (this.bare ? this._keys(v) : this._hud(v)) : '');
     this._set('fx', this.fx, playing ? this._fx(v) : '');
     this._set('screen', this.screen, this._screen(v));
   }
@@ -114,6 +117,7 @@ export class MedalOverlay {
   <div class="key ${v.canAdd ? '' : 'dim'}" data-action="add"><small>A</small>100円追加</div>
   <div class="key ${v.phase === 'Ready' || v.phase === 'Continue' ? 'coral' : 'dim'}" data-action="${bkey}"><small>B</small>計数</div></div>`;
   }
+  _keys() { return ''; }   // 画面にボタンの絵も当たり判定も出さない(決定: ボタンは筐体の外。入力はキーのまま)
   _fx(v) {
     let h = '';
     if (v.banner) { const b = v.banner; h += `<div class="banner ${b.kind} tier${b.tier}"><div class="t big">${esc(b.title)}</div><div class="s">${esc(b.sub)}</div></div>`; }
@@ -130,6 +134,9 @@ export class MedalOverlay {
   }
   _screen(v) {
     const recs = v.records ? `<div class="rec">今日の最高 <b>${v.records.todayBestWallet}玉</b> / 最大 <b>${v.records.todayMaxLamps}灯</b> / 賞玉 <b>${v.records.todayBestAward}玉</b>(${v.records.plays}人)</div>` : '';
+    if (this.bare && !v.confirmFinish && v.phase !== 'Fault') {   // 液晶の待機・時間切れ・計数・結果の演出に任せる(見えない当たり判定だけ)
+      return '';
+    }
     if (v.phase === 'Attract') {
       const tiers = v.prizeTable.map((t) => `<div>${esc(t.name)}<small>${t.from}玉〜</small></div>`).join('');
       return `<div class="screen" data-action="start"><h1 class="big">パチコマ</h1><div class="sub">持ち玉チャレンジ</div>

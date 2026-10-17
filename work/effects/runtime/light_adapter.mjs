@@ -10,6 +10,12 @@ const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(
 const hsv = (h, s, v) => { const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s); return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][((i % 6) + 6) % 6]; };
 const toLin = (c) => (c <= .04045 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4));
 
+/** 合成後の7穴×RGBを、色の比率を保ったまま各口の最大成分が上限(筐体側は0..8を超えると例外)以下になるよう縮める。上限以下の値は変えない */
+function clampTriples(a, max) {
+  for (let i = 0; i + 2 < a.length; i += 3) { const m = Math.max(a[i], a[i + 1], a[i + 2]); if (m > max) { const f = max / m; a[i] *= f; a[i + 1] *= f; a[i + 2] *= f; } }
+  return a;
+}
+
 export class LightAdapter {
   constructor({ geom, sources = {}, rainbowGain = 1 }) {
     this.geom = geom; this.rainbowGain = rainbowGain; this.map = new Map(); this.unmapped = [];
@@ -50,7 +56,7 @@ export class LightAdapter {
     return {
       mode: 'absolute-linear-rgb',
       logo: F.logo.map(k),
-      pocket: Float32Array.from(F.pocket, (v) => v * Math.max(A, .8)),   // 7穴 × RGB。入った穴の口の灯は、演出の暗転(ambient)で消えないようにする(レビューe07)
+      pocket: clampTriples(Float32Array.from(F.pocket, (v) => v * Math.max(A, .8)), 7.9),   // 7穴 × RGB。入った穴の口の灯は、演出の暗転(ambient)で消えないようにする(レビューe07)
       btn: Float32Array.from(F.btn, k),         // 左・右 × RGB
       seg: { meter: F.seg.meter.slice(), blink: F.seg.blink, mode: F.seg.mode },
     };

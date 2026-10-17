@@ -6,7 +6,7 @@
 import * as THREE from '../../game_demo/web/vendor/three/three.module.js';
 export function installBallLights(hr, { max = 8, floor = 0.02 } = {}) {
   const mats = [hr.envBack, hr.envFront];
-  const decl = `uniform int uBLn; uniform vec4 uBLp[${max}]; uniform vec4 uBLc[${max}];\n`;
+  const decl = `uniform int uBLn; uniform vec4 uBLp[${max}]; uniform vec4 uBLc[${max}]; uniform vec4 uBLr; uniform vec2 uBLk;\n`;
   for (const m of mats) {
     if (m.userData.ballLights) continue;
     m.fragmentShader = m.fragmentShader.replace('void main() {', decl + 'void main() {')
@@ -17,16 +17,20 @@ export function installBallLights(hr, { max = 8, floor = 0.02 } = {}) {
           vec3 refl = max(a.rgb + b.rgb, vec3(${floor.toFixed(4)}));
           vec3 acc = vec3(0.0);
           for (int i = 0; i < ${max}; i++) { if (i >= uBLn) break; vec2 d = pp - uBLp[i].xy; float g = exp(-dot(d, d) / (uBLp[i].z * uBLp[i].z)); acc += uBLc[i].rgb * g; }
+          vec2 mlo = smoothstep(uBLr.xy - uBLk.y, uBLr.xy + uBLk.y, pp), mhi = 1.0 - smoothstep(uBLr.zw - uBLk.y, uBLr.zw + uBLk.y, pp);
+          acc *= mix(1.0, uBLk.x, mlo.x * mlo.y * mhi.x * mhi.y);   // 液晶の面は照射を弱める(液晶の絵の色を染めない)
           col += acc * refl;
         }
         gl_FragColor = vec4(col, 0.0);`);
-    m.uniforms.uBLn = { value: 0 };
+    m.uniforms.uBLn = { value: 0 }; m.uniforms.uBLr = { value: new THREE.Vector4(0, 0, 0, 0) }; m.uniforms.uBLk = { value: new THREE.Vector2(1, 1) };
     m.uniforms.uBLp = { value: Array.from({ length: max }, () => new THREE.Vector4()) };
     m.uniforms.uBLc = { value: Array.from({ length: max }, () => new THREE.Vector4()) };
     m.userData.ballLights = true; m.needsUpdate = true;
   }
   return {
     max,
+    // 液晶の矩形[x0,y0,x1,y1](1440x2560の画面px)では照射を k 倍にする(境界は soft px でなだらか)。k=1で無効
+    setMask(rect, k = .15, soft = 30) { for (const m of mats) { m.uniforms.uBLr.value.set(rect[0], rect[1], rect[2], rect[3]); m.uniforms.uBLk.value.set(k, soft); } },
     set(list = []) {
       const n = Math.min(list.length, max);
       for (const m of mats) {

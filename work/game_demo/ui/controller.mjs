@@ -14,7 +14,7 @@ export class MedalController {
     this.game = new MedalGame(rules, seed);
     this.confirmFinish = false; this.aimClock = 0; this.aim = 0; this.aimDir = 1;
     this.frame = 0; this._lastActionFrame = -1; this.freezeRules = false;
-    this.listeners = new Set(); this.sessionId = 0;
+    this.listeners = new Set(); this.sessionId = 0; this.resultAge = 0; this.replayAfter = 3;
     this.preBuffer = null; this.preWindow = 0.3; this.droppedInputs = [];   // R-04: 勝負ボタンの先押しを0.3秒だけ1回保持。捨てた押しは記録
     this.howtoSeconds = 0; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
   }
@@ -33,6 +33,7 @@ export class MedalController {
       else if (this.preBuffer.left <= 0) { this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: 'expired' }); this.preBuffer = null; }
     }
     if (g.phase === MedalPhase.Continue || g.phase === MedalPhase.Result) this.confirmFinish = false;
+    this.resultAge = g.phase === MedalPhase.Result ? (this.resultAge ?? 0) + dt : 0;   // 結果が出てからの秒(客の連打で飛ばさない)
     if (g.canFire && !this.confirmFinish) this.aimClock += dt; // 狙いのスイープは入力受付中だけ進む
     this.aim = triangle(this.aimClock / this.sweepPeriod);
     { const u = (this.aimClock / this.sweepPeriod) % 1; this.aimDir = (u < 0.25 || u >= 0.75) ? 1 : -1; } // +1: 右へ動いている
@@ -65,6 +66,9 @@ export class MedalController {
       case 'confirmFinish': if (this.confirmFinish) { ok = g.finish(); this.confirmFinish = false; } break;
       case 'cancelFinish': if (this.confirmFinish) { this.confirmFinish = false; ok = true; } break;
       case 'settleFault': if (g.phase === MedalPhase.Fault) ok = g.finish(); break;
+      case 'replay':   // 客用の「もう一度」: 結果が出て3秒後から。スタッフ用の 'reset'(R)は即時
+        if ((this.resultAge ?? 0) < this.replayAfter) break;
+        return this.dispatch('reset');
       case 'reset':
         if (g.phase === MedalPhase.Result && (this.hooks.canReset?.() ?? true)) { this.hooks.cancelFlights?.(); this.game = new MedalGame(this.rules, this.seed == null ? undefined : this.seed + 1 + this.sessionId); this.aimClock = 0; this.confirmFinish = false; ok = true; }
         break;

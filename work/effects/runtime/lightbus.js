@@ -26,6 +26,8 @@
     return [1, .08, .38];
   }
   const COL = { pink: [1, .08, .38], sakura: [1, .27, .52], gold: [1, .36, .012], white: [1, 1, 1], crimson: [1, .012, .03], cyan: [.08, .62, 1], paleGold: [1, .62, .22] };
+  // ランクの色(0参加賞 1C 2B 3A 4S 5SS): 虹はJPと大成功だけなので、S・SSも虹にしない(Sは濃い金橙、SSはマゼンタ寄りの赤金)
+  const RK = [COL.sakura, [.85, .45, .2], [.8, .85, 1], COL.gold, [1, .5, .01], [1, .06, .4]];
 
   class Director {
     constructor({ events, geom, seed = 1 }) {
@@ -170,7 +172,7 @@
      *  虹との切り替えはなめらかに混ぜる。色は add に足すので、stage(3Dデモ)・LightAdapter・本番のどれでも同じ式で出る。 */
     edgeBase(F, nn, dt) {
       const E = F.edge, ov = E.tintOv;
-      const T = ov || ([[.02, .06, .45, .06], [.02, .06, .45, .22], [.03, .08, .5, .3], [.04, .1, .55, .4], [1, .08, .38, .85], [1, .08, .38, 1.0], [1, .36, .012, 1.1]][nn]);
+      const T = ov || ([[.02, .06, .45, .06], [.02, .06, .45, .22], [.03, .08, .5, .3], [.04, .1, .55, .4], [1, .08, .38, .85], [1, .2, .15, 1.15], [1, .36, .012, 1.1]][nn]);
       const rbT = E.rbOn ? 1 : 0, k = Math.min(1, dt * 3.5);
       this.rbMix = (this.rbMix ?? rbT) + (rbT - (this.rbMix ?? rbT)) * k;
       const tc = this.tintC || (this.tintC = T.slice()); for (let q = 0; q < 4; q++) tc[q] += (T[q] - tc[q]) * Math.min(1, dt * 4);
@@ -188,7 +190,7 @@
       const N = isP ? this.nP : isE ? this.nE : lane === 'pocket' ? 7 : lane === 'btn' ? 2 : 1;
       const sel = isP ? this.petalSel(p.targets, { ...inst.params, ...p }) : isE ? this.edgeSel(p.targets) : lane === 'pocket' ? this.pocketSel(p.targets) : lane === 'btn' ? Float32Array.from([p.side === 'right' ? 0 : 1, p.side === 'left' ? 0 : 1]) : new Float32Array(1).fill(1);
       const pos = isP ? this.pAng : isE ? this.eS : Array.from({ length: N }, (_, i) => i / N);   // 0..1 周回位置
-      let col = p.color === 'rainbow' ? null : (Array.isArray(p.color) ? p.color : p.color ? color(p.color) : COL.white);
+      let col = p.color === 'rainbow' ? null : p.color === 'rank' ? RK[Math.max(0, Math.min(5, this.state.rank || 0))] : (Array.isArray(p.color) ? p.color : p.color ? color(p.color) : COL.white);
       const colAt = (i, extra = 0) => col || hsv(((pos ? pos[i] : i / N) - lt * .35 + extra) % 1 + (((pos ? pos[i] : i / N) - lt * .35 + extra) % 1 < 0 ? 1 : 0));
       // 書き込みヘルパ(laneごとの出力先)
       const add = (i, c, k) => {
@@ -233,6 +235,9 @@
             let w = pat === 'flicker' ? (hash(i, Math.floor(lt * 14)) > .55 ? 1 : .15) : .5 + .5 * Math.sin(TAU * hz * lt0 - Math.PI / 2);
             add(i, colAt(i), w * depth * fadeEnv(.06, .15) * (isP ? .9 : isE ? 1.6 : 1.2));
           } break; }
+        case 'stutter': {   // 点く前の明滅: 花びらが勝手にチカチカ(消灯と点灯が入れ替わる。だんだん速く)。一斉に点く前の予感
+          const rate = 7 + 14 * u, bin = Math.floor(lt0 * rate), e = smooth(lt0 / .08);
+          for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: e, v: hash(i, bin + 5) > .5 ? 1.35 : .06 }); break; }
         case 'breathe': {
           const per = p.period || 3; const w = lerp(.55, 1.15, .5 + .5 * Math.sin(TAU * lt0 / per - Math.PI / 2)) * smooth(lt0 / .25);
           for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: smooth(lt0 / .25) * fadeEnv(.25, .3), v: w * (isE ? 1.4 : 1) }); break; }
@@ -288,7 +293,7 @@
           const dens = p.density || .4, bin = Math.floor(lt0 * 9);
           for (let i = 0; i < N; i++) if (sel[i] && hash(i, bin + 77) < dens * .35) { const ph = (lt0 * 9) % 1; add(i, [1, .75, .9], Math.exp(-ph * 4) * (isP ? 1.2 : 2.4)); } break; }
         case 'rainbowB': { F.edge.base.amount = (p.amount === 'n' ? F.edge.base.amount : p.amount) || 1; F.edge.base.speed = p.speed || 1; F.edge.rbOn = true; break; }
-        case 'baseTint': { const RK = [COL.sakura, [.85, .45, .2], [.8, .85, 1], COL.gold, COL.gold, COL.gold]; const c = p.color === 'rank' ? RK[this.state.rank || 0] : color(p.color || '#ff2f86'); F.edge.tintOv = [c[0], c[1], c[2], p.level ?? 1]; break; }
+        case 'baseTint': { const c = p.color === 'rank' ? RK[Math.max(0, Math.min(5, this.state.rank || 0))] : color(p.color || '#ff2f86'); F.edge.tintOv = [c[0], c[1], c[2], p.level ?? 1]; break; }
         case 'rainbowFlow': {
           for (let i = 0; i < N; i++) if (sel[i]) { const c = hsv(((this.pAng[i] * 1 - lt0 * (p.speed || .5)) % 1 + 1) % 1); const e = smooth(lt0 / .3) * fadeEnv(.1, .6); over(i, c, { a: e, v: 1.1 + .35 * Math.sin(TAU * (lt0 * 1.4 - this.pAng[i] * 2)) }); } break; }
         case 'countdown': {
@@ -314,7 +319,7 @@
           const total = inst.params.progress === undefined ? u : inst.params.progress; const c = colAt(0);
           for (let i = 0; i < N; i++) { const rank = (this.G.petals[i].zone * 12 + this.petalOrder(i)) / 48; if (rank < total) add(i, c, .95); } break; }
         case 'rankBloom': {
-          const rk = this.state.rank || 0; const cols = [COL.sakura, [.85, .45, .2], [.8, .85, 1], COL.gold, null, null]; const c = cols[rk];
+          const rk = Math.max(0, Math.min(5, this.state.rank || 0)); const c = RK[rk];
           for (let i = 0; i < N; i++) { const e = smooth(lt0 / .4) * (1 - Math.exp(-lt0 * 2)); const cc2 = c || hsv(((this.pAng[i] - lt0 * .5) % 1 + 1) % 1); over(i, cc2, { a: e, v: 1.0 + .3 * Math.sin(TAU * (lt0 * 1.2 - this.pAng[i])) }); } break; }
         case 'drainLit': { const k = inst.params.k || 1; const gone = clamp(Math.floor(lt0 / (dur / (k + .2)))); /* ポケット側は状態更新で消える */ break; }
         case 'shimmer': break;

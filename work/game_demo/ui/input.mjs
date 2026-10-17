@@ -1,7 +1,7 @@
 // キー/ポインタ入力 → controller.dispatch。キーリピートは無視。最初の入力で音声を unlock する。
-// Space: 開始(待機)/1球発射  C: Challenge  A: 100円追加  B: 計数(確認後に確定)  R: 次のお客さま(結果から)  Esc: 戻る/終了
+// Space: 開始(待機)/1球発射  C: Challenge  A: 100円追加  B: 計数(確認後に確定)  R: 次のお客さま(結果から、スタッフ用で即時)  Space: 結果が出て3秒たてばもう一度(客用)  Esc: 戻る/終了
 export const KEY_ACTIONS = (ctrl) => ({
-  Space: () => (ctrl.phase === 'Attract' ? 'start' : 'fire'),
+  Space: () => (ctrl.phase === 'Attract' ? 'start' : ctrl.phase === 'Result' ? 'replay' : 'fire'),
   KeyC: () => 'challenge', KeyA: () => 'add',
   KeyB: () => (ctrl.confirmFinish ? 'confirmFinish' : 'finish'),
   KeyR: () => 'reset',

@@ -42,8 +42,9 @@
             LCD.add(c, k % 2 ? 'spark.png' : 'glint_1.png', x + Math.sin(e * 2 + k) * 36, 530 - e * (170 + k * 35), { w: k % 2 ? 12 : 23, h: k % 2 ? 12 : 23, a: .46 * LCD.env(e, 0, 1.65, .15, .5), tint: k % 2 ? '#bdeaff' : '#ffedc1' });
           }
         }
-        C.reliefTitle(c, 'shippai', '失敗', 640, 139 + (1 - LCD.easeOut((t - .05) / .26)) * -57, 650, 145, { a: LCD.env(t, .03, 1.25, .12, .25) });
-        LCD.text(c, '次こそ!', 640, 575, { size: 66, a: LCD.env(t, 1.68, 2.6, .2, .3), fill1: '#fff7e5', fill2: '#ffdfb2', glow: '#c8e9ff' });
+        LCD.add(c, 'glow_soft.png', 640, 215, { w: 1000, h: 360, a: .42 * LCD.env(t, .03, 1.6, .12, .3), tint: '#9fc6ff' });
+        LCD.text(c, '失敗', 640, 235 + (1 - LCD.easeOut((t - .05) / .26)) * -57, { size: 190, a: LCD.env(t, .03, 1.5, .12, .3), fill1: '#f4f7ff', fill2: '#92a8ff', glow: '#4a6cff' });
+        LCD.text(c, '次こそ!', 640, 430, { size: 96, a: LCD.env(t, 1.68, 2.6, .2, .3), fill1: '#fff7e5', fill2: '#ffdfb2', glow: '#c8e9ff' });
       });
     }
   });

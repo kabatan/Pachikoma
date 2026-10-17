@@ -49,6 +49,35 @@
       LCD.img[n] = await loadImage(LCD.url(n));
     }));
   };
+  // ───────── 先読み(初めて描く瞬間の止まりを散らす) ─────────
+  // 素材は初めて描く瞬間にブラウザが復号してGPUへ送る。素材全体(復号後 約0.7GB)は復号キャッシュに収まらず、別のシーンを挟むと落ちるので、
+  // シーンの途中で新しい素材が出るたび(JPの4秒・11.2秒など)に数十ms止まる。画は変えず、使う少し前に作業用キャンバスへ1フレーム1枚だけ触って復号を散らす。
+  // 計画 touch_plan.json は work/game_demo/perf/gen_touch_plan.mjs が各シーンの描画を実測して作る(素材や演出を差し替えたら作り直す。無い/載っていないシーンは何もしない)。
+  // 次に来るシーン(NEXT)の最初の1.6秒ぶんは、いまのシーンの間に触っておく(開始フレームの止まり対策)。?notouch=1 で無効。
+  const TOUCH_LOOK = 1.2, TOUCH_FIRST = 1.6, TOUCH_MAX_Q = 64;
+  const touch = { plan: null, q: [], cv: null, g: null, off: typeof location !== 'undefined' && /[?&]notouch=1\b/.test(location.search) };
+  const NEXT = { timeup: () => ['finish_count'], finish_count: () => ['result'], roulette: (p) => (p.k === 'all' ? ['jp'] : []) };
+  async function loadTouchPlan() {
+    if (touch.off) return;
+    try { const r = await fetch(LCD.rootUrl + 'work/effects/lcd/touch_plan.json'); if (r.ok) touch.plan = (await r.json()).scenes || null; } catch {}
+  }
+  const touchQueue = (e) => { if (touch.q.length < TOUCH_MAX_Q && !(LCD.t - (e.qt ?? -99) < 3)) { e.qt = LCD.t; touch.q.push(e); } };
+  LCD.prepare = (id, until = TOUCH_FIRST) => { const pl = touch.plan && touch.plan[id]; if (pl) for (const e of pl) if (e.t < until) touchQueue(e); };
+  function touchStep() {
+    const e = touch.q.shift(); if (!e) return;
+    const im = e.n.startsWith('flip:') ? LCD.flipImg[e.n.slice(5)] : LCD.img[e.n]; if (!im) return;
+    if (!touch.g) { touch.cv = document.createElement('canvas'); touch.cv.width = 2048; touch.cv.height = 2048; touch.g = touch.cv.getContext('2d'); }
+    const g = touch.g, w = clamp(e.w, 1, 2048), h = clamp(e.h, 1, 2048);
+    if (e.s) g.drawImage(im, e.s[0], e.s[1], e.s[2], e.s[3], 0, 0, w, h); else g.drawImage(im, 0, 0, w, h);
+  }
+  function touchAhead() {
+    if (!touch.plan) return;
+    for (const sc of LCD.active) {
+      const pl = touch.plan[sc.id]; if (!pl) continue;
+      for (sc.touchI = sc.touchI || 0; sc.touchI < pl.length && pl[sc.touchI].t <= sc.t + TOUCH_LOOK; sc.touchI++) if (pl[sc.touchI].t > sc.t) touchQueue(pl[sc.touchI]);
+    }
+    touchStep();
+  }
   LCD.init = async function (opt = {}) {
     LCD.rootUrl = opt.root || '/';
     LCD.index = await (await fetch(LCD.rootUrl + 'work/effects/lcd/asset_index.json')).json();
@@ -57,16 +86,24 @@
     if (opt.base !== false && root.LCD_BASE) { try { LCD.base = await root.LCD_BASE(LCD.rootUrl + LCD.index.normal_manifest); } catch (e) { console.warn('base failed', e); } }
     const need = new Set(); for (const id of (opt.scenes || Object.keys(LCD.defs))) (LCD.defs[id]?.assets || []).forEach((a) => need.add(a));
     await LCD.load([...need]);
+    await loadTouchPlan();
     for (const h of LCD.initHooks || []) { try { await h(opt); } catch (e) { console.warn('init hook failed', e); } }
     LCD.ready = true; return LCD;
   };
 
   // 色付き(乗算)の複製。素材は白〜灰の光が多いので、色を掛けて使う
-  const tintCache = new Map();
+  // 色が毎フレーム変わる使い方(JPの盤のランプ hsl(...t...) など)は、そのたびに新しいキャンバスを作ると1フレーム数ms食い、キャッシュも増え続ける。
+  // 上限つき(LRU)にして、追い出したキャンバスは同じ大きさの新規作成に使い回す。毎回同じ手順で描き直すので、できあがる画は同じ。
+  const tintCache = new Map(), tintPool = new Map(), TINT_MAX = 600;
   LCD.tinted = (name, color) => {
-    const k = name + '|' + color; if (tintCache.has(k)) return tintCache.get(k);
+    const k = name + '|' + color, hit = tintCache.get(k);
+    if (hit) { tintCache.delete(k); tintCache.set(k, hit); return hit; }
     const im = LCD.img[name]; if (!im) return null;
-    const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d');
+    if (tintCache.size >= TINT_MAX) { const [ok, oc] = tintCache.entries().next().value; tintCache.delete(ok); const pk = oc.width + 'x' + oc.height; (tintPool.get(pk) || tintPool.set(pk, []).get(pk)).push(oc); }
+    const pool = tintPool.get(im.width + 'x' + im.height);
+    let c = pool && pool.pop(), g;
+    if (c) { g = c.getContext('2d'); g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, c.width, c.height); }
+    else { c = document.createElement('canvas'); c.width = im.width; c.height = im.height; g = c.getContext('2d'); }
     g.drawImage(im, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = color; g.fillRect(0, 0, c.width, c.height);
     g.globalCompositeOperation = 'destination-in'; g.drawImage(im, 0, 0); tintCache.set(k, c); return c;
   };
@@ -174,7 +211,7 @@
   };
 
   // ---- 通常画面のウパ: 色とりどりの大きなウパが灯の数だけ泳ぐ(元の計画 anim/upa_swim の動き: ひとかき→滑走、休み、ダッシュ、壁で反射、近づくと離れる) ----
-  const swim = LCD.swim = { list: [], sc: 7, n: 1 };
+  const swim = LCD.swim = { list: [], sc: 7, n: -1 };
   const swRnd = (a, b) => a + Math.random() * (b - a), swAng = (a, b) => { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
   function swimNew(i, enter) {
     const w = 46 * swim.sc, u = { i, w, h: 21 * swim.sc, x: swRnd(.2, .8) * W, y: swRnd(.3, .85) * H, ang: swRnd(0, TAU), tang: 0, sp: 0, base: swRnd(.85, 1.15), phase: Math.random(), freq: swRnd(.9, 1.1), mode: 'swim', t: 0, dur: swRnd(1, 3), kk: 0, wob: Math.random() * 10, sx: 1, sy: 1, tilt: 0, enter: 0, leaving: false };
@@ -183,7 +220,7 @@
     return u;
   }
   swim.sync = (n) => {
-    const want = clamp(Math.round(n), 1, 6); swim.n = want;
+    const want = clamp(Math.round(n), 0, 6); swim.n = want;   // 0灯はウパ0匹(最初の1灯で1匹目が出る)
     const alive = swim.list.filter((u) => !u.leaving);
     for (let k = alive.length; k < want; k++) swim.list.push(swimNew(k, swim.list.length > 0));
     for (let k = alive.length - 1; k >= want; k--) { alive[k].leaving = true; alive[k].tang = alive[k].x < W / 2 ? Math.PI : 0; }
@@ -319,7 +356,9 @@
     if (def.single !== false) LCD.active = LCD.active.filter((s) => s.id !== id);
     const sc = { id, def, params, uid: LCD.uid++, t: 0, scale: params.scale || 1, S: {}, rand: rng((params.seed ?? 7) + LCD.uid) };
     if (def.assets) LCD.load(def.assets);                  // 遅れて読む場合に備える(通常は init で先読み)
-    if (def.start) def.start(sc, params); LCD.active.push(sc); return sc.uid;
+    if (def.start) def.start(sc, params); LCD.active.push(sc);
+    for (const n of (NEXT[id] ? NEXT[id](params) : [])) LCD.prepare(n);
+    return sc.uid;
   };
   LCD.stop = (id) => { LCD.active = LCD.active.filter((s) => s.id !== id && s.uid !== id); };
   // 光バスの合図(lane=lcd)を受ける。同じ実行(uid)で最初の1回だけシーンを始める
@@ -337,9 +376,10 @@
     k.pv += (-k.punch * 220 - k.pv * 16) * dt; k.punch += k.pv * dt;   // ばね
     LCD.flashA = Math.max(0, LCD.flashA - (LCD.flashDecay || 6) * dt);
     if (LCD.base) { LCD.base.update(dt); }
-    if (LCD.state.swimOn !== false && LCD.base) { const sn = Math.max(1, Math.round(LCD.state.nDisp ?? LCD.state.n ?? 0)); if (swim.n !== sn || !swim.list.length) swim.sync(sn); swim.update(dt); }
+    if (LCD.state.swimOn !== false && LCD.base) { const sn = Math.max(0, Math.round(LCD.state.nDisp ?? LCD.state.n ?? 0)); if (swim.n !== sn) swim.sync(sn); swim.update(dt); }
     for (const sc of LCD.active) { sc.dt = dt / sc.scale; sc.t += sc.dt; if (sc.def.update) sc.def.update(sc, sc.dt); }
     LCD.active = LCD.active.filter((s) => s.def.hold || s.t <= s.def.dur + .05);
+    touchAhead();
   };
   LCD.render = (target, tw, th) => {
     const c = LCD.ctx; c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
