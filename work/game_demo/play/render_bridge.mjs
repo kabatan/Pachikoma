@@ -64,6 +64,6 @@ export async function connectLayerPack(hr, url, { dummyEntries = [] } = {}) {
 export function connectAssemblyBalls(hr, transforms) {
   return snapshot => {
     if (snapshot.coordinate_frame !== transforms.frame || snapshot.stage_transforms_revision !== transforms.revision) throw new Error('Ball snapshot assembly frame mismatch');
-    hr.setBalls({ count: snapshot.count, positions: snapshot.positions });
+    hr.setBalls(hr.trayVisualHandle?.visibleBalls?.(snapshot) ?? { count: snapshot.count, positions: snapshot.positions });
   };
 }

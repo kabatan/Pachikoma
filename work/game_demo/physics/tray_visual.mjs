@@ -11,6 +11,9 @@ export function attachTrayVisual(hr, pa) {
   make(vertices,tray.floorMesh.indices);
   // 床下の機構は筐体の中。接触壁の床より上だけを透明な返し縁として可視化する。
   for(const src of tray.visualStatics){
+    // 払出トンネルは筐体内。開口の敷居・まぐさはpackのVIS_TRAY_BACKに含まれる。
+    // 衝突用凸包を黒い前景として二重描画しない。
+    if(src.id.startsWith('COL_PAYOUT_'))continue;
     const vv=[],ii=[],bottom=[],bi=[];
     for(let k=0;k<src.indices.length;k+=3){
       const poly=src.indices.slice(k,k+3).map(i=>src.vertices.slice(i*3,i*3+3).map((v,j)=>v-tray.T[j]));
@@ -29,7 +32,8 @@ export function attachTrayVisual(hr, pa) {
   for(const mat of [material,guardMaterial]){
     const meshes=group.children.filter(m=>m.isMesh&&m.material===mat),vv=[],ii=[];
     for(const mesh of meshes){const a=mesh.geometry.attributes.position.array,base=vv.length/3;vv.push(...a);ii.push(...Array.from(mesh.geometry.index.array,i=>i+base));group.remove(mesh);mesh.geometry.dispose();}
-    if(vv.length)make(vv,ii,mat);
+    // 管の除外でboundsが変わっても、床と同面の可動蓋の描画順は従来どおり保つ。
+    if(vv.length){const mesh=make(vv,ii,mat);if(mat===material)mesh.renderOrder=1;}
   }
   const moving=[];
   for(const src of tray.visualMechs){
@@ -48,6 +52,18 @@ export function attachTrayVisual(hr, pa) {
   };
   const originalRender=hr.render;hr.render=function(...args){update();return originalRender.apply(this,args);};
   hr.trayVisual=true;
-  update();const handle={group,update,dispose(){hr.render=originalRender;hr.trayVisual=false;hr.trayVisualHandle=null;hr.sBalls.remove(group);for(const m of group.children)m.geometry?.dispose();material.dispose();guardMaterial.dispose();}};
+  // 筒内の玉は物理・台帳には残す。実際の出口センサーを通るまで筐体内なので表示しない。
+  let visiblePositions;
+  const visibleBalls=data=>{
+    if(!tray.activePayout||!data.ids)return data;
+    visiblePositions??=new Float32Array(pa.maxBalls*3);let count=0;
+    for(let i=0;i<data.count;i++){
+      if(tray.activeBalls.get(data.ids[i])?.state==='payout')continue;
+      const dst=count++*3,src=i*3;
+      for(let j=0;j<3;j++)visiblePositions[dst+j]=data.positions[src+j];
+    }
+    return {count,positions:visiblePositions};
+  };
+  update();const handle={group,update,visibleBalls,dispose(){hr.render=originalRender;hr.trayVisual=false;hr.trayVisualHandle=null;hr.sBalls.remove(group);for(const m of group.children)m.geometry?.dispose();material.dispose();guardMaterial.dispose();}};
   hr.trayVisualHandle=handle;return handle;
 }
