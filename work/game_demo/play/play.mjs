@@ -11,6 +11,7 @@ import { EffectsBus } from './effects_bus.mjs';
 import { loadPlayConfig, loadPlayRules } from './config.mjs';
 import { prewarm } from './prewarm.mjs';
 import { createLauncherBody } from './launcher_body.mjs';
+import { CabinetSerial } from './cabinet_serial.mjs';
 
 async function main() {
 const q = new URLSearchParams(location.search);
@@ -36,6 +37,8 @@ const app = await createMedalApp(document.getElementById('stage'), {
   rulesUrl: config.rules, seed, quiet: q.has('quiet'), music: false, log: !q.has('nolog'), manual: true,
 });
 const { ctrl, presenter } = app, effects = new EffectsBus();
+const cabinet = new CabinetSerial({ serial: navigator.serial, ctrl, button: document.getElementById('serial-connect'), status: document.getElementById('serial-status') });
+await cabinet.init();
 const howtoDur = await fetch(new URL('../../effects/spec/events.json', import.meta.url)).then(r => r.json()).then(j => j.events.find(e => e.id === 'howto')?.dur).catch(() => null);   // 説明の長さは演出の仕様(events.json)に従う
 ctrl.howtoSeconds = Number(q.get('howto') ?? howtoDur ?? 5.2);   // 開始前のルール説明(時計に含めない・もう一度押すと飛ばせる)。?howto=0 で無効
 window.__effects = effects;
@@ -54,6 +57,7 @@ if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi
 const stats = runtime.stats;
 const launcherBody = q.has('nolauncher') ? null : createLauncherBody({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) });   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
+  cabinet.tick(performance.now());
   const s = pa.snapshot(); setAssemblyBalls(s); if (fxApi) fxApi.ballLights(s);   // 勝負中の玉をピンポイントで照らす(演出側)
   const lf = pack.lighting.frame(presenter.lightingInputs(), pa.tick); if (fxApi) { try { fxApi.applyLights(lf); } catch (e) { if (!window.__lightError) { window.__lightError = e.message; console.error('[lights]', e); } } }   // 演出の光(花びら・縁)が最終の書き手。範囲外などの異常は、その場の光だけ飛ばして遊技を止めない
   hr.setLightingFrame(lf);
@@ -84,7 +88,7 @@ const loop = (now) => {
   }
   requestAnimationFrame(loop);
 };
-window.__play = { app, pa, hr, stats, fxApi, runtime, awardToTray: runtime.awardToTray, releaseAwards: runtime.releaseAwards, setAwardHold: runtime.setAwardHold, trayStatus: runtime.trayStatus, config: pa.playConfig, pack: pack.info, frame, draw, lastTiming: null,
+window.__play = { app, pa, hr, stats, fxApi, runtime, cabinet, awardToTray: runtime.awardToTray, releaseAwards: runtime.releaseAwards, setAwardHold: runtime.setAwardHold, trayStatus: runtime.trayStatus, config: pa.playConfig, pack: pack.info, frame, draw, lastTiming: null,
   tick: (seconds, dt = 1 / 60) => { let left = seconds; while (left > 1e-10) { frame(Math.min(left, dt), false); left -= dt; } return draw(); },
   pause: (value) => { paused = value; last = null; },
 };
