@@ -38,7 +38,7 @@
   function hintLine(c, t, x, y, h, size, a = 1) {
     const { n, r } = h, col = COLORS[r], pulse = 1 + .035 * Math.sin(t * 6);
     const A = `あと ${n}玉で`, B = 'ランク!';
-    c.save(); c.font = `900 ${size}px ${LCD.font}`; const wA = c.measureText(A).width, wB = c.measureText(B).width; c.restore();
+    c.save(); c.font = LCD.fontFor(size); const wA = c.measureText(A).width, wB = c.measureText(B).width; c.restore();
     const key = r === 5 ? 'rank_ss_g' : KEYS[r], gl = size * 1.55, gap = 12, total = wA + gap + gl + gap + wB;
     c.save(); c.translate(x, y); c.scale(pulse, pulse); c.translate(-x, -y);
     let left = x - total / 2;
@@ -50,7 +50,7 @@
     c.restore();
   }
   function fitText(c, str, x, y, size, width, o = {}) {
-    c.save(); c.font = `900 ${size}px ${LCD.font}`; const w = c.measureText(str).width; c.restore();
+    c.save(); c.font = LCD.fontFor(size); const w = c.measureText(str).width; c.restore();
     LCD.text(c, str, x, y, { size: Math.min(size, size * width / Math.max(1, w)), ...o });
   }
   // ---- 背景(ランクの深い色。光の筋はランク色の単色。虹は使わない) ----

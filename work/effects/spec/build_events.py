@@ -57,7 +57,7 @@ ev(id="title", phase="A 待機〜開始", name="タイトル(ボタン待ち)", 
            T("edge",0,3,"ピンクの土台","baseTint",color=SAKURA,level=.9)],
    snd=[(0,"title_loop")], status=dict(lcd="todo", light="todo"))
 
-ev(id="howto", phase="A 待機〜開始", name="あそびかた(3コマの基本説明)", tier=2, dur=8.0, blocking=True,
+ev(id="howto", phase="A 待機〜開始", name="あそびかた(5コマの基本説明)", tier=2, dur=25.0, blocking=True,
    trigger="タイトルでボタンが押された直後。チケットの玉が出る前",
    feel="「玉を穴に入れて灯を増やすんだな。7つでJP。同じ穴だとルーレット」。絵で一息に分かる。ボタンで飛ばせる。",
    precedent=[("実機の『遊び方』画面は、数秒の絵と一文だけで流す(ディレクター10/17: 玉を上から落として増やすゲーム、とだけ伝える)", "verified")],
@@ -151,7 +151,7 @@ ev(id="lamp123", phase="B 通常プレイ", name="新しい灯(1〜3灯)", tier=
            T("petal",0.45,1.4,"N番目の花びらが咲く","bloom",color=SAKURA,targets="nth"),
            T("edge",0.35,1.4,"穴の近くから半周の桜色の彗星(白は帯がクリーム色に見えるので使わない)","comet",color=SAKURA,origin="pocket",turns=.5),
            T("logo",0.45,0.9,"金の一閃","pulse",color=GOLD,hz=2),
-           T("pocket",0.2,1.4,"入った穴の口がきらりと白く(そのあとは白い基底が点き続ける)","pulse",color=WHITE,hz=3,targets="hit")],
+           T("pocket",0,1.3,"入った穴の口が最大の白で閃き、数回ちかちかして白い基底に落ち着く","pburst",color=WHITE,peak=4.4,decay=2.2,hz=7,targets="hit")],
    snd=[(0.45,"lamp_land"),(0.5,"lamp_chime_N")], status=dict(lcd="existing", light="todo"))
 
 ev(id="lamp4", phase="B 通常プレイ", name="4灯(断絶:紺→桜)", tier=3, dur=3.6, blocking=True,
@@ -174,7 +174,8 @@ ev(id="lamp4", phase="B 通常プレイ", name="4灯(断絶:紺→桜)", tier=3,
            T("petal",1.6,3.6,"鮮やかなピンク→呼吸","breathe",color=PINK,period=3.2,targets="all"),
            T("edge",0.9,1.5,"全周が白","flash",color="#ffb4d6",hz=1.5,limit=1),
            T("logo",1.0,1.6,"金の一閃","pulse",color=GOLD,hz=1),
-           T("pocket",1.6,3.6,"未点灯の穴が金で脈打つ","pulse",color=GOLD,hz=1.2,targets="unlit"),
+           T("pocket",0,1.3,"入った穴の口が最大の白で閃く","pburst",color=WHITE,peak=4.4,decay=2.0,hz=7,targets="hit"),
+           T("pocket",1.6,3.6,"未点灯の穴が金で波打つ(あと少し・勝負の入口)","pbeat",color=GOLD,hz=1.6,wave=.12,sharp=2,floor=.12,peak=5.0,targets="unlit"),
            T("btn",2.2,3.6,"【初回のみ】右下へ矢印","pulse",side="right")],
    snd=[(0.8,"impact_deep"),(1.1,"burst_big")], status=dict(lcd="existing", light="todo"))
 
@@ -188,7 +189,8 @@ ev(id="lamp5", phase="B 通常プレイ", name="5灯(桜+金縁)", tier=3, dur=3
    tracks=[T("lcd",0,3.0,"桜色+金縁の5灯(v12)"),
            T("petal",0.4,1.2,"全体が金で強く咲く(4灯はピンク)","bloom",color=GOLD,targets="all"),
            T("petal",1.2,3.0,"ピンク+稜線のきらめき","sparkle",color=WHITE,density=.5,targets="all"),
-           T("pocket",1.0,3.0,"未点灯2口が金","pulse",color=GOLD,hz=1.4,targets="unlit"),
+           T("pocket",0,1.3,"入った穴の口が最大の白で閃く","pburst",color=WHITE,peak=4.4,decay=2.0,hz=7,targets="hit"),
+           T("pocket",1.0,3.0,"未点灯2口が金で強く脈打つ","pbeat",color=GOLD,hz=1.9,wave=.12,sharp=2,floor=.1,peak=5.8,targets="unlit"),
            T("petal",0.2,3.0,"金と橙が交互にちかちか(最後まで続く。4灯は静かなピンクの呼吸)","alt",color=GOLD,color2="#ff6a1a",hz=3,targets="all"),
            T("petal",1.0,3.0,"白金の光が花びらを周回","orbit",color="#fff2b0",speed=.9,targets="all"),
            T("edge",0.2,1.0,"全周が金で一閃","flash",color=GOLD,hz=2.5,limit=2),
@@ -208,7 +210,8 @@ ev(id="lamp6", phase="B 通常プレイ", name="6灯(金+JPチャンスの知ら
            T("petal",0.3,1.0,"金へ弾ける","bloom",color=GOLD,targets="all"),
            T("petal",1.0,3.6,"金+光が周回","orbit",color=GOLD,speed=.25,targets="all"),
            T("edge",0.3,3.0,"金の彗星が2周","comet",color=GOLD,turns=2),
-           T("pocket",1.0,3.6,"最後の1口が白金で脈打つ","pulse",color="#fff0b0",hz=1.6,targets="unlit"),
+           T("pocket",0,1.3,"入った穴の口が最大の白で閃く","pburst",color=WHITE,peak=4.4,decay=2.0,hz=7,targets="hit"),
+           T("pocket",1.0,3.6,"最後の1口が白金で最大に脈打つ","pbeat",color="#fff0b0",hz=2.4,wave=0,sharp=1.6,floor=.1,peak=7.0,targets="unlit"),
            T("petal",0.2,1.8,"金と白が交互にちかちか","alt",color=GOLD,color2=WHITE,hz=6,targets="all"),
            T("edge",0.3,1.0,"全周が金で一閃","flash",color=GOLD,hz=2.5,limit=2)],
    snd=[(0.3,"burst_gold")], status=dict(lcd="existing", light="todo"))
@@ -224,7 +227,7 @@ ev(id="dup_protect", phase="C 重複・消灯", name="重複(保護中)", tier=1
      pocket="入った穴の赤い縁が2回きらっと光る(どの穴が重複か見せる)。", seg="なし", tray="なし", btn="なし"),
    tracks=[T("lcd",0,1.4,"ウパのカットイン『同じ穴!』"),
            T("petal",0.1,0.9,"淡い水色の波紋(金は6灯の色なので使わない)","ripple",color=CYAN,targets="all"),
-           T("pocket",0,1.0,"重複した穴が2回きらり","pulse",color=WHITE,hz=4,targets="hit")],
+           T("pocket",0,1.1,"重複した穴が赤く2回強く閃く","pburst",color="#ff3a4a",peak=5.0,decay=1.4,hz=4,targets="hit")],
    snd=[(0,"dup_soft")], status=dict(lcd="todo", light="todo"))
 
 ev(id="roulette", phase="C 重複・消灯", name="重複ルーレット(−1/−2/−3灯/全消灯)", tier=3, dur=5.0, blocking=True,
@@ -243,6 +246,7 @@ ev(id="roulette", phase="C 重複・消灯", name="重複ルーレット(−1/�
            T("petal",0.6,4.3,"赤い光が針と同じ角度で周回・減速","needle",color=CRIMSON,targets="all"),
            T("edge",0.6,4.3,"深紅の1点が周回・減速","needle",color=CRIMSON),
            T("edge",4.3,4.5,"停止の白い一閃","flash",color=WHITE,hz=3,limit=1),
+           T("pocket",0,1.0,"重複した穴が赤く強く閃く","pburst",color="#ff3a4a",peak=5.0,decay=1.6,hz=5,targets="hit"),
            T("pocket",0.3,4.3,"灯った穴が不安定に点滅","flicker",color=CRIMSON,targets="lit"),
            T("seg",0.6,4.3,"持ち玉が低く点滅","pulse",color=CRIMSON,hz=1.5)],
    snd=[(0.6,"roulette_riser"),(1.4,"title_slam"),(4.3,"roulette_stop")], status=dict(lcd="existing", light="todo"))
@@ -278,8 +282,8 @@ ev(id="challenge_declare", phase="D 勝負", name="勝負の宣言", tier=3, dur
            T("ambient",0,0.5,"盤面を暗く","blackout",level=0.18),
            T("petal",0,0.4,"ほぼ消灯","blackout"), T("petal",0.4,1.6,"P2に金の鼓動","heartbeat",color=GOLD,targets="P2",bpm=84),
            T("edge",0,0.4,"ほぼ消灯","blackout"), T("edge",0.4,1.6,"上辺に金の鼓動","heartbeat",color=GOLD,targets="top",bpm=84),
-           T("pocket",0.3,1.6,"当たりの穴が金で点滅(白でなく濃い金)","pulse",color=GOLD,hz=3,depth=3.2,targets="unlit"),
-           T("pocket",0.3,1.6,"外れの穴は白い基底を消して深紅に沈む","solid",color=CRIMSON,level=.55,targets="lit"),
+           T("pocket",0.3,1.6,"当たりの穴(灯のない穴)が金で強く、端から端へ波打つ","pbeat",color=GOLD,hz=2.2,wave=.14,sharp=2,floor=.2,peak=6.8,targets="unlit"),
+           T("pocket",0.3,1.6,"外れの穴(灯っている穴)は白い基底を消して暗い赤に沈む","solid",color=CRIMSON,level=.3,targets="lit"),
            T("petal",0.4,1.6,"点いている花びらが赤く脈打つ","recolor",color=CRIMSON,bpm=96),
            T("edge",0,1.6,"縁は深紅の土台","baseTint",color=CRIMSON,level=.9)],
    snd=[(0,"challenge_slam")], status=dict(lcd="todo", light="todo"))
@@ -305,8 +309,8 @@ ev(id="challenge_flight", phase="D 勝負", name="勝負の玉が落ちている
    tracks=[T("ambient",0,6,"盤面を暗いまま保つ","hold",level=0.18),
            T("lcd",0,6,"『勝負中』の小さな印"),
            T("petal",0,6,"P2の金の鼓動","heartbeat",color=GOLD,targets="P2",bpm=84),
-           T("pocket",0,6,"当たり(灯のない)穴が濃い金で点滅","pulse",color=GOLD,hz=3,depth=3.2,targets="unlit"),
-           T("pocket",0,6,"外れ(灯っている)穴は白い基底を消して深紅に沈む","solid",color=CRIMSON,level=.55,targets="lit"),
+           T("pocket",0,6,"当たり(灯のない)穴が金で強く、端から端へ波打つ","pbeat",color=GOLD,hz=2.2,wave=.14,sharp=2,floor=.2,peak=6.8,targets="unlit"),
+           T("pocket",0,6,"外れ(灯っている)穴は白い基底を消して暗い赤に沈む","solid",color=CRIMSON,level=.3,targets="lit"),
            T("petal",0,6,"点いている花びらが赤く脈打つ","recolor",color=CRIMSON,bpm=96),
            T("edge",0,6,"縁は深紅の土台","baseTint",color=CRIMSON,level=.9)],
    snd=[(0,"tension_bed")], status=dict(lcd="todo", light="todo"))
@@ -324,6 +328,7 @@ ev(id="success_small", phase="D 勝負", name="成功(1〜3灯・回収)", tier=
            T("petal",0.1,2.4,"ピンク/金のちかちか3回","flash",color=GOLD,hz=2.5,limit=3,targets="all"),
            T("petal",2.4,3.8,"銀白へ戻る","fade",to="n0"),
            T("edge",0.1,2.4,"金が1周","comet",color=GOLD,turns=1),
+           T("pocket",0,1.6,"入った穴が白金で最大に閃く","pburst",color="#fff0b0",peak=7.0,decay=1.6,hz=6,targets="hit"),
            T("pocket",0,2.4,"入った穴が金","solid",color=GOLD,targets="hit"),
            T("seg",1.4,2.6,"持ち玉+N","count",to="+N"),
            T("tray",1.4,2.6,"N玉払い出し","payout",n="N",rate=6)],
@@ -343,6 +348,7 @@ ev(id="success_big", phase="D 勝負", name="成功(4・5灯:画面全体が燃�
            T("petal",0.1,7.0,"虹が流れ稜線がきらめく","rainbowFlow",targets="all",speed=.5),
            T("edge",0.1,6.0,"虹B最大","rainbowB",amount=2.0,speed=2.4),
            T("logo",0.3,7.0,"虹で輝く","breathe",color=RAINBOW,period=1.2),
+           T("pocket",0,1.6,"入った穴が白金で最大に閃く","pburst",color="#fff0b0",peak=7.0,decay=1.6,hz=6,targets="hit"),
            T("pocket",0.2,3.0,"全7口が金→虹で走る","chase",color=RAINBOW,speed=3.0),
            T("petal",0.1,3.4,"虹と白が交互にちかちか(実機の当たり)","alt",color=RAINBOW,color2=WHITE,hz=7,targets="all"),
            T("edge",0.1,1.6,"全周が白金で3連発","flash",color=WHITE,hz=3,limit=4),
@@ -366,6 +372,7 @@ ev(id="fail", phase="D 勝負", name="失敗", tier=2, dur=2.6, blocking=True,
            T("edge",0.5,2.4,"青紫の柱が下から上へ","sweep",color="#6f7cd0",axis="up"),
            T("edge",0.2,1.0,"金→消灯","fade",to="off"),
            T("edge",1.0,1.3,"冷たい青白の一瞬","flash",color=CYAN,hz=3,limit=1),
+           T("pocket",0,1.5,"外れた穴が赤く強く閃く(どこに入ったかを穴で見せる)","pburst",color="#ff3a4a",peak=5.4,decay=1.5,hz=4,targets="hit"),
            {**T("pocket",0.0,0.4,"惜しかった口に波紋1回","pulse",color=GOLD,targets="target",hz=2.5), "when": {"near_miss": True}},
            {**T("edge",0.0,0.4,"その口の下から波紋1回","ripple",color=GOLD,origin="pocket"), "when": {"near_miss": True}}],
    snd=[(0,"glass_break"),(1.0,"fail_sigh")], status=dict(lcd="todo", light="todo"))
@@ -582,6 +589,7 @@ for e in E:
            T("edge",0,8.3,"縁は深い赤の土台(結果を見守る)","baseTint",color="#d0101e",level=.7),
            T("edge",2.05,6.8,"深紅の1点が周回・減速","needle",color=CRIMSON),
            T("edge",6.8,7.0,"停止の白い一閃","flash",color=WHITE,hz=3,limit=1),
+           T("pocket",0,1.0,"重複した穴が赤く強く閃く","pburst",color="#ff3a4a",peak=5.0,decay=1.6,hz=5,targets="hit"),
            T("pocket",0.3,8.3,"灯った穴が不安定に点滅","flicker",color=CRIMSON,targets="lit"),
            T("seg",0.6,6.8,"持ち玉が低く点滅","pulse",color=CRIMSON,hz=1.5)]
         e["snd"] = [(0.6,"roulette_riser"),(1.5,"title_slam"),(6.8,"roulette_stop"),(6.93,"result_title")]

@@ -1,3 +1,5 @@
+import { TRAY_GEOMETRY, COUNT_PORT, outsideRect, exportedFloor, trayFloor, trayPoint, parseObjMeshes } from './tray_geometry.mjs';
+import { TrayRollingResistance } from './tray_rolling.mjs';
 // 皿ユニット(stage1)の Rapier 変換。入力は work/cabinet/stage1/export/{parts.json, col_all.obj}（読むだけ）。
 //  - 静的衝突: parts.json の role=collision のうち親が TRAY_UNIT のもの → col_all.obj の凸包(単位m・設計座標) + 根の移動 = 世界座標
 //  - 可動部: 親が MECH_* の衝突 → kinematic 剛体(凸包は部品原点=mech.origin_m の局所座標。体は origin+根の移動に置く)。ヒンジ(range_deg)/スライダ(stroke)を setMech で動かす
@@ -30,14 +32,19 @@ export function parseObj(text) {
 
 /** 溢れ蓋の方針。
  *  count: 皿の球数(途中の球を含む)が n 以上で開く(stage1 の元の方針。n 既定 50)。n は規則ではなく試験用の仮値。
- *  reach: 皿の中で静止した球が「溢れ口の手前の到達域」に積み上がったら開く（満杯数を決めず、物理で届いたら）。
+ *  reach: 溢れ口付近の球が床上17mmへ届いたら開く。0.8秒の保持と球半径を含む安全インターロック（個数で決めない）。
  *  open:  常に開く(試験用)   closed: 常に閉じる(試験用) */
 export const OVERFLOW_POLICIES = ['count', 'reach', 'open', 'closed', 'mouth'];
 
+// 実床の勾配。重力は垂直のまま。
+export const TRAY_MOTION = Object.freeze({ tilt: 0, rollingResistance: 0.006, variability: 0.15 });
+
 export class Stage1Tray {
-  constructor(RAPIER, world, { readText, base = '', overflow = { type: 'open' }, rng = Math.random, scale = 10, RollingResistance = null, translation_m = null } = {}) {
+  constructor(RAPIER, world, { readText, base = '', overflow = { type: 'open' }, rng = Math.random, scale = 10, RollingResistance = null, translation_m = null, debugHistory = false } = {}) {
     this.RollingResistanceClass = RollingResistance; this.rr = null; this.payoutActive = false; this.countOpen = false; this.countEmptySince = null; this.blockSince = null; this.idleSince = null; this.ovfWant = false;
-    this.translationOverride = translation_m;
+    this.translationOverride = translation_m; this.debugHistory = debugHistory; this.activeBalls = new Map(); this.activePayout = 0;
+    this.tilt = TRAY_MOTION.tilt;
+    world.numSolverIterations = 4;
     this.S = scale; // 物理空間の倍率(m→物理単位)。Rapier の凸包は mm 級の形をメートルで作ると玉との接触が壊れる(素通り・横滑り)ため、10倍にして使う。world の重力と lengthUnit も同倍率にすること
     this.R = RAPIER; this.world = world; this.readText = readText; this.base = base; this.overflow = overflow; this.rng = rng;
     this.statics = []; this.mechBodies = new Map(); this.balls = new Map(); this.events = []; this.hash = null;
@@ -48,20 +55,60 @@ export class Stage1Tray {
   /** @returns {Promise<boolean>} 作り直したか */
   async reload(force = false) {
     const [pj, obj] = await Promise.all([this.readText(this.base + 'parts.json'), this.readText(this.base + 'col_all.obj')]);
-    const hash = await geometryHash(pj + obj);
+    const hash = await geometryHash(pj + obj + JSON.stringify(TRAY_GEOMETRY));
     if (!force && hash === this.hash) return false;
     for (const c of this.statics) this.world.removeCollider(c, false);
     for (const b of this.mechBodies.values()) this.world.removeRigidBody(b.body);
     this.statics = []; this.mechBodies.clear(); this.hash = hash;
-    const parts = JSON.parse(pj); const hulls = parseObj(obj); this.parts = parts;
+    const parts = JSON.parse(pj); const hulls = parseObj(obj), meshes = parseObjMeshes(obj); this.parts = parts;
+    const oldFloor = parts.physics.floor_model;
+    this.geometry = TRAY_GEOMETRY;
+    const warp = p => trayPoint(p, oldFloor);
+    const exitDelta = trayFloor(.0263,-.14)-exportedFloor(.0263,-.14,oldFloor);
+    const warpPayout = p => [p[0],p[1]+exitDelta-.10*(p[2]+.14),p[2]];
+    // 可動部の原点/軸・平面センサー・払出中心線を同じ床変位へつなぐ。
+    const originalOrigins = new Map(parts.mechs.map(m => [m.id, m.origin_m.slice()]));
+    for (const m of parts.mechs) {
+      if(m.id==='MECH_SEP_NEEDLE'){m.origin_m[0]=-.180;originalOrigins.get(m.id)[0]=-.180;}
+      const o=m.origin_m; if(m.axis){const a=warp(o), b=warp(o.map((v,i)=>v+m.axis[i]*.001));m.axis=b.map((v,i)=>(v-a[i])/.001);}
+      m.origin_m=warp(o);
+    }
+    for(const s of parts.sensors)if(s.center_m)s.center_m=(s.id==='SENSOR_PAYOUT_EXIT'?warpPayout:warp)(s.center_m);
+    const os=parts.sensors.find(s=>s.id==='SENSOR_RES_OVERFLOW_ENTRANCE');os.center_m[1]=(os.center_m[1]+trayFloor(os.center_m[0],os.center_m[2]))/2;os.half_y_m=.050;
+    for(const p of parts.paths)if(p.centerline_m)p.centerline_m=p.centerline_m.map(p.id==='PATH_PAYOUT'?warpPayout:warp);
     const T = this.translationOverride ?? parts.roots.find((r) => r.id === 'TRAY_UNIT').transform.translation_m; this.T = T;
     const world = (v, i) => v + T[i % 3];
     const R = this.R; const mechDef = Object.fromEntries(parts.mechs.map((m) => [m.id, m]));
+    const mergedVertices = [], mergedIndices = [], floorVertices = [], floorIndices = []; this.visualMechs = []; this.visualStatics = [];
     for (const p of parts.parts) {
-      if (p.role !== 'collision') continue;
+      if (p.role !== 'collision' || p.id.startsWith('COL_CNT_') || p.parent === 'MECH_CNT_FLAP') continue;
       const raw = hulls.get(p.mesh.object); if (!raw) throw new Error('missing hull ' + p.mesh.object);
       const isStatic = p.parent === 'TRAY_UNIT'; // 可動部の凸包は可動部の原点(part.transform)基準の局所座標、静的部は設計座標
-      const wp = isStatic ? raw.map(world) : raw;
+      const o = originalOrigins.get(p.parent);
+      const warped = [];
+      for(let i=0;i<raw.length;i+=3){
+        const v=raw.slice(i,i+3), a=isStatic?(p.id.startsWith('COL_PAYOUT')?warpPayout:warp)(v):warp(v.map((x,k)=>x+o[k])).map((x,k)=>x-mechDef[p.parent].origin_m[k]);warped.push(...a);
+      }
+      const wp = isStatic ? warped.map(world) : warped;
+      if(isStatic && p.id.startsWith('COL_TRAY_FLOOR_')) {
+        const mesh=meshes.get(p.mesh.object);
+        for(let k=0;k<mesh.indices.length;k+=3){
+          const tri=mesh.indices.slice(k,k+3).map(i=>raw.slice(i*3,i*3+3));
+          if(!tri.every(v=>Math.abs(v[1]-exportedFloor(v[0],v[2],oldFloor))<.00001))continue;
+          for(const pc of outsideRect(tri,COUNT_PORT)){
+            const base=floorVertices.length/3;
+            for(const v of pc)floorVertices.push(v[0]*this.S+T[0]*this.S,(trayFloor(v[0],v[2])+T[1])*this.S,(v[2]+T[2])*this.S);
+            for(let j=1;j<pc.length-1;j++)floorIndices.push(base,base+j,base+j+1);
+          }
+        }
+        continue;
+      }
+      if(isStatic){
+        if(p.id.startsWith('COL_TRAY_') || p.id.startsWith('COL_PAYOUT_'))this.visualStatics.push({id:p.id,vertices:wp,indices:meshes.get(p.mesh.object).indices});
+        const offset=mergedVertices.length/3;
+        mergedVertices.push(...wp.map(v=>v*this.S));
+        mergedIndices.push(...meshes.get(p.mesh.object).indices.map(i=>i+offset));
+      }
       // Rapier 0.21 の convexHull は原点から離れた点群だと接触が壊れる(玉が素通りする)ため、重心を引いて setTranslation で戻す
       const c = [0, 1, 2].map((k) => { let a = 0, n = 0; for (let i = k; i < wp.length; i += 3) { a += wp[i]; n++; } return a / n; });
       const S = this.S; const pts = new Float32Array(wp.map((v, i) => (v - c[i % 3]) * S));
@@ -73,16 +120,50 @@ export class Stage1Tray {
         let m = this.mechBodies.get(p.parent);
         if (!m) { const o0 = mechDef[p.parent].origin_m.map((v, i) => v + T[i]); const body = this.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(o0[0] * S, o0[1] * S, o0[2] * S)); m = { body, def: mechDef[p.parent], value: 0 }; this.mechBodies.set(p.parent, m); }
         this.world.createCollider(desc, m.body);
+        this.visualMechs.push({id:p.parent,vertices:wp,indices:meshes.get(p.mesh.object).indices});
       }
     }
+    const floorDesc=R.ColliderDesc.trimesh(new Float32Array(floorVertices),new Uint32Array(floorIndices),R.TriMeshFlags.FIX_INTERNAL_EDGES);
+    floorDesc.setFriction(.25).setRestitution(.35);this.statics.push(this.world.createCollider(floorDesc));
+    this.floorMesh={vertices:floorVertices,indices:floorIndices};
+    const floorOffset=mergedVertices.length/3;mergedVertices.push(...floorVertices);mergedIndices.push(...floorIndices.map(i=>i+floorOffset));
+    const ductVertices=[],ductIndices=[];
+    // 左端の幅48mm・奥行59mmの計数シャッターと、その幅に一致する下向き排出路。
+    // 旧22x18mmの一点穴は多球で架橋し、100玉すべてが強制収納になった。
+    const cp=COUNT_PORT, cx=(cp.x[0]+cp.x[1])/2, front=cp.z[1];
+    const cm=mechDef.MECH_CNT_FLAP; cm.origin_m=[cx,trayFloor(cx,front),front];cm.axis=[1,TRAY_GEOMETRY.slopeX,0];
+    const cb=this.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation((cx+T[0])*this.S,(cm.origin_m[1]+T[1])*this.S,(front+T[2])*this.S));
+    this.mechBodies.set('MECH_CNT_FLAP',{body:cb,def:cm,value:0});
+    const flap=[];
+    for(const x of cp.x)for(const z of cp.z)for(const h of [0,-.003])flap.push((x-cx)*this.S,(trayFloor(x,z)+h-cm.origin_m[1])*this.S,(z-front)*this.S);
+    this.world.createCollider(R.ColliderDesc.convexHull(new Float32Array(flap)).setFriction(.25).setRestitution(.35),cb);
+    const fv=[];for(const h of [-.003,0])for(const [x,z]of [[cp.x[0],cp.z[0]],[cp.x[1],cp.z[0]],[cp.x[1],cp.z[1]],[cp.x[0],cp.z[1]]])fv.push(x-cx,trayFloor(x,z)+h-cm.origin_m[1],z-front);
+    this.visualMechs.push({id:'MECH_CNT_FLAP',vertices:fv,indices:[0,2,1,0,3,2,4,5,6,4,6,7,0,1,5,0,5,4,1,2,6,1,6,5,2,3,7,2,7,6,3,0,4,3,4,7]});
+    const ductY=z=>-.300+(z-front)*Math.tan(Math.PI/6);
+    const box=(x0,x1,z0,z1,lo,hi)=>{
+      const base=ductVertices.length/3;
+      for(const y of [lo,hi])for(const [x,z]of [[x0,z0],[x1,z0],[x1,z1],[x0,z1]])ductVertices.push((x+T[0])*this.S,(y(x,z)+T[1])*this.S,(z+T[2])*this.S);
+      for(const i of [0,2,1,0,3,2,4,5,6,4,6,7,0,1,5,0,5,4,1,2,6,1,6,5,2,3,7,2,7,6,3,0,4,3,4,7])ductIndices.push(base+i);
+    };
+    const [xl,xr]=cp.x;
+    box(xl-.002,xr+.002,cp.rear,front+.002,(x,z)=>ductY(z)-.003,(x,z)=>ductY(z));
+    for(const [a,b]of [[xl-.002,xl],[xr,xr+.002]])box(a,b,cp.rear,front+.002,(x,z)=>ductY(z)-.003,(x,z)=>trayFloor(x,z));
+    box(xl-.002,xr+.002,front,front+.002,(x,z)=>ductY(z)-.003,(x,z)=>trayFloor(x,z));
+    const cs=parts.sensors.find(s=>s.id==='SENSOR_RES_COUNT_ENTRANCE');cs.center_m=[cx,(ductY(cp.rear+.006)+trayFloor(cx,cp.rear+.006))/2,cp.rear+.006];cs.half_x_m=(xr-xl)/2;cs.half_y_m=.050;
+    const meshDesc=R.ColliderDesc.trimesh(new Float32Array(ductVertices),new Uint32Array(ductIndices),R.TriMeshFlags.FIX_INTERNAL_EDGES);
+    meshDesc.setFriction(.25).setRestitution(.35);
+    this.statics.push(this.world.createCollider(meshDesc));
+    const ductOffset=mergedVertices.length/3;mergedVertices.push(...ductVertices);mergedIndices.push(...ductIndices.map(i=>i+ductOffset));
+    this.staticMesh = { vertices: mergedVertices, indices: mergedIndices };
     this.sensors = parts.sensors.filter((s) => s.kind === 'plane').map((s) => ({ ...s, center: s.center_m.map((v, i) => v + T[i]), normal: s.normal }));
     // 払出の中心線(設計座標→世界)
     const path = parts.paths.find((x) => x.id === 'PATH_PAYOUT'); this.payoutStart = path.centerline_m[0].map((v, i) => v + T[i]);
     const ovf = parts.reservoir.find((r) => r.id === 'RES_OVERFLOW'); this.ovfHole = { x: ovf.hole_x_m.map((v) => v + T[0]), z: ovf.hole_z_m.map((v) => v + T[2]) };
-    const cnt = parts.reservoir.find((r) => r.id === 'RES_COUNT'); this.cntHole = { x: cnt.hole_x_m.map((v) => v + T[0]), z: cnt.hole_z_m.map((v) => v + T[2]) };
+    const cnt = parts.reservoir.find((r) => r.id === 'RES_COUNT'); this.cntHole = { x: COUNT_PORT.x.map(v=>v+T[0]), z: COUNT_PORT.z.map(v=>v+T[2]) };
     this.trayBox = { x: [-0.173 + T[0], 0.0855 + T[0]], z: [-0.140 + T[2], -0.064 + T[2]], y: [-0.30 + T[1], -0.236 + T[1]] }; // 皿の内側体積（col_all.obj の皿壁の範囲）
     for (const k of this.mechBodies.keys()) this.setMech(k, 0);
-    if (this.RollingResistanceClass) { this.rr = new this.RollingResistanceClass(parts.physics, T, this.rng); for (const [id, b] of this.balls) if (!b.stored) this.rr.attach(id, b.body); }
+    this.rr = new TrayRollingResistance(T, this.rng);
+    for (const [id, b] of this.activeBalls) if (!b.stored) this.rr.attach(id, b.body);
     return true;
   }
 
@@ -103,86 +184,109 @@ export class Stage1Tray {
     this.world.createCollider(R.ColliderDesc.ball(0.006 * S).setDensity(7800 / S ** 3).setFriction(0.25 * f).setRestitution(Math.min(0.9, 0.35 * e)), body);
     const id = opts.id ?? `B${String(this.nextBall++).padStart(3, '0')}`;
     if (this.rr) this.rr.attach(id, body);
-    this.balls.set(id, { id, body, prev: { x: p[0], y: p[1], z: p[2] }, state: 'payout' }); return id;
+    const b = { id, body, prev: this.pos(body), sensorMask: 0, state: 'payout' };
+    this.balls.set(id, b); this.activeBalls.set(id, b); this.activePayout++; this._countCache = null; this._dishCount = null; return id;
   }
-  pos(body) { const t = body.translation(), S = this.S; return { x: t.x / S, y: t.y / S, z: t.z / S }; }
+  /** 剛体を台帳へ移した後は480Hzの走査から外す。診断用のballs履歴は保つ。 */
+  retire(b, reason) {
+    if (b.stored) return;
+    if (b.state === 'payout') this.activePayout--;
+    b.stored = reason; this.activeBalls.delete(b.id); this._countCache = null; this._dishCount = null; this.world.removeRigidBody(b.body);
+    this.rr?.prev.delete(b.id); this.rr?.dfac.delete(b.id);
+  }
+  pos(body, out = {x:0,y:0,z:0}) { const t = body.translation(this._rawPosition ??= {x:0,y:0,z:0}), S = this.S; out.x=t.x/S;out.y=t.y/S;out.z=t.z/S;return out; }
   /** 皿の中の球(中心が皿の内側体積)と、途中(トンネル内)の球。 */
   counts() {
+    if (this._countCache) return this._countCache;
     const b = this.trayBox; let inDish = 0, tunnel = 0, resting = 0;
-    for (const x of this.balls.values()) { if (x.stored) continue; const t = this.pos(x.body); if (t.x > b.x[0] && t.x < b.x[1] && t.z > b.z[0] && t.z < b.z[1] && t.y > b.y[0] && t.y < b.y[1] + 0.03) { inDish++; if (x.body.isSleeping() || Math.hypot(...Object.values(x.body.linvel())) < 0.02 * this.S) resting++; } else tunnel++; }
-    return { inDish, outside: tunnel, resting };
+    for (const x of this.activeBalls.values()) { if (x.stored) continue; const t = x.prev; if (t.x > b.x[0] && t.x < b.x[1] && t.z > b.z[0] && t.z < b.z[1] && t.y > b.y[0] && t.y < b.y[1] + 0.03) { inDish++; if (x.body.isSleeping() || Math.hypot(...Object.values(x.body.linvel())) < 0.02 * this.S) resting++; } else tunnel++; }
+    return this._countCache = { inDish, outside: tunnel, resting };
   }
   _overflowWantsOpen() {
     const o = this.overflow; if (o.type === 'open') return true; if (o.type === 'closed') return false;
-    if (o.type === 'mouth') { // 払出口の出口が詰まった(トンネル最後の12mmに球が0.5秒動かない)ら開き、払出が終わって1秒で閉じる
+    if (o.type === 'mouth') {
+      if (!this.activePayout && !this.ovfWant) return false; // 払出口の出口が詰まった(トンネル最後の12mmに球が0.5秒動かない)ら開き、払出が終わって1秒で閉じる
       const PX = 0.0263 + this.T[0], ZB = -0.137 + this.T[2]; let blocked = false;
-      for (const x of this.balls.values()) { if (x.stored || x.state !== 'payout') continue; const t = this.pos(x.body); const v = x.body.linvel();
+      for (const x of this.activeBalls.values()) { if (x.stored || x.state !== 'payout') continue; const t = x.prev; const v = x.body.linvel();
         if (Math.abs(t.x - PX) < 0.014 && t.z > ZB - 0.012 && t.z < ZB + 0.002 && Math.hypot(v.x, v.y, v.z) < 0.02 * this.S) blocked = true; }
       const now = this.tick / (this.hz ?? 480);
       if (blocked) { this.blockSince ??= now; if (now - this.blockSince >= 0.5) this.ovfWant = true; } else this.blockSince = null;
       if (!this.payoutActive) { this.idleSince ??= now; if (now - this.idleSince >= 1.0) this.ovfWant = false; } else this.idleSince = null;
       return this.ovfWant;
     }
+    if(o.type === 'reach') {
+      const h=this.ovfHole;let high=false;
+      for(const b of this.activeBalls.values()){
+        const t=b.prev;if(t.x<h.x[0]-.012||t.x>h.x[1]+.012||t.z<h.z[0]-.008||t.z>h.z[1]+.008)continue;
+        const floor=trayFloor(t.x-this.T[0],t.z-this.T[2])+this.T[1];
+        if(t.y>floor+.017 && t.y<floor+.050){high=true;break;}
+      }
+      if(high){this.levelLast=this.tick;this.ovfWant=true;}
+      else if(this.tick-(this.levelLast??-1e9)>.8*(this.hz??480))this.ovfWant=false;
+      return this.ovfWant;
+    }
     const c = this.counts();
     if (o.type === 'count') return c.inDish + this._inFlightToDish() >= o.n;
     // reach: 溢れ口の手前(x±22mm, z±20mm)に、静止した球が2層以上(中心高さが床+9mm超)で届いたら開く
     const h = this.ovfHole, floor = this.floorY ?? (-0.2686 + this.T[1]); let reach = false;
-    for (const x of this.balls.values()) { if (x.stored) continue; const t = this.pos(x.body); const v = x.body.linvel(); /* 物理単位/s */
+    for (const x of this.activeBalls.values()) { if (x.stored) continue; const t = x.prev; const v = x.body.linvel(); /* 物理単位/s */
       if (t.x > h.x[0] - 0.022 && t.x < h.x[1] + 0.022 && t.z > h.z[0] - 0.02 && t.z < h.z[1] + 0.02 && t.y > floor + 0.009 + 0.006 && Math.hypot(v.x, v.y, v.z) < 0.05 * this.S) reach = true; }
     return reach;
   }
-  _inFlightToDish() { let n = 0; for (const x of this.balls.values()) if (!x.stored && x.state === 'payout') { const t = this.pos(x.body); if (!(t.z > this.trayBox.z[0])) n++; } return n; }
+  _inFlightToDish() { let n = 0; for (const x of this.activeBalls.values()) if (!x.stored && x.state === 'payout') { const t = x.prev; if (!(t.z > this.trayBox.z[0])) n++; } return n; }
 
-  /** 1step の前に呼ぶ。皿の傾き(床は水平のまま、重力のx成分 GRAV_TILT で取込側=-x へ)を皿の中の球に与える。 */
-  beforeStep(dt) {
-    const b = this.trayBox, g = this.tilt ?? 0.04, F = 0.00706 * 9.81 * this.S * g * dt;
-    for (const x of this.balls.values()) { if (x.stored) continue; const t = this.pos(x.body);
-      if (t.x > b.x[0] && t.x < b.x[1] && t.z > b.z[0] && t.z < b.z[1] && t.y > b.y[0] && t.y < b.y[1] + 0.03) x.body.applyImpulse({ x: -F, y: 0, z: 0 }, true); }
-  }
+  /** 床の実傾斜と垂直重力だけで転がす。互換用の空hook。 */
+  beforeStep(dt) {}
   /** 480Hz などの固定刻みの1step後に呼ぶ。蓋の開閉・センサー・球の収納を処理。 */
   afterStep(dt) {
-    this.tick++;
+    this.tick++; this._countCache = null; this._dishCount = null;
     // 蓋(溢れ・計数): 0.25s で 0→-90°。穴の上に沈みかけた球がいる間は閉じない(parts.json の interlock)
     this.hz = 1 / dt;
     for (const [fid, want, hole] of [['MECH_OVF_FLAP', this._overflowWantsOpen(), 'ovf'], ['MECH_CNT_FLAP', this.countOpen, 'cnt']]) {
       const m = this.mechBodies.get(fid); if (!m) continue;
       const speed = (Math.PI / 2) / 0.25 * dt; let v = m.value;
-      if (want) v = Math.max(-Math.PI / 2, v - speed); else if (!this._ballOnHole(hole)) v = Math.min(0, v + speed);
+      const occupied=this._ballOnHole(hole);
+      if (want || (occupied && v < -.05)) v = Math.max(-Math.PI / 2, v - speed); else if (!occupied) v = Math.min(0, v + speed);
       if (v !== m.value) this.setMech(fid, v);
       if (hole === 'ovf') this.flapOpen = v < -Math.PI / 4; else this.cntFlapOpen = v < -Math.PI / 4;
     }
-    if (this.rr && this.tick % Math.max(1, Math.round(this.hz / 60)) === 0) this.rr.update(this.balls, 1 / 60, this.S);
-    for (const [id, b] of this.balls) {
-      if (b.stored) continue; const t = this.pos(b.body);
-      for (const s of this.sensors) {
-        const key = s.id + '|' + id; if (this.latched.has(key)) continue;
+    for (const [id, b] of this.activeBalls) {
+      if (b.stored || b.body.isSleeping()) continue; const t = this.pos(b.body, this._stepPosition ??= {x:0,y:0,z:0});
+      for (let si = 0; si < this.sensors.length; si++) {
+        const s = this.sensors[si], mask = 1 << si; if (b.sensorMask & mask) continue;
         const n = s.normal, d0 = (b.prev.x - s.center[0]) * n[0] + (b.prev.y - s.center[1]) * n[1] + (b.prev.z - s.center[2]) * n[2];
         const d1 = (t.x - s.center[0]) * n[0] + (t.y - s.center[1]) * n[1] + (t.z - s.center[2]) * n[2];
         if (d0 < 0 && d1 >= 0) {
           const k = -d0 / (d1 - d0), hx = b.prev.x + (t.x - b.prev.x) * k, hy = b.prev.y + (t.y - b.prev.y) * k, hz = b.prev.z + (t.z - b.prev.z) * k;
           const ok = s.radius_m != null ? Math.hypot(hx - s.center[0], hy - s.center[1], hz - s.center[2]) <= s.radius_m
             : Math.abs(hx - s.center[0]) <= (s.half_x_m ?? 1e9) && Math.abs(hy - s.center[1]) <= (s.half_y_m ?? 1e9);
-          if (ok) { this.latched.set(key, this.tick); this.events.push({ tick: this.tick, ball: id, sensor: s.id }); this._onSensor(s.id, id, b); }
+          if (ok) { b.sensorMask |= mask; this.latched.set(s.id + '|' + id, this.tick); this.events.push({ tick: this.tick, ball: id, sensor: s.id }); this._onSensor(s.id, id, b); }
         }
       }
-      if (this.tick % 24 === 0) b.last = [t.x - this.T[0], t.y - this.T[1], t.z - this.T[2]].map((v) => +(v * 1000).toFixed(0));
-      b.prev = { x: t.x, y: t.y, z: t.z };
+      if (this.debugHistory && this.tick % 24 === 0) b.last = [t.x - this.T[0], t.y - this.T[1], t.z - this.T[2]].map((v) => +(v * 1000).toFixed(0));
+      b.prev.x = t.x; b.prev.y = t.y; b.prev.z = t.z;
       if (!b.fell && t.y < this.T[1] - 0.34) { b.fell = true; this.events.push({ tick: this.tick, ball: id, sensor: 'FELL', at: [t.x - this.T[0], t.y - this.T[1], t.z - this.T[2]].map((v) => +(v * 1000).toFixed(0)), prev: b.prevLog }); }
-      if (this.tick % 12 === 0) { const p = b.hist ??= []; p.push([t.x - this.T[0], t.y - this.T[1], t.z - this.T[2]].map((v) => +(v * 1000).toFixed(0))); if (p.length > 12) p.shift(); }
-      if (t.y < -0.6) { this.events.push({ tick: this.tick, ball: id, sensor: 'LOST', last: b.last }); b.stored = true; this.world.removeRigidBody(b.body); }
+      if (this.debugHistory && this.tick % 12 === 0) { const p = b.hist ??= []; p.push([t.x - this.T[0], t.y - this.T[1], t.z - this.T[2]].map((v) => +(v * 1000).toFixed(0))); if (p.length > 12) p.shift(); }
+      if (t.y < -0.6) { this.events.push({ tick: this.tick, ball: id, sensor: 'LOST', last: b.last }); this.retire(b, 'lost'); }
     }
+    if (this.rr && this.tick % Math.max(1, Math.round(this.hz / 60)) === 0) this.rr.update(this.activeBalls, 1 / 60, this.S);
   }
-  _ballOnHole(which = 'ovf') { const h = which === 'ovf' ? this.ovfHole : this.cntHole, floor = -0.2686 + this.T[1]; for (const x of this.balls.values()) { if (x.stored) continue; const t = this.pos(x.body); if (t.x > h.x[0] && t.x < h.x[1] && t.z > h.z[0] && t.z < h.z[1] && t.y < floor + 0.012) return true; } return false; }
+  _ballOnHole(which = 'ovf') { const h = which === 'ovf' ? this.ovfHole : this.cntHole, floor = trayFloor((h.x[0]+h.x[1])/2-this.T[0], (h.z[0]+h.z[1])/2-this.T[2])+this.T[1]; for (const x of this.activeBalls.values()) { if (x.stored) continue; const t = x.prev; if (t.x > h.x[0]-.0065 && t.x < h.x[1]+.0065 && t.z > h.z[0]-.0065 && t.z < h.z[1]+.0065 && t.y < floor+.020 && t.y > floor-.020) return true; } return false; }
   /** 取込口(皿の左)に最も近い、皿の中の球を取り除いて返す(取込ゲート〜昇降の物理は未移植、台帳＋時間差で代用)。 */
   takeNearestIntake() {
     let best = null, bx = 1e9;
-    for (const [id, b] of this.balls) { if (b.stored || b.state !== 'dish') continue; const t = this.pos(b.body); if (t.x > this.trayBox.x[0] && t.x < this.trayBox.x[1] && t.z > this.trayBox.z[0] && t.z < this.trayBox.z[1] && t.x < bx) { bx = t.x; best = id; } }
-    if (best == null) return null; const b = this.balls.get(best); b.stored = 'feed'; this.world.removeRigidBody(b.body); this.stored.feed = (this.stored.feed ?? 0) + 1; return best;
+    for (const [id, b] of this.activeBalls) { if (b.stored || b.state !== 'dish') continue; const t = b.prev; if (t.x > this.trayBox.x[0] && t.x < this.trayBox.x[1] && t.z > this.trayBox.z[0] && t.z < this.trayBox.z[1] && t.x < bx) { bx = t.x; best = id; } }
+    if (best == null) return null; const b = this.balls.get(best); this.retire(b, 'feed'); this.stored.feed = (this.stored.feed ?? 0) + 1; return best;
   }
-  dishCount() { let n = 0; for (const b of this.balls.values()) { if (b.stored) continue; const t = this.pos(b.body); if (t.x > this.trayBox.x[0] && t.x < this.trayBox.x[1] && t.z > this.trayBox.z[0] && t.z < this.trayBox.z[1] && t.y < this.trayBox.y[1] + 0.03) n++; } return n; }
+  dishCount() {
+    if(this._dishTick===this.tick && this._dishCount!=null)return this._dishCount;
+    const b=this.trayBox;let n=0;
+    for(const x of this.activeBalls.values()){const t=x.prev;if(t.x>b.x[0]&&t.x<b.x[1]&&t.z>b.z[0]&&t.z<b.z[1]&&t.y>b.y[0]&&t.y<b.y[1]+.03)n++;}
+    this._dishTick=this.tick;return this._dishCount=n;
+  }
   _onSensor(sid, id, b) {
-    if (sid === 'SENSOR_PAYOUT_EXIT') { this.payoutExited++; b.state = 'dish'; }
-    else if (sid === 'SENSOR_RES_OVERFLOW_ENTRANCE') { this.stored.overflow++; b.stored = 'overflow'; this.world.removeRigidBody(b.body); }
-    else if (sid === 'SENSOR_RES_COUNT_ENTRANCE') { this.stored.count++; b.stored = 'count'; this.world.removeRigidBody(b.body); }
+    if (sid === 'SENSOR_PAYOUT_EXIT') { this.payoutExited++; this.activePayout--; b.state = 'dish'; this._countCache = null; this._dishCount = null; }
+    else if (sid === 'SENSOR_RES_OVERFLOW_ENTRANCE') { this.stored.overflow++; this.retire(b, 'overflow'); }
+    else if (sid === 'SENSOR_RES_COUNT_ENTRANCE') { this.stored.count++; this.retire(b, 'count'); }
   }
 }

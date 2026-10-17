@@ -10,6 +10,10 @@
  .oldui #start,.oldui #fullscreen{opacity:1;width:auto;height:auto}
  #serial-panel{position:fixed;left:8px;top:48px;z-index:9;display:flex;align-items:center;gap:8px;color:#fff;background:#111a;padding:5px 8px;font:12px sans-serif;border-radius:4px}
  #serial-connect{padding:4px 8px;font:12px sans-serif}
+ #audio-panel{max-width:calc(100vw - 32px);display:flex;flex-wrap:wrap;align-items:center;gap:4px;position:fixed;right:8px;top:48px;z-index:9;background:#111b;color:white;padding:5px 8px;font:12px sans-serif}
+ #audio-panel[hidden]{display:none}
+ #audio-credits{position:fixed;right:8px;bottom:40px;z-index:9;max-width:320px;background:#111e;color:#fff;padding:6px 10px;font:12px sans-serif}
+ #audio-credits[hidden]{display:none}
  #hud{display:none;position:fixed;right:8px;top:8px;z-index:9;color:#9fd;font:12px monospace;white-space:pre;text-align:right;pointer-events:none}
  #fullscreen{position:fixed;right:8px;bottom:8px;z-index:9;padding:8px 16px;font:16px sans-serif;opacity:0;width:1px;height:1px;overflow:hidden}
  #config-debug{position:fixed;left:8px;bottom:8px;z-index:9;color:#bde;background:#000b;font:12px monospace;white-space:pre-wrap;pointer-events:none;max-width:75vw}
@@ -19,6 +23,14 @@
 <button id="start">音を有効にする(クリック)</button>
 <div id="serial-panel"><button id="serial-connect">ESP32 接続</button><span id="serial-status">ESP32: 未接続</span></div>
 <button id="fullscreen">全画面</button>
+<div id="audio-panel" hidden>
+ <label>音量 <input id="audio-master" aria-label="音量" type="range" min="0" max="1" step=".01" value=".45"></label>
+ <label><input data-bgm-enable type="checkbox"> BGM有効</label>
+ <label>BGM音量 <input data-bgm-volume aria-label="BGM音量" type="range" min="0" max="1" step=".01" value=".65"></label>
+ <label><input data-bgm-mute type="checkbox"> BGMミュート</label>
+ <button data-bgm-reload type="button">BGM再読込</button><span data-bgm-status role="status"></span>
+</div>
+<details id="audio-credits" hidden><summary>音声クレジット</summary><p id="audio-voice-credit"></p></details>
 <div id="hud"></div>
 <div id="config-debug" hidden></div>
 <div id="config-error" role="alert" hidden></div>

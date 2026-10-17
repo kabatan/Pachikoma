@@ -2,7 +2,16 @@
   "RapidFire": false,
   "MaxInFlight": 3,
   "FireInterval": 0.6,
-  "ClockStopOnReset": true,
+  "ClockStopOnReset": false,
+  "ResetWhileShooting": true,
+  "ResetVisualSecondsByLamps": [
+    0,
+    1.5,
+    3,
+    3,
+    4.5,
+    6
+  ],
   "ClockStopOnJackpot": true,
   "ClockStopBudget": 10,
   "ClockStopBudgetIncludesJackpot": false,
@@ -23,7 +32,7 @@
     24,
     28
   ],
-  "LoanBalls": 15,
+  "LoanBalls": 80,
   "InitialSeconds": 72,
   "ExtraSeconds": 22,
   "ContinueSeconds": 8,
@@ -32,8 +41,8 @@
     1,
     2,
     3,
-    16,
-    24,
+    20,
+    30,
     100
   ],
   "ResetWeights": [
@@ -62,10 +71,10 @@
     null
   ],
   "JackpotAwards": [
-    24,
+    30,
     40,
-    80,
-    160,
+    100,
+    200,
     500
   ],
   "JackpotWeights": [
@@ -75,7 +84,14 @@
     4,
     1
   ],
-  "PrizeThresholds": [0, 9, 35, 51, 165, 543],
+  "PrizeThresholds": [
+    0,
+    74,
+    100,
+    120,
+    165,
+    543
+  ],
   "PrizeNames": [
     "参加賞",
     "C賞",
@@ -84,5 +100,11 @@
     "S賞",
     "SS賞"
   ],
-  "ClockStartsAfterLoan": true
+  "ClockStartsAfterLoan": true,
+  "ExtraLoanBalls": 10,
+  "R2Enabled": true,
+  "ChallengePrepareSeconds": 0.6,
+  "ChallengeAimSpeed": 0.5,
+  "PrepareForcedChallenge": true,
+  "EndGraceSeconds": 1.5
 }

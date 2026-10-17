@@ -128,8 +128,9 @@
       const gl = [0.15, .25, .4, .55, .8, 1, 1.25][nn] * this.dimV; F.logo = nn >= 6 ? [1 * gl, .5 * gl, .03 * gl] : [gl * 1, gl * .55, gl * .06];
       for (let i = 0; i < 7; i++) {
         const lit = this.state.litPockets.includes(i + 1);
-        if (lit) { F.pocket[i * 3] = 3.6; F.pocket[i * 3 + 1] = 3.1; F.pocket[i * 3 + 2] = 2.6; }   // 入った穴の口は、白い基底(stage2cのpocket source。推奨ヒット値4)で点く。レビューe07
+        if (lit) { const pc = [[1, .86, .72], [1, .86, .72], [1, .86, .72], [1, .86, .72], [1, .62, .7], [1, .72, .36], [1, .6, .12]][nn]; F.pocket[i * 3] = 2.5 * pc[0]; F.pocket[i * 3 + 1] = 2.5 * pc[1]; F.pocket[i * 3 + 2] = 2.5 * pc[2]; }   // 灯った穴の定常色は灯の数で変わる(〜4灯=白、4灯=ピンク、5灯=金橙、6灯=濃い金)。穴の色だけで何灯かが分かる   // 入った穴の口は、白い基底(stage2cのpocket source。推奨ヒット値4)で点く。レビューe07
       }
+      if (this.state.hint) this.hintLights(F, t);   // 初見ヒント(R2-TU): 穴・ボタンのLEDだけで場所を示す
       F.seg.meter = [0, 0, 0, 0, 0];
       // ボタンの定常: 押せる時だけ光り、いま押すボタンが一番強い
       this.btnAmbient(F, t, nn);
@@ -229,6 +230,17 @@
           else if (to === 'stateN') mulAll(smooth(u), sel); break; }
         case 'solid': {
           const e = fadeEnv(.12, .25); for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: e, v: p.level || 1 }); break; }
+        case 'pburst': {   // 穴のLED: 入った/外れた瞬間の強い閃光。最大値で立ち上がり、数回ちかちかしながら減る(R2-E 10/18: 穴の入賞が地味)
+          const peak = p.peak === undefined ? 4.4 : p.peak, dec = p.decay === undefined ? 2.4 : p.decay, hz = p.hz || 7;
+          const hold = p.hold === undefined ? .3 : p.hold, lh = Math.max(0, lt0 - hold);   // 入った直後 hold 秒は最大で保つ(10/18 監督: 入賞の光が地味。一瞬では見えない)
+          const w = Math.exp(-lh * dec) * (lt0 < hold ? 1 : .4 + .6 * (.5 + .5 * Math.cos(TAU * hz * lh))) * (1 - Math.exp(-lt0 * 90)) * smooth((dur - lt0) / .2);
+          for (let i = 0; i < N; i++) if (sel[i]) add(i, colAt(i), w * peak); break; }
+        case 'pbeat': {   // 穴のLED: 狙う穴へ誘う脈打ち。穴ごとに位相をずらして端から端へ波が走る(wave=穴1つぶんの位相のずれ)。floor=谷の明るさ
+          const hz = p.hz || 2, wave = p.wave || 0, sharp = p.sharp || 1, floor = p.floor === undefined ? .15 : p.floor, peak = p.peak === undefined ? 5 : p.peak;
+          for (let i = 0; i < N; i++) if (sel[i]) {
+            const sv = .5 + .5 * Math.sin(TAU * (hz * lt0 - wave * i) - Math.PI / 2), w = floor + (1 - floor) * Math.pow(sv, sharp);
+            add(i, colAt(i), w * peak * fadeEnv(.08, .2));
+          } break; }
         case 'pulse': case 'flicker': {
           const hz = p.hz || 2, depth = p.depth === undefined ? 1 : p.depth;
           for (let i = 0; i < N; i++) if (sel[i]) {
@@ -329,6 +341,30 @@
         case 'count': case 'payout': case 'collect': case 'ambientLcd': break;
         default: break;
       }
+    }
+    // 初見ヒントのLED(R2-TU の依頼)。Effects.hint が state.hint にセットする。holes: ランプの無い穴をやわらかく呼吸(soft) / 1つの穴を強く(steady)。button: ボタンを呼吸。
+    hintLights(F, t) {
+      const H = this.state.hint; if (!H) return;
+      const lit = this.state.litPockets;
+      if (H.holes) {
+        const h = H.holes; if (h.until > 0 && t > h.until) H.holes = null; else {
+          const ph = Math.max(0, t - h.t0), ramp = Math.min(smooth(ph / .3), h.until > 0 ? smooth((h.until - t) / .3) : 1);
+          for (let i = 0; i < 7; i++) {
+            const on = h.pockets === 'unlit' ? !lit.includes(i + 1) : (h.pockets || []).includes(i + 1); if (!on) continue;
+            if (h.mode === 'red') { const w = ramp * 5.4; F.pocket[i * 3] += 1 * w; F.pocket[i * 3 + 1] += .04 * w; F.pocket[i * 3 + 2] += .07 * w; }
+            else if (h.mode === 'steady') { const w = (.65 + .35 * (.5 + .5 * Math.sin(TAU * 2.2 * ph))) * ramp * 5; F.pocket[i * 3] += 1 * w; F.pocket[i * 3 + 1] += .8 * w; F.pocket[i * 3 + 2] += .2 * w; }
+            else { const w = (.3 + .7 * (.5 + .5 * Math.sin(TAU * (.8 * ph - .1 * i) - Math.PI / 2))) * ramp * 2.6; F.pocket[i * 3] += .5 * w; F.pocket[i * 3 + 1] += .82 * w; F.pocket[i * 3 + 2] += 1 * w; }
+          }
+        }
+      }
+      if (H.button) {
+        const b = H.button; if (b.until > 0 && t > b.until) H.button = null; else {
+          const ph = Math.max(0, t - b.t0), ramp = Math.min(smooth(ph / .25), b.until > 0 ? smooth((b.until - t) / .3) : 1), w = (.35 + .65 * (.5 + .5 * Math.sin(TAU * 1.3 * ph - Math.PI / 2))) * ramp * 1.5;
+          const c = b.side === 'right' ? [1, .62, .06] : [1, .32, .6], o = b.side === 'right' ? 3 : 0;
+          for (let q = 0; q < 3; q++) F.btn[o + q] += c[q] * w;
+        }
+      }
+      if (!H.holes && !H.button) this.state.hint = null;
     }
     btnAmbient(F, t, n) {
       const S = this.state, tut = S.tut || {}, act = (id) => this.inst.some((x) => x.id === id);

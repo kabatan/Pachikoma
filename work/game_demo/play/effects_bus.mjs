@@ -36,7 +36,9 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
   let seen = new Set(), levels = new Set(), shots = new Map(), pending = [], receiptSeen = -1;
   bus.context = () => ({ t: clock, state: { lit: ctrl.game.lampCount, pockets: ctrl.game.lamps,
     balls: ctrl.game.wallet, secondsLeft: ctrl.game.secondsLeft,
-    canLaunch: (ctrl.game.overlap ? ctrl.game.canAim : ctrl.game.canFire) && !ctrl.confirmFinish && !ctrl.freezeRules, declared: ctrl.game.armed } });
+    canLaunch: (ctrl.game.rules.R2Enabled || ctrl.game.rules.ResetWhileShooting ? ctrl.game.canFire : ctrl.game.overlap ? ctrl.game.canAim : ctrl.game.canFire) && !ctrl.confirmFinish && !ctrl.freezeRules,
+    declared: ctrl.game.armed, ...(ctrl.game.rules.ResetWhileShooting ? { resetDisplays: ctrl.game.resetDisplays } : {}),
+    ...(ctrl.game.rules.R2Enabled ? { challenge: ctrl.game.challengeStatus, end: ctrl.game.endStatus, aim: ctrl.aim } : {}) } });
   const nextRank = (rules, balls) => {   // 次の景品までの実数(結果画面・計数の「あと○玉でA賞」用)
     const th = rules.PrizeThresholds; let rank = 0; th.forEach((n, i) => { if (balls >= n) rank = i; });
     return rank + 1 < th.length ? { rankIndex: rank, next_rank: rank + 1, to_next: th[rank + 1] - balls, next_threshold: th[rank + 1] } : { rankIndex: rank, next_rank: null, to_next: 0, next_threshold: null };
@@ -51,7 +53,7 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
     const g = ctrl.game;
     if (action === 'howto') { reset(); send('howto', { seconds: ctrl.howtoSeconds }); }
     if (action === 'start') { reset(); send('ticket', { balls: g.rules.LoanBalls, duration: g.receipt.duration }); }
-    if (action === 'add') { warned = false; send('add100', { balls: g.rules.LoanBalls, seconds: g.rules.ExtraSeconds, duration: g.receipt.duration }); }
+    if (action === 'add') { warned = false; send('add100', { balls: g.receipt.award, seconds: g.rules.ExtraSeconds, duration: g.receipt.duration }); }
     if (action === 'challengeWait') send('challenge_wait', { award: g.award, onBoard: g.shots.length });
     if (action === 'challenge') send(g.armed ? 'challenge_declare' : 'challenge_cancel', { award: g.award }, g.armed ? 'challenge' : undefined);
     if (action === 'fire') shots.set(g.shot.id, { shotId: g.shot.id, aim: ctrl.lockedAim, dir: ctrl.aimDir, challenge: g.shot.challenge, lamps: [...g.shot.lamps] });
@@ -69,7 +71,9 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
     } else if (r.kind === 'Protected') send('dup_protect', data, 'duplicate');
     else if (r.kind === 'Reset') {
       const removed = r.before.filter(l => !r.after.includes(l));
-      const d = { ...data, result: r.resetChoice, removed, removedCount: r.removed, k: r.removed, n_from: r.before.length };
+      const d = { ...data, result: r.resetChoice, removed, removedCount: r.removed, k: r.removed, n_from: r.before.length,
+        ...(r.visualDuration !== undefined ? { duration: r.visualDuration, ruleDuration: r.duration, resetSlot: r.resetSlot, resetReplaces: r.resetReplaces, maxConcurrent: 3 } : {}) };
+      if (r.resetReplaces != null) pending = pending.filter(event => event.data.receiptId !== r.resetReplaces);
       send('roulette', d, 'duplicate');
       // 現行Presenterの針停止(1.1秒)。1灯時は針がなく即決。
       pending.push({ at: clock + (r.before.length > 1 ? 1.1 : 0), id: 'ascend', data: d });

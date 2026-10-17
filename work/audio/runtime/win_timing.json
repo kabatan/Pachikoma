@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "effects_spec_sha256": "3befc59798f1ef739e9d2798a1aa9a843c75b0e04e2cf328185967ea87019a47",
+  "events": {
+    "success_small": {
+      "duration_s": 3.8,
+      "payout_start_s": 1.4,
+      "charge_s": 0.14
+    },
+    "success_big": {
+      "duration_s": 7.0,
+      "payout_start_s": 3.4,
+      "charge_s": 0.2
+    },
+    "jp": {
+      "duration_s": 20,
+      "payout_start_s": 11.2,
+      "charge_s": 0.26
+    }
+  },
+  "jp_parts": {
+    "head_s": 2.8,
+    "loop_s": 1.6,
+    "overlap_s": 0.02,
+    "tail_s": 2,
+    "number_fraction": 0.56,
+    "head_gain": 0.9,
+    "loop_gain": 0.36,
+    "number_gain": 0.76,
+    "tail_gain": 0.55
+  },
+  "jp_variants_s": [
+    14,
+    16,
+    20,
+    24,
+    28
+  ],
+  "parameter_contract": "JP: data.duration > data.scale*spec.duration > tier variant > spec.duration. Success: data.audio.payoutStart or data.payoutStart > data.scale*spec.payout_start > spec.payout_start. Receipt duration for success is rule time, not visual payout start; it is not substituted."
+}

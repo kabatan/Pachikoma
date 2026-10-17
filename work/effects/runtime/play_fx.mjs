@@ -46,20 +46,21 @@ function lcdMesh(hr, canvas, { rect = LCD_RECT, gain = 1 } = {}) {
 // 調整側の皿API(runtime: awardToTray / releaseAwards / setAwardHold / trayStatus)を、光バスの tray トラックから呼ぶ形に包む。
 // 玉の物理は調整側。ここは「いつ・どの速さで注ぐか」だけ。付与が演出の注ぎ始めまで保留されるよう、最大保留をイベントごとに伸ばす。
 const HOLD = { ticket: 5, add100: 5, success_small: 5, success_big: 7, jp: 14 };   // 注ぎ始め(秒)+余裕
-function trayAdapter(rt, now) {
+function trayAdapter(rt, now, fired = () => 0) {
   if (!rt || !rt.awardToTray) return null;
   rt.setAwardHold(true, 4);
   return {
     holdFor(id) { rt.setAwardHold(true, HOLD[id] || 4); },
     award(count, { eventId, rate }) {
-      const r = Math.max(2, Math.min(40, rate || 12)), t0 = now(), w0 = rt.displayWallet ? rt.displayWallet() : null;
+      const r = Math.max(2, Math.min(40, rate || 12)), t0 = now(), w0 = rt.displayWallet ? rt.displayWallet() : null, f0 = fired();
       const poured = rt.awardToTray(count, { rate: r, origin: eventId }) || 0;
       (window.__awards || (window.__awards = [])).push({ eventId, count, poured, w0, t0, rate: r });
-      // 皿に着いた数は、調整側の「いま表示している持ち玉(7セグ)」の増えで見る。取れない時だけ時間で見積もる。
-      const landed = () => (w0 === null ? Math.min(poured, Math.max(0, now() - t0 - .5) * r) : Math.max(0, Math.min(poured, rt.displayWallet() - w0)));
+      // 皿に着いた数 = いま表示している持ち玉(7セグ)の増え + 払い出し中に撃って減らした分。
+      // (撃った分を足さないと、払い出し中に連打した時に「着いた数」が減り、払い出しが終わらず、7セグ・液晶の数字がずれたままになった: R2-E 調査 10/17)
+      const landed = () => (w0 === null ? Math.min(poured, Math.max(0, now() - t0 - .5) * r) : Math.max(0, Math.min(poured, rt.displayWallet() - w0 + (fired() - f0))));
       // 規則の払い出し数(count)のうち物理側に最初からある予備球(昇降管)は注がれない。7セグ・液晶は count 基準で見せるため、その分を最初から数える
       const reserve = eventId === 'ticket' ? Math.max(0, count - poured) : 0;
-      return { poured: poured + reserve, landed: () => reserve + landed(), done: () => landed() >= poured && now() - t0 > .5 };
+      return { poured: poured + reserve, landed: () => reserve + landed(), done: () => (landed() >= poured && now() - t0 > .5) || now() - t0 > poured / r + 6 };
     },
     collect() { /* 回収(精算)の物理は調整側のカウントが担当。演出は数字・光だけ */ },
   };
@@ -72,14 +73,15 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   await import(new URL('../lcd/base_normal.mjs', here).href);
   await new Promise((r) => (window.LCD_BASE ? r() : addEventListener('lcd-base-ready', r, { once: true })));
   await loadScript(new URL('./lightbus.js', here).href);
-  await loadScript(new URL('./effects.js', here).href);
+  { const alt = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('fxjs') : null; await loadScript(alt ? new URL(alt, location.href).href : new URL('./effects.js', here).href); }   // ?fxjs=... は前後比較の確認用(旧版の effects.js を差し替えて録画する)
   const [events, geom] = await Promise.all(['work/effects/spec/events.json', 'work/effects/spec/geometry.json'].map(async (p) => (await fetch(R(p))).json()));
   const fx = new window.Effects({ events, geom });
   fx.tutorial = tutorial;
   const ok = await fx.initLcd({ root });
   if (!ok) throw new Error('LCD init failed');
   if (rules) fx.setState({ rules: { awards: rules.Awards, loanBalls: rules.LoanBalls, extraSeconds: rules.ExtraSeconds, thresholds: (rules.PrizeThresholds || []).slice(1), jackpotAwards: rules.JackpotAwards } });   // 数値は規則から(固定値にしない)
-  const trayA = trayAdapter(tray, () => clock); fx.setTray(trayA);   // 調整側の皿関数: { award(count,{eventId,duration,rate,origin}) -> {landed(),done()}?, collect({eventId,duration}) }。無ければ液晶と光だけ
+  let firedTotal = 0, prevBalls = null;   // 撃って減った持ち玉の累計(皿に着いた数の判定に使う)
+  const trayA = trayAdapter(tray, () => clock, () => firedTotal); fx.setTray(trayA);   // 調整側の皿関数: { award(count,{eventId,duration,rate,origin}) -> {landed(),done()}?, collect({eventId,duration}) }。無ければ液晶と光だけ
   const adapter = new Stage2cLightAdapter({ geom, sources: Object.fromEntries(lightingSources.map((x) => [x.id, x])) });
   let seen = { shot: false, challenge: false }, clock = 0;
   const sync = () => {
@@ -97,6 +99,8 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
     const lane = d.pocket ?? d.lane; if (lane !== undefined) { p.pocket = lane; p.hit = lane; }
     if (d.near_miss !== undefined) p.near_miss = !!d.near_miss; if (d.target !== undefined) p.target = d.target;   // 惜しい: 物理で実際に近かった時だけ
     if (d.to_next !== undefined) { p.to_next = d.to_next; p.next_rank = d.next_rank; }   // 次の景品まで(実数)
+    if ((e.id === 'ticket' || e.id === 'add100') && Number.isFinite(d.balls)) p.balls = d.balls;   // 払い出す玉数(add100 は ExtraLoanBalls)。液晶と皿はこの値
+    if (e.id === 'add100' && Number.isFinite(d.seconds)) p.seconds = d.seconds;
     if (d.total !== undefined) p.total = d.total; else if (d.balls !== undefined && (e.id === 'finish_count' || e.id === 'result' || e.id === 'tray_overflow')) p.total = d.balls;
     if (e.id === 'jp') { if (d.tier !== undefined) p.tier = d.tier; if (d.duration > 0) p.duration = d.duration; }   // JP全尺はゲームが決める(14/16/20/24/28秒)
     if (d.reason !== undefined) p.reason = d.reason; if (d.reasonCode) p.reason = d.reasonCode;
@@ -114,12 +118,13 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
     try { fx.notify(e.id, paramsOf(e)); } catch (err) { console.warn('effects notify', e.id, err.message); }
   });
   // 勝負の玉をピンポイントで照らす(盤の釘・枠だけが光る点光源。勝負中の飛行中だけ)。玉の位置を画面座標へ射影して渡す
-  let BL = null; try { BL = installBallLights(hr, { max: 36 }); } catch (err) { console.warn('ballLights', err.message); }
+  let BL = null; try { BL = installBallLights(hr, { max: 44 }); } catch (err) { console.warn('ballLights', err.message); }
   const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   if (BL && BL.setMask) BL.setMask([150, 760, 1330, 1445], Number(qs.get('lcdmask') ?? .12), 30);   // 液晶の面は盤面の照射を弱める(通常画面の純青を紫・ピンクに染めない。点検 新e09)
   if (BL && BL.setClip && !qs.has('noclip')) BL.setClip([140, 650, 1345, 2020], Number(qs.get('clipsoft') ?? 22));   // 盤の洗いは囲い(ガラス窓の内側)だけ。外の枠・花びら周りは照らさない(10/17 ディレクター)
   if (qs.has('ebk')) adapter.bottomK = Number(qs.get('ebk'));   // 皿の縁(下辺)の縁LEDの強さ(0〜1)。省略=1
   const wash = BL && !qs.has('nowash') ? makeBoardWash(geom, adapter, { gain: Number(qs.get('washgain') ?? 2.2) }) : null;   // 盤面全体の電飾(花びら・縁の色を盤へ)
+  const POCKET_X = [169, 355, 539, 722, 903, 1084, 1261], POCKET_Y = 1985;   // 7つの穴の口の画面座標(1440x2560。録画の口の位置から実測)
   const _v = new THREE.Vector3();
   const trail = new Map(), TRAIL = [[.05, .5], [.1, .4], [.17, .28], [.26, .17], [.38, .09]], BALL_R = Number(qs.get('ballr') ?? 34), BALL_G = Number(qs.get('ballg') ?? 3.5);
   const ballLights = (snap) => {
@@ -162,6 +167,16 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
         list.push({ x: (_v.x * .5 + .5) * 1440, y: (.5 - _v.y * .5) * 2560, rgb: [1, .74, .3], radius: 190, gain: 2.4 }); nb++;
       }
     }
+    // 穴のLEDの照り返し: 7つの穴の口(U字の受け皿)の灯の強さに合わせて、口の真上の盤(釘・仕切り・ガラス)をその色で照らす。
+    // 穴の真上に液晶の絵を置く代わりに(10/18 監督: 液晶の位置は実際の穴とずれて気持ち悪い)、穴そのものの光で当たり・外れ・入った穴を見せる。実機のLEDリングが口の周りを照らす想定。
+    if (last && last.pocket && !qs.has('nopockethalo')) {
+      for (let i = 0; i < 7; i++) {
+        const r = last.pocket[i * 3], g = last.pocket[i * 3 + 1], b = last.pocket[i * 3 + 2], m = Math.max(r, g, b);
+        if (m < 1.2) continue;
+        const k = Math.min(1, m / 7.9) ** 1.2;
+        list.push({ x: POCKET_X[i], y: POCKET_Y, rgb: [r / m, g / m, b / m], radius: 130 + 170 * k, gain: Number(qs.get('pgain') ?? 12) * k, nomask: true });
+      }
+    }
     BL.set(list);
   };
   // 筐体の7セグ(持ち玉)。タイトル〜ticketの前は消灯。払い出し中は皿に着いた数に合わせて増える。凍結像の「15」は誰も駆動しないと残る
@@ -169,10 +184,13 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   bus.on('*', (e) => { if (e.id === 'ticket') digitsOn = true; else if (e.id === 'attract' || e.id === 'title' || e.id === 'howto') digitsOn = false; });
   const driveDigits = () => {
     const s = getSnapshot().state, L = window.LCD && window.LCD.state, th = fx._trayHandle;
-    // 払い出し中(ticket・成功・追加100円)は、財布の玉数のうち「まだ皿に着いていない分」を引いて、皿に着くたびに増やす
-    // 払い出しが始まる前(付与済みで皿に注がれていない玉がある間)は、財布の増えた値を出さない。皿に着いた分だけ増える
-    const waiting = !th && tray && tray.trayStatus ? tray.trayStatus().pending : 0;
-    const v = !digitsOn ? -1 : (th && th.landed && fx._trayPay && L && L.trayLanded !== undefined ? Math.max(0, s.balls - Math.max(0, (fx._trayTotal || 0) - Math.floor(L.trayLanded))) : Math.max(0, s.balls - waiting));
+    // 筐体の7セグ(と液晶の持ち玉の板)は「いま手元で使える玉」= 調整側の表示持ち玉(displayWallet: 皿に着いた分だけ増え、撃つと減る)に合わせる。
+    // 以前は「財布 - (払い出し数 - 着いた数)」で見ていたため、払い出し中に撃つと払い出しが終わった判定にならず、数字が数玉小さいまま残った(R2-E 調査)。
+    // 払い出しが始まる前(付与済みで皿に注がれていない玉がある間)は財布の増えた値を出さない(pending を引く)。
+    const waiting = tray && tray.trayStatus ? tray.trayStatus().pending : 0;
+    const dw = tray && tray.displayWallet ? tray.displayWallet() : null;
+    const base = Math.max(0, s.balls - waiting);
+    const v = !digitsOn ? -1 : dw !== null ? Math.max(0, Math.min(dw, base)) : (th && th.landed && fx._trayPay && L && L.trayLanded !== undefined ? Math.max(0, s.balls - Math.max(0, (fx._trayTotal || 0) - Math.floor(L.trayLanded))) : base);
     if (v === digitsShown) return; digitsShown = v;
     try { adapter.setCabinet({ display: { digits: ballCountToDigits(Math.max(0, v), { blank: v < 0 }) } }); } catch (err) { console.warn('digits', err.message); }
   };
@@ -184,8 +202,8 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
     fx, get frameData() { return last; }, get plate() { return plate; },
     frame(dt) {
       sync();
-      clock += dt; last = fx.frame(dt);
-      driveDigits();
+      { const b = getSnapshot().state.balls; if (prevBalls !== null && b < prevBalls && digitsOn) firedTotal += prevBalls - b; prevBalls = b; }
+      clock += dt; driveDigits(); window.LCD.setState({ ballsShown: digitsShown }); last = fx.frame(dt);
       if (last.lcd) { if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain }); plate.tex.needsUpdate = true; }
       return last;
     },

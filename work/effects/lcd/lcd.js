@@ -89,6 +89,7 @@
   LCD.init = async function (opt = {}) {
     LCD.rootUrl = opt.root || '/';
     LCD.index = await (await fetch(LCD.rootUrl + 'work/effects/lcd/asset_index.json')).json();
+    await LCD.loadFonts(LCD.rootUrl);
     const core = ['glow_soft.png', 'spark.png', 'sprite_calm.png', 'sprite_smile.png', 'sprite_happy.png', 'rays_soft.png', 'flare_ring.png', 'flare_streak.png', 'glint_1.png', 'glint_2.png', 'glint_3.png', 'bokeh_disc.png', 'petal_1.png', 'petal_2.png', 'petal_3.png', 'petal_4.png', 'ember.png'];
     await LCD.load(core);
     if (opt.base !== false && root.LCD_BASE) { try { LCD.base = await root.LCD_BASE(LCD.rootUrl + LCD.index.normal_manifest); } catch (e) { console.warn('base failed', e); } }
@@ -276,9 +277,22 @@
       c.save(); c.imageSmoothingEnabled = false; c.translate(Math.round(u.x), Math.round(u.y)); c.rotate(u.tilt); c.drawImage(src, -w / 2, -h / 2, w, h); c.restore(); }
   };
   // 日本語の短い文(ヒント)。縁取りと影で背景の上でも読める
-  LCD.font = '"Noto Sans CJK JP","Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
+  // 書体(10/18 監督「もっとパチンコらしい書体に」)。見出し・数字は太く勢いのある Dela Gothic One、本文・小さな字は丸みのある M PLUS 1p ExtraBold。
+  // どちらも SIL OFL(work/effects/lcd/fonts/ にライセンスと出所)。読み込めなかった時は従来の Noto Sans CJK JP に落ちる。
+  const FALL = '"Noto Sans CJK JP","Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
+  LCD.fontHead = `"Dela Gothic One","M PLUS 1p",${FALL}`; LCD.fontBody = `"M PLUS 1p",${FALL}`; LCD.font = LCD.fontBody;
+  LCD.HEAD_MIN = 60;   // この大きさ以上の字(見出し・数字)は見出し書体
+  // 字の大きさ(と指定)から c.font に入れる書体を決める。o.font: 'head' | 'body'(省略は大きさで自動)。Dela は1種類の太さだけなので擬似太字を避けて 400。
+  LCD.fontFor = (px, o = {}) => ((o.font ?? (px >= LCD.HEAD_MIN ? 'head' : 'body')) === 'head' ? `400 ${px}px ${LCD.fontHead}` : `800 ${px}px ${LCD.fontBody}`);
+  LCD.loadFonts = async (root) => {
+    if (typeof FontFace === 'undefined' || typeof document === 'undefined') return;
+    const defs = [['Dela Gothic One', 'DelaGothicOne-Regular.ttf', '400'], ['M PLUS 1p', 'MPLUS1p-ExtraBold.ttf', '800']];
+    await Promise.all(defs.map(async ([fam, file, weight]) => {
+      try { const f = new FontFace(fam, `url(${root}work/effects/lcd/fonts/${file})`, { weight }); await f.load(); document.fonts.add(f); } catch (e) { console.warn('font failed', fam, e); }
+    }));
+  };
   LCD.text = (c, str, x, y, o = {}) => {
-    c.save(); const px = o.size ?? 44; c.font = `${o.weight ?? 900} ${px}px ${LCD.font}`; c.textAlign = o.align ?? 'center'; c.textBaseline = 'middle'; c.globalAlpha = clamp(o.a ?? 1);
+    c.save(); const px = o.size ?? 44; c.font = LCD.fontFor(px, o); c.textAlign = o.align ?? 'center'; c.textBaseline = 'middle'; c.globalAlpha = clamp(o.a ?? 1);
     c.lineJoin = 'round'; c.lineWidth = o.stroke ?? px * .22; c.strokeStyle = o.strokeColor ?? 'rgba(20,10,50,.92)';
     if (o.glow) { c.shadowColor = o.glow; c.shadowBlur = px * .5; }
     c.strokeText(str, x, y); c.shadowBlur = 0;
@@ -312,7 +326,7 @@
       const b = LCD.titleBounds(im), s = Math.min(w / (b.r - b.l + 1), h / (b.bottom - b.top + 1)) * (o.zoom ?? 1);
       return LCD.title(c, key, x + (im.width / 2 - (b.l + b.r) / 2) * s, y + (im.height / 2 - (b.top + b.bottom) / 2) * s, { ...o, s });
     }
-    c.save(); c.font = `900 100px ${LCD.font}`;
+    c.save(); c.font = LCD.fontFor(100, { font: 'head' });
     const size = Math.min(h * .72, w / Math.max(1, c.measureText(fallback).width) * 100);
     c.translate(x, y); c.scale(o.zoom ?? 1, o.zoom ?? 1);
     LCD.titleOr(c, key, fallback, 0, 0, { ...o, s: .6, size, a }); c.restore();
@@ -400,10 +414,16 @@
     c.translate(W / 2 + (Math.random() - .5) * 2 * sh, H / 2 + (Math.random() - .5) * 2 * sh); c.scale(z, z); c.translate(-W / 2, -H / 2);
     // 覆うシーンより前は描かない
     let first = 0; LCD.active.forEach((s, i) => { if (s.def.cover && s.t > (s.def.coverFrom ?? 0)) first = i; });
-    for (let i = first; i < LCD.active.length; i++) { const sc = LCD.active[i]; c.save(); sc.def.draw(c, sc.t, sc, LCD); c.restore(); }
+    for (let i = first; i < LCD.active.length; i++) {
+      const sc = LCD.active[i]; const m0 = LCD.debugLeak ? c.getTransform() : null; c.save();
+      try { sc.def.draw(c, sc.t, sc, LCD); } finally { c.restore(); }
+      if (m0) { const m = c.getTransform(); if (!LCD.leaks) LCD.leaks = {}; if (Math.abs(m.e - m0.e) + Math.abs(m.f - m0.f) + Math.abs(m.a - m0.a) > .01) LCD.leaks[sc.id] = (LCD.leaks[sc.id] || 0) + 1; }
+    }
     c.restore();
     // 残り時間は遊技中ずっと右上に。warn10 は自前で同じ位置に描くので重ねない。ホスト未接続(sec無し)なら出さない。
-    if (LCD.state.hudOn && typeof LCD.hud === 'function' && !LCD.active.some((s) => s.id === 'warn10')) { c.save(); LCD.hud(c, { sec: LCD.state.sec }); c.restore(); }
+    const hudReset = () => { if (LCD.noHudReset) return; c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.shadowBlur = 0; c.filter = 'none'; };
+    if (LCD.state.hudOn && typeof LCD.hud === 'function' && !LCD.active.some((s) => s.id === 'warn10')) { c.save(); hudReset(); LCD.hud(c, { sec: LCD.state.sec }); c.restore(); }
+    if (LCD.state.hudOn && typeof LCD.hudMochi === 'function') { c.save(); hudReset(); LCD.hudMochi(c); c.restore(); }   // 持ち玉の板(左上)は warn10 中も出す
     c.save();
     if (LCD.flashA > .005) { c.globalAlpha = clamp(LCD.flashA); c.fillStyle = LCD.flashC; c.fillRect(0, 0, W, H); }
     c.restore();

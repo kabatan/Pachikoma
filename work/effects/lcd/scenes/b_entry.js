@@ -144,16 +144,16 @@
     if(a<=0)return;
     c.save();c.globalAlpha=a*.8;const g=c.createLinearGradient(0,y-96,0,720);g.addColorStop(0,'rgba(4,10,30,0)');g.addColorStop(.32,'rgba(4,10,30,.86)');g.addColorStop(1,'rgba(4,10,30,.94)');c.fillStyle=g;c.fillRect(0,y-96,1280,820-y);c.restore();
     for(let r=0;r<2;r++){const q=((t*.9+r*.5)%1);LCD.add(c,'flare_ring.png',34,706,{w:90+q*190,h:90+q*190,a:a*(1-q)*.8,tint:'#ff9ac0'});}
-    LCD.buttonArrow(c,128,y-6+Math.sin(t*6)*4,'left',t,{s:.95*s,a:a*(.7+.3*beat)});
+    LCD.arrow(c,128,y-6+Math.sin(t*6)*4,'down',t,{s:.95*s,a:a*(.7+.3*beat)});
     LCD.text(c,'ひかる 左の ボタンを おして',706,y-24,{size:56*s,a,stroke:9,fill1:'#fff4d9',fill2:'#ffcf98',glow:'#b46355'});
     LCD.text(c,'玉を うとう!',706,y+48,{size:76*s,a,stroke:12,fill1:'#fff9e0',fill2:'#ffd24a',strokeColor:'#6e3f18',glow:'#d98a3a'});
   };
 
   // ───────── あそびかた(開始前の基本説明) ─────────
-  // 3コマ(計8.0秒。ボタンで飛ばせる。時計は止まる)。実物の盤・入賞口・ランプ・ルーレットの絵で見せる。
-  //  1 玉を落として穴に入れる→その穴のランプがつく  2 ちがう穴に入るほどランプが増える(7つでJP)  3 同じ穴に2回入ると、ルーレットが回ってランプが消えるかも(でもまた集められる)
+  // 2コマ(計約11秒。2コマ目まで読ませる。時計は止まる)。実物の盤・入賞口・ランプ・ルーレットの絵で見せる。
+  //  1 左のボタンで玉を打つ→穴に入るとランプがつく  2 ちがう穴に入るほどランプが増える(7つでJP)。同じ穴のルーレットは遊技中の最初の保護で例を見せる(tut_dup)
   // 「しょうぶ」は、はじめて4灯になった時(tut_lamp4)・はじめて勝負の合図が出る時(tut_challenge)に出す。
-  const HOW=[[0,2.1],[2.1,4.9],[4.9,8.0]],HOW_END=8.0,FDUR=.8;
+  const HOW_END=25.0,FDUR=.8;   // 4コマ。実際の長さはゲームが渡す seconds(events.json の dur)を等分
   const PX=i=>640+(i-4)*130,PY=410,PLY=500;
   const PIN_ROWS=Array.from({length:5},(_,r)=>{const o=[];for(let x=232+(r%2?32:0);x<1060;x+=64)o.push([x,172+r*44]);return o;});
   const WP_Y=[108,172,216,260,304,348,414];
@@ -167,65 +167,90 @@
     goldText(c,l1,640,606,{size:52,a,stroke:9});
     goldText(c,l2,640,664,{size:o.s2??62,weight:900,a:a*(o.a2??1),stroke:11,fill1:o.f1??'#fff9e0',fill2:o.f2??'#ffd24a',strokeColor:o.sc??'#6e3f18',glow:o.glow});
   };
+  // 4コマ(各約6秒、計約24秒。ボタンで次へ・時計は止まる)。文字でなく絵で3つの約束を見せる:
+  //  1 玉を入れるとランプ(多いほど勝負で大きい)  2 勝負=ランプのない穴で成功  3 ランプのある穴だと全部消える  4 おなじ穴は(4つから)ルーレットでランプが消える
+  const NP=5,AWARD=[0,1,2,3,12,30];
+  const hits=(c,x,y,txt,a,col)=>{if(a<=0)return;goldText(c,txt,x,y,{size:112,a,stroke:14,fill1:col?'#ffffff':'#fff9e0',fill2:col??'#ffd24a',strokeColor:col?'#5a0a0a':'#6e3f18',weight:900});};
   LCD.scene({id:'howto',dur:HOW_END,cover:true,assets:[...B.assets,...B.titles('jackpot'),...E.assets],
-    start(sc){B.init(sc);},
+    start(sc,p){B.init(sc);sc.H=sc.params.seconds>0?sc.params.seconds:HOW_END;if(p&&p.panel!=null)sc.fixPanel=p.panel;},
     update(sc,dt){B.step(sc,dt);
-      B.at(sc,1.1,()=>{LCD.flash(.3,'#fff0c4',8);B.burst(sc,36,PX(4),PY+30,.5);});
-      [[2,.85],[6,1.11],[3,1.37],[5,1.63],[1,1.89],[7,2.15]].forEach(([i,o],k)=>B.at(sc,2.1+o,()=>{B.burst(sc,16,PX(i),PY+30,.35);}));
-      B.at(sc,4.4,()=>{LCD.flash(.45,'#fff0c4',7);LCD.shake(8,.3);B.burst(sc,90,640,300,1.1);});
-      B.at(sc,4.9+.9,()=>{LCD.flash(.25,'#ff6a5a',9);B.burst(sc,20,PX(3),PY+30,.4);});
-      B.at(sc,4.9+2.0,()=>{LCD.shake(9,.3);});
+      const hc=(typeof window!=='undefined'&&window.__play&&window.__play.app&&window.__play.app.ctrl)||null;
+      if(hc&&hc.howto)sc.hT=hc.howto.t;else sc.hT=sc.t;   // ボタンで次のコマへ進める(コントローラの時刻に合わせる)。無ければ場面の時刻
+      if(sc.fixPanel!=null)sc.hT=sc.fixPanel*sc.H/NP+(sc.t%(sc.H/NP));
     },
     draw(c,t,sc) {
-      B.layer(c,B.exit(t,HOW_END,.3),g=>{
-        const open=smooth(t/.25),st=Math.max(0,HOW.findIndex(([a,b])=>t>=a&&t<b)),lt=t-HOW[st][0];
+      const H=sc.H,per=H/NP,T=sc.hT??t;
+      B.layer(c,B.exit(t,H,.3),g=>{
+        const open=smooth(t/.25),st=Math.min(NP-1,Math.floor(T/per)),lt=T-st*per;
         B.background(g,t);B.drift(g,t,24,{a:.5});B.drift(g,t,26,{petals:true,a:.7});
-        // 見出しと番号
         goldText(g,'あそびかた',40,46,{size:56,a:open,stroke:9,align:'left'});
-        for(let i=0;i<3;i++){const on=i===st,x=470+i*92,y=46;g.save();g.globalAlpha=open;g.fillStyle=on?'#ffd978':'rgba(255,255,255,.22)';g.strokeStyle=on?'#6e3f18':'rgba(255,255,255,.45)';g.lineWidth=5;g.beginPath();g.arc(x,y,on?36:28,0,TAU);g.fill();g.stroke();g.restore();LCD.text(g,String(i+1),x,y+2,{size:on?46:34,a:open,fill1:on?'#4a2a10':'#dfe6f8',fill2:on?'#4a2a10':'#dfe6f8',stroke:0,strokeColor:'rgba(0,0,0,0)'});}
-        // 状態: 各ポケットのランプの明るさ
-        const lev=Array(8).fill(0);let warn3=0,flash=Array(8).fill(0),ball=null,pinGlow=null;
+        for(let i=0;i<NP;i++){const on=i===st,x=470+i*80,y=46;g.save();g.globalAlpha=open;g.fillStyle=on?'#ffd978':'rgba(255,255,255,.22)';g.strokeStyle=on?'#6e3f18':'rgba(255,255,255,.45)';g.lineWidth=5;g.beginPath();g.arc(x,y,on?34:26,0,TAU);g.fill();g.stroke();g.restore();LCD.text(g,String(i+1),x,y+2,{size:on?44:32,a:open,fill1:on?'#4a2a10':'#dfe6f8',fill2:on?'#4a2a10':'#dfe6f8',stroke:0,strokeColor:'rgba(0,0,0,0)'});}
+        const lev=Array(8).fill(0),flash=Array(8).fill(0),warn=Array(8).fill(0);let ball=null;
         const arrive=(tt,i)=>{lev[i]=Math.max(lev[i],smooth((lt-tt)/.14));const q=(lt-tt)/.5;if(q>0&&q<1)flash[i]=Math.max(flash[i],1-q);};
-        const drop=(t0,i,sx)=>{const u=(lt-t0)/FDUR;if(u>=0&&u<1){const b=ballPos(sx,PX(i),u);ball=ball||[];ball.push(b);}};
-        let n=0,l2='',l1='',jp=0,wheel=null;
+        const drop=(t0,i,sx,miss)=>{const u=(lt-t0)/FDUR;if(u>=0&&u<1){const b=ballPos(sx,PX(i),u);ball=ball||[];ball.push(b);}};
+        const off=(tt,i)=>{if(lt>tt)lev[i]=Math.max(0,lev[i]*(1-smooth((lt-tt)/.2)));};
+        let shobu=false,status=false,l1='',l2='',big=null,bigCol=null,readout=null,bt=null,extra=null,btn=0;
+        let jp=0;
         if(st===0){
-          drop(.3,4,PX(4)+36);arrive(.3+FDUR,4);n=lev[4]>.5?1:0;
-          l1='玉を 落として 穴に 入れよう';l2='入ると ランプが つく!';
+          // 左のボタンを押すたびに玉が1つ。4番の穴へ(ランプがつく)。狙いは自動でゆれる
+          btn=Math.max(smooth(1-Math.abs(lt-1.3)/.25),0);
+          drop(1.5,4,PX(4)+36);arrive(1.5+FDUR,4);
+          if(lev[4]>.5){l1='入ると';l2='ランプが つく!';} else {l1='たまを うって';l2='あなに いれよう';}
         } else if(st===1){
-          lev[4]=1;const seq=[2,6,3,5,1,7];
-          seq.forEach((i,k)=>{const t0=.05+k*.26;drop(t0,i,PX(i)+((k*53)%5-2)*26);arrive(t0+FDUR,i);});
-          n=1+seq.filter((i,k)=>lt>.05+k*.26+FDUR).length;
-          jp=smooth((lt-2.2)/.3);
-          l1='ちがう 穴に 入るほど';l2=n>=7?'7つ そろえば JP!':'ランプが ふえる!';
-        } else {
-          [2,3,4].forEach(i=>lev[i]=1);
-          drop(.1,3,PX(3)-34);
-          const hit=.1+FDUR;if(lt>hit){flash[3]=Math.max(0,1-(lt-hit)/.5);warn3=smooth((lt-hit)/.1)*(1-smooth((lt-2.1)/.3));}
-          if(lt>2.0)lev[3]=1-smooth((lt-2.0)/.18);
-          if(lt>2.0&&lt<2.4)lev[3]=Math.max(lev[3],.5+.5*Math.sin(lt*70))*(1-smooth((lt-2.0)/.4));
-          n=lt>2.05?2:3;
-          const q=clamp((lt-.95)/.3),out=smooth((lt-2.45)/.3);
-          if(lt>.95)wheel={r:100*easeOutBack(q)*(1-out*.9),a:smooth(q)*(1-out),rot:14*(1-Math.exp(-(lt-.95)*2.2)),needle:0};
-          l1='同じ穴に 2回 入ると';l2=lt<2.1?'ランプが 消えるかも':'でも また 集めれば OK!';
+          const seq=[2,6,3,5,1,7],step=Math.min(.26,(per-FDUR-2.2)/6);let n=1;lev[4]=1;
+          seq.forEach((i,k)=>{const t0=.4+k*step;drop(t0,i,PX(i)+((k*53)%5-2)*26);arrive(t0+FDUR,i);if(lt>.4+k*step+FDUR)n++;});
+          jp=smooth((lt-(.4+6*step+FDUR+.2))/.3);
+          l1='ちがう あなに はいるほど';l2=n>=7?'7つで JP!':'ランプが ふえるよ';readout=-n;
+        } else if(st===2){
+          // 勝負(右ボタン)→ランプのない穴に入れば成功。成功でもランプは全部きえる
+          [1,3,6].forEach(i=>lev[i]=1);shobu=true;
+          btn=Math.max(smooth(1-Math.abs(lt-.8)/.3),0);bt='right';
+          drop(2.0,5,PX(5)+30);arrive(2.0+FDUR,5);
+          if(lt>2.0+FDUR){[1,3,6].forEach(i=>off(2.0+FDUR+.5,i));}
+          if(lt<1.9){l1='みぎボタンで しょうぶ!';l2='金色の あなを ねらう';}
+          else {l1='金色の あなに はいれば たまが ふえる';l2='ランプが おおいほど たくさん!';}
+          if(lt>2.0+FDUR){const q=smooth((lt-2.0-FDUR)/.25);big='たまが ふえる!';extra=q;}
+        } else if(st===3){
+          [1,3,6].forEach(i=>lev[i]=1);shobu=true;
+          btn=Math.max(smooth(1-Math.abs(lt-.8)/.3),0);bt='right';
+          drop(2.0,3,PX(3)-24);
+          if(lt>2.0+FDUR){const q=smooth((lt-2.0-FDUR)/.25);[1,3,6].forEach(i=>{warn[i]=q;off(2.0+FDUR+.6,i);});flash[3]=Math.max(flash[3],q*.6);big='はずれ…';bigCol='#ff6a5a';extra=q;}
+          l1='赤い あなは はずれ!';l2='ランプが ぜんぶ きえる';
+        } else if(st===4){
+          // おなじ穴(最初の4つまでは保護)。4つから重複するとルーレットで ランプが きえる
+          [1,2,4,6,7].forEach(i=>lev[i]=1);
+          drop(1.2,2,PX(2)+24);
+          const R0=1.2+FDUR;
+          if(lt>R0)for(let i=1;i<=7;i++)if(lev[i]>0)warn[i]=smooth((lt-R0)/.3);
+          if(lt>R0+3.2)off(R0+3.2,2);
+          if(lt<R0){l1='4つ ひかっているとき';l2='おなじ あなに はいると…';}
+          else{l1='おなじ あなに はいると ルーレット!';l2='ランプが きえる ことが ある';}
+          if(lt>R0+.3)extra=smooth((lt-R0-.3)/.3);
         }
-        // 盤
-        E.boardPanel(g,150,96,980,464,open);
-        PIN_ROWS.forEach((row,ri)=>row.forEach(([px,py])=>{let gl=0;if(ball)for(const b of ball){const d=Math.hypot(b.x-px,b.y-py);if(d<46)gl=Math.max(gl,1-d/46);}E.pin(g,px,py,gl);}));
-        // 入賞口とランプ
-        for(let i=1;i<=7;i++)E.pocket(g,PX(i),PY,{lit:lev[i],flash:flash[i],warn:i===3&&st===2?warn3:0,ly:PLY,a:open});
-        // 玉(銀)
+        if(!status)E.boardPanel(g,150,96,980,464,open);
+        if(!status)PIN_ROWS.forEach(row=>row.forEach(([px,py])=>{let gl=0;if(ball)for(const b of ball){const d=Math.hypot(b.x-px,b.y-py);if(d<46)gl=Math.max(gl,1-d/46);}E.pin(g,px,py,gl);}));
+        if(!status)for(let i=1;i<=7;i++){
+          const red=shobu&&(i===1||i===3||i===6);   // 勝負中: ランプのある穴は赤、ない穴は金色(本番の盤面LEDと同じ)
+          E.pocket(g,PX(i),PY,{lit:lev[i],flash:flash[i],warn:red?Math.max(warn[i],lev[i]>.02?1:0):warn[i],ly:PLY,a:open});
+          if(shobu&&!red){const pu=.5+.5*Math.sin(t*5),k=(st===2&&i===5&&lt>2.0+FDUR)?0:1;LCD.add(g,'glow_soft.png',PX(i),PY+4,{w:210,h:210,a:open*k*(.6+.3*pu),tint:'#ffce54'});g.save();g.globalAlpha=open*k;g.strokeStyle='#ffe27a';g.lineWidth=5;g.beginPath();g.arc(PX(i),PY+2,50,Math.PI,0);g.stroke();g.restore();}
+        }
         if(ball)for(const b of ball){for(let k=1;k<5;k++)LCD.add(g,'glow_soft.png',b.x,b.y-k*14,{w:34,h:34,a:.22*(1-k/5),tint:'#cfe0ff'});LCD.ball(g,b.x,b.y,17,{gold:false});}
-        // ランプの数
-        goldText(g,`ランプ ${n} / 7`,880,46,{size:56,a:open*(1),stroke:9,fill2:n>=7?'#ff9ad0':'#ffcf7a'});
-        // ルーレット(実物)
-        if(wheel)E.wheel(g,640,252,wheel.r,{rot:wheel.rot,needle:wheel.needle,a:wheel.a});
-        // JP
-        if(jp>0){LCD.titleFit(g,'jackpot','JACKPOT',640,268,{w:640,h:150,a:jp,zoom:lerp(1.5,1,easeOut(jp))});LCD.add(g,'flare_streak.png',640,268,{w:1100*jp,h:60,a:.8*(1-smooth((lt-2.6)/.2))});
-          for(let i=1;i<=7;i++)LCD.add(g,'glow_soft.png',PX(i),PLY,{w:150,h:150,a:.6*jp*(.5+.5*Math.sin(t*10+i)),tint:`hsl(${(i*52+t*200)%360},95%,62%)`});}
-        sc.S.P.draw(g);
-        const sa=smooth(lt/.2)*(1-smooth((lt-(HOW[st][1]-HOW[st][0]-.15))/.15));
-        caption(g,l1,l2,sa,st===2&&lt>=2.1?{f2:'#ffe0a0'}:{});
-        LCD.text(g,'ひかる ボタンで とばせる ▶',1250,703,{size:30,align:'right',a:smooth((t-.4)/.3)*(.75+.25*Math.sin(t*4)),fill1:'#f4f8ff',fill2:'#c8d4f2',stroke:6});
+        if(readout!=null&&readout<0)goldText(g,`ランプ ${-readout} / 7`,1120,46,{size:44,a:open,stroke:9,fill2:-readout>=7?'#ff9ad0':'#ffcf7a'});
+        if(readout!=null&&readout>0)goldText(g,`ランプ ${readout}つ → しょうぶで +${AWARD[readout]}玉`,640,150,{size:50,a:open,stroke:9,fill2:readout>=4?'#ff9ad0':'#ffcf7a'});
+        if(big&&extra!=null)hits(g,640,300,big,extra,bigCol);
+        if(jp>0){LCD.titleFit(g,'jackpot','JACKPOT',640,268,{w:640,h:150,a:jp,zoom:lerp(1.5,1,easeOut(jp))});}
+        if(st===4&&extra!=null){   // ルーレット: まわって、ランプが きえる ことが ある
+          const R0=1.2+FDUR+.3,k=Math.min(1,Math.max(0,(lt-R0)/2.8)),rot=lt*9*(1-easeOut(k)*.97);
+          LCD.add(g,'glow_soft.png',640,230,{w:300,h:300,a:.5*extra,tint:'#ff5a4a'});
+          E.wheel(g,640,230,86,{a:extra,rot,needle:rot*.3});
+          goldText(g,'ルーレット',640,128,{size:44,a:extra,stroke:8,fill2:'#ffb0a0'});
+        }
+        const sa=smooth(lt/.25)*(1-smooth((lt-(per-.2))/.2));
+        caption(g,l1,l2,sa,{});
+        // ボタン(筐体の下): 押す瞬間にまっすぐ下向きの矢印が光る。左=うつ、右=しょうぶ
+        const bx=bt==='right'?1196:128;
+        if(st===0||st===2||st===3)B.point(g,bx,632+btn*10,bt==='right'?'right':'left',t,{s:.8,a:sa});
+        LCD.text(g,st<NP-1?'ひかる ボタンで つぎへ ▶':'ひかる ボタンで スタート ▶',1262,708,{size:24,align:'right',a:smooth((lt-2.2)/.3)*(.75+.25*Math.sin(t*4)),fill1:'#f4f8ff',fill2:'#c8d4f2',stroke:6});
       });
     }
   });
@@ -245,7 +270,7 @@
     c.fillStyle='#07102a';for(const yy of[-h/2,h/2]){c.beginPath();c.arc(130,yy,16,0,TAU);c.fill();}
     LCD.blit(c,'crest_sakura.png',-w/2+75,0,{w:120,h:120,a:.9});
     LCD.text(c,'パチコマ',85,-56,{size:44,fill1:'#6b3b1d',fill2:'#8a4f1f',stroke:0,strokeColor:'rgba(0,0,0,0)'});
-    LCD.text(c,`${LCD.rules().loanBalls} BALLS`,85,10,{size:64,fill1:'#8a4a12',fill2:'#c2761c',stroke:0,strokeColor:'rgba(0,0,0,0)'});
+    LCD.text(c,`${LCD.shownLoan??LCD.rules().loanBalls} BALLS`,85,10,{size:64,fill1:'#8a4a12',fill2:'#c2761c',stroke:0,strokeColor:'rgba(0,0,0,0)'});
     LCD.text(c,'あそびけん',85,66,{size:34,fill1:'#8a4f1f',fill2:'#8a4f1f',stroke:0,strokeColor:'rgba(0,0,0,0)'});
     if(shineT!=null){c.save();c.beginPath();c.roundRect(-w/2,-h/2,w,h,22);c.clip();c.globalCompositeOperation='lighter';
       const sx=lerp(-w,w,shineT),sg=c.createLinearGradient(sx-60,0,sx+60,0);sg.addColorStop(0,'rgba(255,255,255,0)');sg.addColorStop(.5,'rgba(255,255,255,.75)');sg.addColorStop(1,'rgba(255,255,255,0)');
@@ -257,7 +282,7 @@
     update(sc,dt){
       B.step(sc,dt);
       if(LCD.active.some(s=>s.id==='start')){sc.t=99;return;}   // startが引き継いだら退く
-      const tot=LCD.rules().loanBalls,count=Number.isFinite(sc.params.count)?clamp(Math.floor(sc.params.count),0,tot):LCD.landed(tot,Math.min(tot,Math.round(clamp((sc.t-.75)/1.5)*tot)));
+      const tot=LCD.shownLoan=(Number.isFinite(sc.params.balls)?sc.params.balls:LCD.rules().loanBalls),count=Number.isFinite(sc.params.count)?clamp(Math.floor(sc.params.count),0,tot):LCD.landed(tot,Math.min(tot,Math.round(clamp((sc.t-.75)/1.5)*tot)));
       if(count>sc.S.count){const d=count-sc.S.count;sc.S.count=count;
         for(let i=0;i<4*d;i++) sc.S.P.emit({x:640+(sc.rand()-.5)*520,y:300+sc.rand()*80,vx:(sc.rand()-.5)*200,vy:-140-sc.rand()*160,ay:900,life:.9,s0:.3,s1:.1,a0:1,a1:0,img:'glint_1.png',tint:'#ffe3a0',blend:'add'});
         sc.S.pulse=sc.t;
@@ -266,7 +291,7 @@
       if(sc.S.count>=tot&&tot>0&&!sc.S.full){sc.S.full=1;LCD.flash(.28,'#fff0c4',9);LCD.shake(7,.25);B.burst(sc,60,640,350,.9);}
     },
     draw(c,t,sc){
-      const a=B.exit(Math.min(t,2.7),2.8,.08),tot=LCD.rules().loanBalls,cnt=sc.S.count,pg=clamp(cnt/tot);
+      const a=B.exit(Math.min(t,2.7),2.8,.08),tot=LCD.shownLoan=(Number.isFinite(sc.params.balls)?sc.params.balls:LCD.rules().loanBalls),cnt=sc.S.count,pg=clamp(cnt/tot);
       // 金の盤面(全面)。上下の帯だけにしない
       LCD.blit(c,'bg_gold.jpg',640,360,{w:1280,h:720});
       LCD.add(c,'rays_soft.png',640,330,{s:2.8,rot:t*.06,a:.4,tint:'#ffe3a0'});

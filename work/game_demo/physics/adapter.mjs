@@ -5,10 +5,10 @@
 //   pa.launch(shotId)                        1球発射（シャトルの球が無ければ予備球が来るまで待つ）
 //   pa.payout(n, earned)                     皿へ n 球を 1 球ずつ払い出す
 //   pa.startCount()                          結果演出の終わり: 計数排出口を開けて皿の玉を収納へ
-//   pa.advance(dtReal)                       実時間を進める(固定 480Hz で内部ステップ)
+//   pa.advance(dtReal)                       実時間を進める(盤/制御480Hz、皿240Hz)
 //   pa.drainEvents()                         {type:'cup'|'lost'|'peg'|'tray_ball'|'count'|'count_done'|'overflow'|'nudge'|'feed'...}
 //   pa.snapshot()                            { tick, count, positions:Float32Array(xyz,assembly座標m), kinds:Uint8Array, shuttle:{x,hasBall}, mech:{...}, tray:{...}, ledger }
-// 物理: 盤・皿とも Rapier 0.21 を S=10 倍の空間で（凸包の不具合回避）。皿は重力 x 成分で傾き 0.04（床は水平）、転がり抵抗は stage1 の参照実装。
+// 物理: Rapier 0.21、S=10（小さな凸包の接触精度）。皿は実際の斜面と垂直重力。
 // 代用（物理でない）部分: 皿の取込ゲート〜昇降管〜シャトル補充（s1sim.py の状態機械は未移植。皿の取込口に最も近い玉を時間差で予備球へ）、
 //   戻り管（PATH_RETURN をなぞる 1 次元の転がり）、収納（溢れ・計数・戻りの先は個数の台帳）。
 import { Board3, S as SB } from './board3.mjs';
@@ -18,7 +18,8 @@ import { loadStageTransforms } from './stage_transforms.mjs';
 
 export const KIND = { board: 0, ret: 1, tray: 2, lift: 3, shuttle: 4 };
 const HZ = 480, DT = 1 / HZ;
-export const STOCK0 = 5, STOCK_MAX = 4, DISH_CAP = 125;
+export const TRAY_HZ = 240; const TRAY_STRIDE = HZ / TRAY_HZ;
+export const STOCK0 = 5, STOCK_MAX = 4;
 /** 同時発射(MaxInFlight>1)用の補給: 装填・取込を0.45秒、昇降管を0.4m/s、予備球は開始時4個(シャトル含む)・以後最大3個で、皿に玉が11個ほど見える。0.6秒間隔の連射でも射出待ちが出ない(physics/rapid_supply_test.mjs)。 */
 export const RAPID_SUPPLY = Object.freeze({ reloadSeconds: 0.45, feedGap: 0.45, liftSpeed: 0.4, stockMax: 3, stock0: 4 });
 
@@ -31,7 +32,7 @@ function at(poly, s) {
 
 export class PhysicsAdapter {
   static async create(RAPIER, opts) { const pa = new PhysicsAdapter(RAPIER, opts); await pa.init(); return pa; }
-  constructor(RAPIER, { readText, importModule, seed = 1, overflow = 'open', maxBalls = 700, loadTransforms = loadStageTransforms, stageDir = 'stage3', jitter = {}, boardTimeScale = 1, reloadSeconds = 1.0, feedGap = 0.9, liftSpeed = 0.09, stockMax = STOCK_MAX, stock0 = STOCK0 } = {}) {
+  constructor(RAPIER, { readText, importModule, seed = 1, overflow = 'reach', maxBalls = 700, loadTransforms = loadStageTransforms, stageDir = 'stage3', jitter = {}, boardTimeScale = 1, reloadSeconds = 1.0, feedGap = 0.9, liftSpeed = 0.09, stockMax = STOCK_MAX, stock0 = STOCK0 } = {}) {
     this.stageDir = (stageDir.startsWith('work/') ? new URL('../../' + stageDir.slice(5), import.meta.url).href : stageDir).replace(/\/$/, ''); this.jitter = normalizeJitter(jitter);
     this.loadTransforms = loadTransforms;
     this.R = RAPIER; this.readText = readText; this.importModule = importModule; this.maxBalls = maxBalls; this.overflowPolicy = overflow;
@@ -50,7 +51,7 @@ export class PhysicsAdapter {
     } });
     this.returns = new Map(); for (const t of model.phys.tubes) this.returns.set(t.n, polyline(t.pts.map((p) => [p[0], p[1], -p[2]])));
     const { RollingResistance } = await this.importModule('stage1/export/rolling_resistance.mjs');
-    this.tw = new R.World({ x: -9.81 * SB * 0.04, y: -9.81 * SB, z: 0 }); this.tw.timestep = DT; this.tw.lengthUnit = 0.01 * SB;
+    this.tw = new R.World({ x: 0, y: -9.81 * SB, z: 0 }); this.tw.timestep = 1 / TRAY_HZ; this.tw.lengthUnit = 0.01 * SB;
     this.tray = new Stage1Tray(R, this.tw, { readText: (p) => this.readText('stage1/export/' + p), overflow: { type: this.overflowPolicy }, rng: this.rng, scale: SB, RollingResistance, translation_m: transforms.get('stage1').translation });
     await this.tray.load();
     const path = (id) => s2.paths.find((p) => p.id === id), drop = path('PATH_DROP');
@@ -67,12 +68,12 @@ export class PhysicsAdapter {
   }
   /** 状態を空にする。rules を新規プレイにするとき呼ぶ。 */
   reset() {
-    this.board.clear(); for (const [id, b] of this.tray.balls) if (!b.stored) this.tray.world.removeRigidBody(b.body);
+    this.board.clear(); for (const [id, b] of this.tray.activeBalls) if (!b.stored) this.tray.world.removeRigidBody(b.body);
     this.board.tick = 0; this.board.nudges = 0; this.board.events.length = 0; this._lastPeg = -9999;
-    this.tray.balls.clear(); this.tray.events.length = 0; this.tray.stored = { overflow: 0, count: 0 }; this.tray.payoutExited = 0; this.tray.latched.clear(); this.tray.nextBall = 0; this.tray.countOpen = false; if (this.tray.rr) { this.tray.rr.scale = 1; this.tray.rr.prev.clear(); }
+    this.tray.balls.clear(); this.tray.activeBalls.clear(); this.tray.activePayout = 0; this.tray._countCache = null; this.tray.events.length = 0; this.tray.stored = { overflow: 0, count: 0 }; this.tray.payoutExited = 0; this.tray.latched.clear(); this.tray.nextBall = 0; this.tray.countOpen = false; this.tray.setMech('MECH_SEP_NEEDLE', 0); if (this.tray.rr) { this.tray.rr.scale = 1; this.tray.rr.prev.clear(); this.tray.rr.dfac.clear(); }
     this.transit = []; this.travel = []; this.payQueue = 0; this.payRate = null; this.payTimer = 0; this.payEarned = false; this.skipPayout = 0; this.stock = 0; this.shuttleHas = false; this.refillAt = null; this.feedAt = 0;
     this.pendingLaunch = []; this.pendingAim?.clear(); this.aim = 0; this.dir = 1; this.counting = null; this.stored = { overflow: 0, count: 0, returned: 0 }; this.evIdx = 0; this.t = 0; this.tick = 0; this.acc = 0; this.boardAcc = 0; this.seq = 0; this.events = []; this.inputs = new Map(); this.dryFor = 0; this.shots = 0; this.valve = 0;
-    this.tray.tick = 0; this.tray.blockSince = this.tray.idleSince = null; this.tray.ovfWant = false;
+    this.tray.tick = 0; this.tray.blockSince = this.tray.idleSince = null; this.tray.ovfWant = false; this.tray.levelLast = null;
   }
   beginGame(loanBalls) { this.reset(); this.stock = this.stock0 - 1; this.shuttleHas = true; this.skipPayout = Math.min(this.stock0, loanBalls); this.stockOnTray = 0; }
 
@@ -95,7 +96,7 @@ export class PhysicsAdapter {
     const event = { type: 'launch', tick: this.tick + (this._stepping ? 0 : 1), shotId, part_id: 'SOCKET_MUZZLE', x: this.transforms.point('stage2', [this.board.shuttle(this.aim, this.dir).x + delta.x, this.muzzle[1], this.muzzle[2]])[0], launchDelta: { ...delta } }; this._stamp(event); this.events.push(event);
   }
   payout(n, earned = true, rate = null) { n = Math.max(0, n | 0); if (n > 0) this.payRate = rate > 0 ? Math.min(40, rate) : (this.payQueue > 0 ? this.payRate : null); const k = Math.min(n, this.skipPayout); this.skipPayout -= k; n -= k; this.payQueue += n; this.payEarned = earned; }
-  startCount() { if (this.counting) return; this.counting = { t0: this.t, emptyFor: 0, counted: 0, drainedAt: null }; this.tray.countOpen = true; if (this.tray.rr) this.tray.rr.scale = 0; }
+  startCount() { if (this.counting) return; this.counting = { t0: this.t, emptyFor: 0, counted: 0, drainedAt: null }; this.tray.countOpen = true; this.tray.setMech('MECH_SEP_NEEDLE', .004); if (this.tray.rr) this.tray.rr.scale = 0; }
 
   /** tick は次の物理刻み以降。再生入力を描画間隔から分離する。 */
   setInput(tick, input) {
@@ -134,7 +135,9 @@ export class PhysicsAdapter {
     }
     // 皿
     this._payoutSchedule();
-    this.tw.step(); this.tray.afterStep(DT);
+    if (this.tick % TRAY_STRIDE === 0) {
+      this.tray.beforeStep(1 / TRAY_HZ); this.tw.step(); this.tray.afterStep(1 / TRAY_HZ);
+    }
     for (; this.evIdx < this.tray.events.length; this.evIdx++) {
       const e = this.tray.events[this.evIdx];
       if (e.sensor === 'SENSOR_PAYOUT_EXIT') this.events.push({ type: 'tray_ball', ball: e.ball, part_id: e.sensor, earned: this.payEarned });
@@ -149,22 +152,13 @@ export class PhysicsAdapter {
     this._stepping = false;
   }
   _startTransit(e) { const poly = this.returns.get(e.cup); if (poly) this.transit.push({ shotId: e.shotId, poly, s: 0, v: Math.min(1.5, Math.abs(e.vy) + 0.2) }); }
-  _tunnelBalls() { let n = 0; for (const b of this.tray.balls.values()) if (!b.stored && b.state === 'payout') n++; return n; }
+  _tunnelBalls() { return this.tray.activePayout; }
   _payoutSchedule() {
-    if (this.tick % 48 === 0) this._unjam();
     if (this.payQueue <= 0) return; this.payTimer -= DT; if (this.payTimer > 0) return;
-    if (this.tray.dishCount() >= DISH_CAP) { this.payQueue--; this.stored.overflow++; this.valve++; this.events.push({ type: 'overflow', n: this.stored.overflow, valve: true }); this.payTimer = 0.04; return; } // 性能の上限: 皿が満杯なら払出は直接収納へ
     const p = this.tray.payoutStart, T = this.tray;
-    for (const b of T.balls.values()) { if (b.stored) continue; const t = T.pos(b.body); if (Math.hypot(t.x - p[0], t.y - p[1], t.z - p[2]) < 0.013) return; } // 出口が空くまで待つ
+    for (const b of T.activeBalls.values()) { if (b.stored) continue; const t = b.prev; if (Math.hypot(t.x - p[0], t.y - p[1], t.z - p[2]) < 0.013) return; } // 出口が空くまで待つ
     T.spawnPayout(); this.payQueue--; if (this.payQueue <= 0) this.payRate = null;
     const base = this.payRate ? 1 / this.payRate : this.payQueue > 30 ? Math.max(0.04, 0.15 * 30 / this.payQueue) : 0.15; this.payTimer = base * (0.75 + 0.5 * this.rng());
-  }
-  // 払出トンネルの球が 4 秒動かない(山が出口をふさいだまま)なら、その球は収納へ逃がす(安全弁。件数を数える)
-  _unjam() {
-    for (const [id, b] of this.tray.balls) {
-      if (b.stored || b.state !== 'payout') continue; const v = b.body.linvel(); const sp = Math.hypot(v.x, v.y, v.z) / SB;
-      if (sp < 0.02) { b.stillSince ??= this.t; if (this.t - b.stillSince > 4) { b.stored = 'valve'; this.tray.world.removeRigidBody(b.body); this.stored.overflow++; this.valve++; this.events.push({ type: 'overflow', n: this.stored.overflow, valve: true }); } } else b.stillSince = null;
-    }
   }
   // 取込ゲート〜昇降管〜シャトル(代用): 予備球が STOCK_MAX 未満なら、0.9 秒ごとに皿の取込口に最も近い玉を 1 つ昇降管へ
   _feed() {
@@ -186,12 +180,11 @@ export class PhysicsAdapter {
   }
   _count() {
     const c = this.counting; if (!c) return;
-    const n = [...this.tray.balls.values()].filter((b) => !b.stored).length;
+    const n = this.tray.activeBalls.size;
     if (this.payQueue === 0) c.drainedAt ??= this.t;
     if (n === 0 && this.payQueue === 0) c.emptyFor += DT; else c.emptyFor = 0;
     if (c.lastN !== c.counted) { c.lastN = c.counted; this.events.push({ type: 'count', counted: c.counted + this.stored.overflow }); }
-    if (c.emptyFor > 0.5 || (c.drainedAt !== null && this.t - c.drainedAt > 8)) {
-      if (n > 0) { for (const [id, b] of this.tray.balls) if (!b.stored) { b.stored = 'count'; this.tray.world.removeRigidBody(b.body); c.counted++; } }
+    if (c.emptyFor > 0.5) {
       const counted = c.counted + this.stored.overflow + this.stock + this.travel.length + (this.shuttleHas ? 1 : 0);
       this.stored.count = counted; this.stored.overflow = 0;
       this.tray.countOpen = false; this.counting = null; this.events.push({ type: 'count_done', counted, forced: n });
@@ -203,14 +196,15 @@ export class PhysicsAdapter {
 
   /** HUD の持ち玉に使う、物理側で「まだ皿に着いていない」玉(払出待ち+トンネル内)。 */
   pendingPhysical() { return this.payQueue + this._tunnelBalls(); }
-  ledger() { let dish = 0; for (const b of this.tray.balls.values()) if (!b.stored && b.state !== 'payout') dish++; return { dish, tunnel: this._tunnelBalls(), queue: this.payQueue, overflow: this.stored.overflow, stock: this.stock, travel: this.travel.length, shuttle: this.shuttleHas ? 1 : 0, counted: this.stored.count }; }
+  ledger() { let dish = 0; for (const b of this.tray.activeBalls.values()) if (!b.stored && b.state !== 'payout') dish++; return { dish, tunnel: this._tunnelBalls(), queue: this.payQueue, overflow: this.stored.overflow, stock: this.stock, travel: this.travel.length, shuttle: this.shuttleHas ? 1 : 0, counted: this.stored.count }; }
 
   snapshot() {
-    const pos = new Float32Array(this.maxBalls * 3), kind = new Uint8Array(this.maxBalls), ids = [];
+    const buf = this._snapshotBuffer ??= { pos: new Float32Array(this.maxBalls * 3), kind: new Uint8Array(this.maxBalls), ids: [] };
+    const { pos, kind, ids } = buf; ids.length = 0; // 次のsnapshotまで有効。描画側はsetBalls内でコピーする。
     let n = 0; const put = (x, y, z, k, id) => { if (n >= this.maxBalls) return; pos[3 * n] = x; pos[3 * n + 1] = y; pos[3 * n + 2] = z; kind[n] = k; ids.push(id); n++; };
     for (const b of this.board.balls.values()) { const p = this.board.pos(b.body); put(...this.transforms.point('stage3', [p.x, p.y, p.z]), KIND.board, b.id); }
     for (const q of this.transit) { const p = at(q.poly, q.s); put(...this.transforms.point('stage3', p), KIND.ret, q.shotId); }
-    for (const [id, b] of this.tray.balls) { if (b.stored) continue; const p = this.tray.pos(b.body); put(...this.transforms.point('stage1', [p.x, p.y, p.z].map((v, i) => v - this.tray.T[i])), KIND.tray, id); }
+    for (const [id, b] of this.tray.activeBalls) { if (b.stored) continue; const p = b.prev; put(...this.transforms.point('stage1', [p.x, p.y, p.z].map((v, i) => v - this.tray.T[i])), KIND.tray, id); }
     for (const q of this.travel) { const p = at(this.liftPath, q.s); put(...this.transforms.point('stage2', p), KIND.lift, q.id); }
     const sh = this.board.shuttle(this.aim, this.dir); const shuttleAssembly = this.transforms.point('stage2', [sh.x, this.muzzle[1], this.muzzle[2]]);
     if (this.shuttleHas) put(...shuttleAssembly, KIND.shuttle, 'shuttle');

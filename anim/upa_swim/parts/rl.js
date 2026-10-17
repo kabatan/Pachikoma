@@ -11,7 +11,7 @@ const RL_CASES={
 };
 const RL_TIER={m1:{face:'rl_face_1.png',txt:'−1',c0:'#3a0a12',c1:'#6a1020',ink:'#f3ecdf'},m2:{face:'rl_face_2.png',txt:'−2',c0:'#7a0a1c',c1:'#d0102a',ink:'#fff4e8'},
   m3:{face:'rl_face_3.png',txt:'−3',c0:'#a01808',c1:'#ff4a28',ink:'#fff'},all:{face:'rl_face_4.png',txt:'全消灯',c0:'#050203',c1:'#1a0508',ink:'#f3ecdf'}};
-const RL_TITLE={dup:'重複',m1:'−1灯',m2:'−2灯',m3:'−3灯',all:'全消灯'};
+const RL_TITLE={dup:'おなじ あな',m1:'−1灯',m2:'−2灯',m3:'−3灯',all:'全消灯'};
 const rlSm=u=>{u=clamp(u,0,1);return u*u*(3-2*u)};
 function kf(t,pts){ // [[t,v],...] をなめらかにつなぐ
   if(t<=pts[0][0])return pts[0][1];
@@ -49,7 +49,7 @@ function RT(name){
     const cg=g.createConicGradient(R(-90-160),512,512);cg.addColorStop(0,'rgba(255,40,30,0)');cg.addColorStop(160/360,'rgba(255,200,180,.9)');cg.addColorStop(160.01/360,'rgba(0,0,0,0)');cg.addColorStop(1,'rgba(0,0,0,0)');
     g.fillStyle=cg;g.beginPath();g.arc(512,512,500,0,7);g.arc(512,512,280,0,7,true);g.fill()}
   else if(/^rl_t_(\w+)_(face|glow|shadow)\.png$/.test(name)){const m=name.match(/^rl_t_(\w+)_(face|glow|shadow)\.png$/),txt=RL_TITLE[m[1]]||'?',kind=m[2];
-    c=cvs(900,320);const g=c.getContext('2d');g.font='900 250px "Noto Sans CJK JP","Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif';g.textAlign='center';g.textBaseline='middle';
+    c=cvs(900,320);const g=c.getContext('2d');const RLF='"Noto Sans CJK JP","Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif';g.font='900 250px '+RLF;{const mw=g.measureText(txt).width;if(mw>840)g.font='900 '+Math.floor(250*840/mw)+'px '+RLF}g.textAlign='center';g.textBaseline='middle';
     if(kind==='glow'){g.fillStyle='#000';g.fillRect(0,0,900,320);g.shadowColor='rgba(255,40,30,1)';g.shadowBlur=50;g.fillStyle='rgba(255,60,40,.8)';g.fillText(txt,450,165)}
     else if(kind==='shadow'){g.shadowColor='rgba(0,0,0,.9)';g.shadowBlur=30;g.fillStyle='rgba(0,0,0,.9)';g.fillText(txt,462,180)}
     else{const dark=m[1]==='all';const gr=g.createLinearGradient(0,40,0,290);if(dark){gr.addColorStop(0,'#e8e0d8');gr.addColorStop(.5,'#2a2a2e');gr.addColorStop(1,'#050505')}else{gr.addColorStop(0,'#fff0e8');gr.addColorStop(.45,'#e01830');gr.addColorStop(1,'#5a0010')}

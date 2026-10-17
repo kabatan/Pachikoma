@@ -2,6 +2,7 @@
   "b_common.js",
   "b_entry.js",
   "b_tutorial.js",
+  "../../runtime/tutorial.js",
   "b_challenge.js",
   "b_success.js",
   "c_common.js",

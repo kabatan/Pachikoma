@@ -633,7 +633,7 @@ def main():
     if a.part in ['all','parts']:
         rim(); faces(); dome(); hub(); needle(); divider_shadow_lamps(); trail()
     if a.part in ['all','text']:
-        for key,s in [('dup','重複'),('m1','−1灯'),('m2','−2灯'),('m3','−3灯'),('all','全消灯')]: text_asset(key,s)
+        for key,s in [('dup','おなじ あな'),('m1','−1灯'),('m2','−2灯'),('m3','−3灯'),('all','全消灯')]: text_asset(key,s)
     if a.part in ['all','fx']: effects()
     if a.part in ['all','review']: review()
 

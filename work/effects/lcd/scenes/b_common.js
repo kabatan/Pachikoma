@@ -175,7 +175,7 @@
   B.point = (c,x,y,side,t,o={}) => {
     const a=o.a??1,s=o.s??.7;
     LCD.add(c,'glow_soft.png',x+(side==='left'?-30:30),y+35,{w:160*s,h:100*s,a:.25*a,tint:'#ffd16f'});
-    LCD.buttonArrow(c,x,y,side,t,{s,a,color:o.color??'#ffe5a0'});
+    LCD.arrow(c,x,y,'down',t,{s,a,color:o.color??'#ffe5a0'});   // 真下向き(ボタンの真上に置く)
   };
   // 穴番号は実機と同じ1始まり。既点灯と、これから狙う未点灯を分ける。
   B.holes = (c,x,y,t,params={},o={}) => {

@@ -85,12 +85,13 @@
     update(sc) { if (LCD.active.some((x) => x.id === 'start')) sc.t = 99; },
     draw(c, t, sc) {
       C.fade(c, Math.min(t, 2.7), 3, .3, c => {
-        const R = LCD.rules(), balls = R.loanBalls || 15, sec = R.extraSeconds || 25;
+        const R = LCD.rules(), balls = Number.isFinite(sc.params.balls) ? sc.params.balls : (R.loanBalls || 15), sec = Number.isFinite(sc.params.seconds) ? sc.params.seconds : (R.extraSeconds || 25);   // 追加の玉は規則の ExtraLoanBalls(イベントの値)。貸玉(最初の玉数)ではない
         C.field(c, t, { rank: 3 }); LCD.dim(c, .08, '#420b1f');
         LCD.add(c, 'rays_soft.png', 640, 330, { w: 1540, h: 1100, a: .34, rot: t * .11, tint: '#ffd49a' }); C.confetti(c, t, 80, true);
         LCD.flip(c, 'shock_2', t, 640, 300, { s: 2.2, a: .4 });
         const hit = .7 + .3 * easeOutBack(t / .3);
-        LCD.text(c, '追加!', 640 - 6, 170, { size: Math.round(190 * hit), fill1: '#fff9e1', fill2: '#ffd35a', glow: '#d08232', stroke: '#7a1a10' });
+        LCD.text(c, '追加!', 640 - 6, 214, { size: Math.round(150 * hit),   // 上の板(もちだま・のこり)と重ならない高さ
+           fill1: '#fff9e1', fill2: '#ffd35a', glow: '#d08232', stroke: '#7a1a10' });
         const a2 = smooth((t - .3) / .25);
         c.save(); c.globalAlpha = a2;
         C.numberDepth(c, balls, 330, 430, 150, false, { maxW: 360 });

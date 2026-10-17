@@ -1,0 +1,239 @@
+{
+  "version": 5,
+  "sampleRate": 48000,
+  "format": "PCM16 stereo",
+  "seed": 20261017,
+  "design": {
+    "reference_metrics_sha256": "a2da9a84720c9870857ff55a04cbcf5a8cce4c62afea10c85c102d40085c3483",
+    "carrier_Hz": 1725,
+    "reference_scalar_peaks_Hz": [
+      1476.6,
+      2015.6
+    ],
+    "source_audio_used": false,
+    "rationale": "SANKYO告知集の1–4kHz優勢と複数の上昇リッジ、GOD PVの低域層を別役割へ。単一の長いFMから短い告知列に変更。",
+    "round": "S5",
+    "pressure_targets_sha256": "ca4e273194084c84c74a3a34f4799c68451f4dc459326a8e5ee4406bc2d40249",
+    "target_2_6k_percent": 45.20494243628911,
+    "target_6_12k_percent": 5.047708331703267,
+    "stereo_side_mid_target_dB": -10,
+    "structure": "attack + tremolo/arpeggio sustain + decay; same event sequence comparison",
+    "pitched_scale": "A major pentatonic: A B C# E F#",
+    "pitch_classes": [
+      9,
+      11,
+      1,
+      4,
+      6
+    ],
+    "win_reference_sha256": "fb1826247256e8ec60e15cb2408a59f98bc997487470927640d619206f50725e",
+    "win_timing_sha256": "41a70cfaad136d7371eb08b9e330535a853aeba69952173d36055ac1769e0be0",
+    "win_structure": "charge / <=100ms A1 impact / repeated pentatonic sirens / celebration / A-E open-fifth tail",
+    "win_layers_designed": {
+      "small": 5,
+      "big": 7,
+      "jp_head": 9
+    },
+    "reference_layer_count_inferred": false
+  },
+  "files": [
+    {
+      "file": "launch.wav",
+      "seconds": 0.09,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "cup.wav",
+      "seconds": 0.09,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "lamp1.wav",
+      "seconds": 0.72,
+      "loop": false,
+      "peak_target": 0.54
+    },
+    {
+      "file": "lamp2.wav",
+      "seconds": 0.82,
+      "loop": false,
+      "peak_target": 0.59
+    },
+    {
+      "file": "lamp3.wav",
+      "seconds": 0.95,
+      "loop": false,
+      "peak_target": 0.64
+    },
+    {
+      "file": "lamp4.wav",
+      "seconds": 1.45,
+      "loop": false,
+      "peak_target": 0.69
+    },
+    {
+      "file": "lamp5.wav",
+      "seconds": 1.65,
+      "loop": false,
+      "peak_target": 0.76
+    },
+    {
+      "file": "lamp6.wav",
+      "seconds": 1.9,
+      "loop": false,
+      "peak_target": 0.82
+    },
+    {
+      "file": "protect.wav",
+      "seconds": 0.55,
+      "loop": false,
+      "peak_target": 0.82
+    },
+    {
+      "file": "title.wav",
+      "seconds": 1.1,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "howto.wav",
+      "seconds": 0.55,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "ticket.wav",
+      "seconds": 0.8,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "start.wav",
+      "seconds": 1.0,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "add100.wav",
+      "seconds": 0.85,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "declare.wav",
+      "seconds": 1.1,
+      "loop": false,
+      "peak_target": 0.82
+    },
+    {
+      "file": "cancel.wav",
+      "seconds": 0.32,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "ascend.wav",
+      "seconds": 1.25,
+      "loop": false,
+      "peak_target": 0.28
+    },
+    {
+      "file": "success_small.wav",
+      "seconds": 1.4,
+      "loop": false,
+      "peak_target": 0.64
+    },
+    {
+      "file": "success_big.wav",
+      "seconds": 3.4,
+      "loop": false,
+      "peak_target": 0.86
+    },
+    {
+      "file": "jp.wav",
+      "seconds": 20.0,
+      "loop": false,
+      "peak_target": 0.91
+    },
+    {
+      "file": "fail.wav",
+      "seconds": 0.85,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "overflow.wav",
+      "seconds": 0.22,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "warn10.wav",
+      "seconds": 0.65,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "timeup.wav",
+      "seconds": 1.1,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "result.wav",
+      "seconds": 1.8,
+      "loop": false,
+      "peak_target": 0.5
+    },
+    {
+      "file": "roulette_loop.wav",
+      "seconds": 1.6,
+      "loop": true,
+      "peak_target": 0.82
+    },
+    {
+      "file": "focus_loop.wav",
+      "seconds": 1.2,
+      "loop": true,
+      "peak_target": 0.5
+    },
+    {
+      "file": "count_loop.wav",
+      "seconds": 0.8,
+      "loop": true,
+      "peak_target": 0.5
+    },
+    {
+      "file": "payout.wav",
+      "seconds": 0.24,
+      "loop": false,
+      "peak_target": 0.82
+    },
+    {
+      "file": "win_jp_head.wav",
+      "seconds": 2.8,
+      "loop": false,
+      "peak_target": 0.95
+    },
+    {
+      "file": "win_jp_loop.wav",
+      "seconds": 1.6,
+      "loop": true,
+      "peak_target": 0.95
+    },
+    {
+      "file": "win_jp_tail.wav",
+      "seconds": 2.0,
+      "loop": false,
+      "peak_target": 0.95
+    },
+    {
+      "file": "win_number.wav",
+      "seconds": 0.8,
+      "loop": false,
+      "peak_target": 0.95
+    }
+  ]
+}

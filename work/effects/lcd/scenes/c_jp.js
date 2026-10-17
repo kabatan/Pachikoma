@@ -80,7 +80,7 @@
   // ---- JACKPOT(立体)。位置は 2.1 ドン → 3.3-4.0 で左上へ ----
   function jackpotTitle(c, t) {
     const m = smooth((t - 3.1) / .6), slam = easeOutBack((t - 2.1) / .36);
-    const x = 640 + (410 - 640) * m, y = 520 + (84 - 520) * m, w = 1180 + (620 - 1180) * m, h = 240 + (120 - 240) * m;
+    const x = 640 + (528 - 640) * m, y = 520 + (72 - 520) * m, w = 1180 + (520 - 1180) * m, h = 240 + (104 - 240) * m;   // 左上の板(もちだま)は JP の間だけ小さくなって端へ寄る。題は板と板のあいだ
     const z = t < 2.1 ? 0 : (.55 + .45 * slam) * (1 + .012 * Math.sin(t * 6));
     if (t < 2.1 && t < 4) return;
     C.extrude(c, 'jackpot', 'JACKPOT', x, y + Math.sin(t * 3) * (1 - m) * 3, w, h, { zoom: z * (t >= 4 ? 1 : 1), near: '#9a1560', far: '#2a0640', rim: '#ffcf40', depth: .09 });

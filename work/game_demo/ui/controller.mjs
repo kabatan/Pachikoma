@@ -18,7 +18,7 @@ export class MedalController {
     this.preBuffer = null; this.preWindow = 0.3; this.preWindowDrain = 5;
     this.fireBuffer = null; this.fireWindow = 0.3;   // 同時発射: 間隔待ち(残り0.3秒以内)に押された発射は、狙いを押した瞬間に固定して解禁と同時に撃つ
     this.droppedInputs = [];   // R-04: 勝負ボタンの先押しを0.3秒だけ1回保持。捨てた押しは記録
-    this.howtoSeconds = 0; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
+    this.howtoSeconds = 0; this.howtoMinDwell = 2.5; this.howtoPanels = 5; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
   }
   onAction(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   get phase() { return this.game.phase; }
@@ -29,6 +29,10 @@ export class MedalController {
     const g = this.game;
     if (this.howto) { this.howto.t += dt; if (this.howto.t >= this.howtoSeconds) this._startNow(); }
     if (!this.freezeRules) g.advance(dt);
+    if (g.rules.R2Enabled && g.challengeIntent && this.fireBuffer) {
+      this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'challenge-clears-buffer' });
+      this.fireBuffer = null;
+    }
     if (this.preBuffer) {
       this.preBuffer.left -= dt;
       if ((g.overlap ? g.canArm : g.canFire) && !this.confirmFinish) { this.preBuffer = null; if (g.toggleChallenge()) for (const fn of this.listeners) fn('challenge', this); else this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: 'not-allowed-after-wait' }); }
@@ -41,7 +45,7 @@ export class MedalController {
     }
     if (g.phase === MedalPhase.Continue || g.phase === MedalPhase.Result) this.confirmFinish = false;
     this.resultAge = g.phase === MedalPhase.Result ? (this.resultAge ?? 0) + dt : 0;   // 結果が出てからの秒(客の連打で飛ばさない)
-    if (g.canAim && !this.confirmFinish) this.aimClock += dt; // 狙いのスイープは入力受付中だけ進む
+    if (g.canAim && !this.confirmFinish) this.aimClock += dt * g.challengeAimSpeed; // 狙いのスイープは入力受付中だけ進む
     this.aim = triangle(this.aimClock / this.sweepPeriod);
     { const u = (this.aimClock / this.sweepPeriod) % 1; this.aimDir = (u < 0.25 || u >= 0.75) ? 1 : -1; } // +1: 右へ動いている
   }
@@ -54,12 +58,21 @@ export class MedalController {
     switch (action) {
       case 'start':
         if (g.phase !== MedalPhase.Attract) break;
-        if (this.howto) { if (this.howto.t >= 0.3) { this._startNow(); return true; } break; }   // 説明中の2度押しで飛ばす(誤タップ防止に0.3秒は無視)
+        if (this.howto) {   // 説明は howtoPanels コマ(等分)。押すと次のコマへ、最後のコマで押すと開始。各コマ最低 howtoMinDwell 秒は読ませる(連打で一気に飛ばさない)
+          const h = this.howto, per = this.howtoSeconds / this.howtoPanels, dwell = Math.min(this.howtoMinDwell, per * 0.6);
+          const k = Math.min(this.howtoPanels - 1, Math.floor(h.t / per));
+          if (h.t - k * per >= dwell) { if (k >= this.howtoPanels - 1) { this._startNow(); return true; } h.t = (k + 1) * per; this._lastActionFrame = this.frame; return true; }
+          break;   // 読ませている間の押下は無視
+        }
         if (this.howtoSeconds > 0) { this.howto = { t: 0 }; ok = true; action = 'howto'; break; }
         this.hooks.cancelFlights?.(); ok = g.start(); this.sessionId++; break;
       case 'fire': ok = this._fire(); break;
       case 'challenge':
         ok = g.toggleChallenge();
+        if (g.rules.R2Enabled) {
+          if (ok) this.fireBuffer = this.preBuffer = null;
+          break;
+        }
         // 演出中(次の発射可能が近い)の先押しだけ0.3秒保持(1回)。同時発射では、盤上の玉が着いて空になるまで(最大 preWindowDrain 秒)保持し、その間は新しい玉を撃たない
         if (!ok && (g.phase === MedalPhase.Effect || (g.overlap && g.shots.length > 0 && g.phase !== MedalPhase.Flight)) && g.lampCount > 0 && g.lampCount < 6) {
           if (this.preBuffer) this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: 'already-buffered' });
@@ -95,6 +108,11 @@ export class MedalController {
   }
   _fire(aim = this.aim, dir = this.aimDir) {
     const g = this.game;
+    if (g.rules.R2Enabled && g.challengeIntent && g.challengeIntent.stage !== 'ready') {
+      this.fireBuffer = null;
+      this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: g.challengeIntent.stage });
+      return false;
+    }
     if (this.preBuffer && g.overlap) return false;   // 勝負待ちの間は盤を空にする
     if (g.overlap && !g.canFire && g.canAim && !g.armed && !this.fireBuffer && g.shots.length < g.rules.MaxInFlight && g.rules.FireInterval - g._sinceFire <= this.fireWindow) {
       this.fireBuffer = { aim, dir, left: this.fireWindow }; return false;   // 間隔待ちの先押しを保持(通知は撃った時に出す)

@@ -502,7 +502,7 @@ export class HybridRenderer {
     r.setRenderTarget(this.rtMain); r.setViewport(0, 0, W, H);
     r.setClearColor(0x000000, 0); r.clear(true, true, false);
     r.render(this.sBack, this.fsCam);
-    if (this.balls.count > 0) { this.probes.compose(this.frame); r.setRenderTarget(this.rtMain); r.setViewport(0, 0, W, H); r.render(this.sBalls, this.camera); }
+    if (this.balls.count > 0 || this.trayVisual) { this.probes.compose(this.frame); r.setRenderTarget(this.rtMain); r.setViewport(0, 0, W, H); r.render(this.sBalls, this.camera); }
     // 2) 手前: τ⊙D + F（線形HDR）
     r.setRenderTarget(this.rtC); r.setViewport(0, 0, W, H);
     r.render(this.sFront, this.fsCam);

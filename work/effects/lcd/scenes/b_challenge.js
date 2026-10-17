@@ -8,8 +8,6 @@
     const n=clamp(Math.round(params.n??LCD.state.n),0,7);
     return new Set(Array.isArray(params.lit)?params.lit:Array.from({length:n},(_,i)=>i+1));
   }
-  // 筐体の7つの穴の真上にあたる液晶のx座標(筐体全体の画像で合わせた値)。穴は液晶の下端のさらに下にある。
-  const HOLE_X=i=>27+196.6*(i-1);
 
   // ───────── 勝負宣言 ─────────
   const HS=[[.32,.1]];                               // ヒットストップ(文字が当たった瞬間に0.1秒止める)
@@ -80,57 +78,24 @@
   });
 
   // ───────── 勝負の玉が飛んでいる間 ─────────
-  // 穴の真上に「ここに入れば 成功!」(未点灯の穴)/「ここは しっぱい」(点灯済みの穴)を置き、矢印で液晶の下端(その先に穴)を指す。
-  function column(c,t,i,on){
-    const x=HOLE_X(i),ax=clamp(x,40,1240),lx=clamp(x,74,on?1170:1200),beat=.5-.5*Math.cos(t*TAU*1.4);
-    if(!on){                                                    // 成功の穴: 金の柱+大きな矢印+「成功!」
-      const w=140+beat*34;
-      const g=c.createLinearGradient(0,330,0,720);g.addColorStop(0,'rgba(255,176,0,0)');g.addColorStop(1,`rgba(255,176,0,${.4+.3*beat})`);
-      c.fillStyle=g;c.fillRect(ax-w/2,330,w,390);
-      LCD.add(c,'glow_soft.png',ax,690,{w:300,h:200,a:.55+.3*beat,tint:'#ffb000'});
-      const z=1+.07*beat;
-      c.save();c.translate(lx,520);c.scale(z,z);LCD.text(c,'成功!',0,0,{size:60,stroke:12,fill1:'#fffbe0',fill2:'#ffb000',glow:'#ff9a00',strokeColor:'#4a2000'});c.restore();
-      for(let k=0;k<2;k++)LCD.arrow(c,ax,626,'down',t+k*.4,{s:.82-k*.2,color:'#ffd24a',glow:'rgba(255,176,0,.95)',a:k?.5:1});
-    }else{                                                      // 失敗の穴: 赤く控えめ
-      const fl=.7+.3*Math.sin(t*23+i*2.1)*Math.sin(t*7.3+i);
-      const g=c.createLinearGradient(0,520,0,720);g.addColorStop(0,'rgba(220,0,30,0)');g.addColorStop(1,`rgba(220,0,30,${.3*fl})`);
-      c.fillStyle=g;c.fillRect(ax-46,520,92,200);
-      LCD.text(c,'ここは',lx,510,{size:30,stroke:7,a:.9,fill1:'#ffb8c0',fill2:'#ff7a88',strokeColor:'#2a0008'});
-      LCD.text(c,'しっぱい',lx,554,{size:36,stroke:8,a:.92*fl,fill1:'#ffc0c8',fill2:'#ff3a52',strokeColor:'#2a0008'});
-      LCD.arrow(c,ax,640,'down',t+i,{s:.46,color:'#ff6a7c',glow:'rgba(255,30,60,.8)',a:.7*fl});
-    }
-  }
-  // 成功の穴が続くひとかたまりごとに、「ここに入れば」を真上へ。
-  function banners(c,t,lit){
-    let i=1;
-    while(i<=7){
-      if(lit.has(i)){i++;continue;}
-      let j=i;while(j<7&&!lit.has(j+1))j++;
-      const x0=Math.max(0,HOLE_X(i)-98),x1=Math.min(1280,HOLE_X(j)+98),w=x1-x0,size=clamp(w/6.3,42,50);
-      const beat=.5-.5*Math.cos(t*TAU*1.4);
-      LCD.text(c,'ここに入れば',clamp((x0+x1)/2,size*3.2,1280-size*3.2),452,{size,stroke:9,fill1:'#fff0c0',fill2:'#ffc23a',strokeColor:'#3a1800',a:.9+.1*beat});
-      i=j+1;
-    }
-  }
+  // 盤にある情報(どの穴が当たりか・その位置)は液晶に出さない(10/18 監督: 液晶の位置は実際の穴とずれて気持ち悪い)。
+  // 当たりの穴は、穴そのものの光(穴のLEDと、口の真上の照り返し。lightbus の pbeat)で見せる。液晶は盤に無い情報だけ: いくつ貰えるか、いまの気分。
   LCD.scene({id:'challenge_flight',dur:0,hold:true,cover:true,assets:['glow_soft.png','flare_streak.png'],
     draw(c,t,sc){
-      // 通常画面は完全に覆う。結果を先取りせず、実際の7口の点灯済み/未点灯だけを見せる。
-      const beat=Math.exp(-Math.pow((t%1.12)/.14,2))+.45*Math.exp(-Math.pow(((t+.86)%1.12)/.12,2));
+      const beat=Math.exp(-Math.pow((t%1.12)/.14,2))+.45*Math.exp(-Math.pow(((t+.86)%1.12)/.12,2)),slow=.5-.5*Math.cos(t*TAU*.9);
+      const jp=sc.params.jp===true,n=clamp(Math.round(sc.params.n??LCD.state.n??0),0,7),AW=LCD.rules().awards||[0,1,2,3,12,30,80],JA=LCD.rules().jackpotAwards||[];
       const g=c.createLinearGradient(0,0,0,720);g.addColorStop(0,'#14020a');g.addColorStop(1,'#2a0410');c.fillStyle=g;c.fillRect(-128,-72,1536,864);
       LCD.vignette(c,.5+beat*.2,'160,10,40');
-      const jp=sc.params.jp===true;
-      LCD.text(c,jp?'JPチャンス!':'しょうぶの 1球',jp?330:340,92,{size:52,stroke:10,fill1:jp?'#ffe08a':'#ffd0c0',fill2:jp?'#ffb000':'#ff8a78',strokeColor:'#2a0008'});
-      const JA=LCD.rules().jackpotAwards||[];
-      LCD.text(c,jp&&JA.length?`JPで ${Math.min(...JA)}〜${Math.max(...JA)}玉!`:'たまを おいかけよう',340,152,{size:36,stroke:8,a:.9,fill1:jp?'#fff0b8':'#ffe6d0',strokeColor:'#2a0008'});
-      const lit=mouths(sc.params);
-      for(let i=1;i<=7;i++)column(c,t,i,lit.has(i));
-      banners(c,t,lit);
-      const p=sc.params;
-      if(Number.isFinite(p.x)&&Number.isFinite(p.y)){
-        const px=clamp(p.x>=0&&p.x<=1?p.x*1280:p.x,24,1256),py=clamp(p.y>=0&&p.y<=1?p.y*720:p.y,24,696);
-        LCD.add(c,'glow_soft.png',px,py,{w:90,h:90,a:.65,tint:'#fff0b8'});
-        LCD.radial(c,px,py,14,'255,239,195',.8);c.fillStyle='#fff7d1';c.beginPath();c.arc(px,py,4,0,TAU);c.fill();
-      }
+      LCD.add(c,'glow_soft.png',640,400,{w:1100+120*slow,h:560+60*slow,a:.3+.12*slow,tint:jp?'#ff9a00':'#ff2a3a'});
+      LCD.text(c,jp?'JPチャンス!':'しょうぶの 1球',640,214,{size:64,stroke:10,fill1:jp?'#ffe08a':'#ffd0c0',fill2:jp?'#ffb000':'#ff8a78',strokeColor:'#2a0008'});
+      // 成功したらいくつ貰えるか(数は規則から)。盤の写しではなく、盤に書いていない数
+      const stake=jp&&JA.length?`${Math.min(...JA)}〜${Math.max(...JA)}`:String(AW[Math.min(n,6)]??0);
+      const z=1+.035*slow;
+      c.save();c.translate(640,420);c.scale(z,z);
+      LCD.text(c,'せいこうで',0,-96,{size:42,stroke:8,a:.92,fill1:'#fff0e4',fill2:'#ffc8b0',strokeColor:'#2a0008'});
+      LCD.text(c,`+${stake}玉`,0,0,{size:jp?150:190,stroke:16,fill1:'#fffbe0',fill2:jp?'#ffb000':'#ffc23a',strokeColor:'#4a1a00',glow:jp?'#ff9a1a':'#ff7a1a'});
+      c.restore();
+      LCD.text(c,'金色に ひかる あなを ねらえ!',640,610,{size:46,stroke:9,a:.9,fill1:'#fff0c0',fill2:'#ffc23a',strokeColor:'#3a1800'});
     }
   });
   LCD.scene({id:'tut_fail',dur:2,assets:[],

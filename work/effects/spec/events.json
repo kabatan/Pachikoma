@@ -366,9 +366,9 @@
   {
    "id": "howto",
    "phase": "A 待機〜開始",
-   "name": "あそびかた(3コマの基本説明)",
+   "name": "あそびかた(5コマの基本説明)",
    "tier": 2,
-   "dur": 8.0,
+   "dur": 25.0,
    "blocking": true,
    "trigger": "タイトルでボタンが押された直後。チケットの玉が出る前",
    "feel": "「玉を穴に入れて灯を増やすんだな。7つでJP。同じ穴だとルーレット」。絵で一息に分かる。ボタンで飛ばせる。",
@@ -854,13 +854,15 @@
     },
     {
      "lane": "pocket",
-     "t0": 0.2,
-     "t1": 1.4,
-     "label": "入った穴の口がきらりと白く(そのあとは白い基底が点き続ける)",
-     "pat": "pulse",
+     "t0": 0,
+     "t1": 1.3,
+     "label": "入った穴の口が最大の白で閃き、数回ちかちかして白い基底に落ち着く",
+     "pat": "pburst",
      "p": {
       "color": "#ffffff",
-      "hz": 3,
+      "peak": 4.4,
+      "decay": 2.2,
+      "hz": 7,
       "targets": "hit"
      }
     }
@@ -1003,13 +1005,31 @@
     },
     {
      "lane": "pocket",
+     "t0": 0,
+     "t1": 1.3,
+     "label": "入った穴の口が最大の白で閃く",
+     "pat": "pburst",
+     "p": {
+      "color": "#ffffff",
+      "peak": 4.4,
+      "decay": 2.0,
+      "hz": 7,
+      "targets": "hit"
+     }
+    },
+    {
+     "lane": "pocket",
      "t0": 1.6,
      "t1": 3.6,
-     "label": "未点灯の穴が金で脈打つ",
-     "pat": "pulse",
+     "label": "未点灯の穴が金で波打つ(あと少し・勝負の入口)",
+     "pat": "pbeat",
      "p": {
       "color": "#ffc83a",
-      "hz": 1.2,
+      "hz": 1.6,
+      "wave": 0.12,
+      "sharp": 2,
+      "floor": 0.12,
+      "peak": 5.0,
       "targets": "unlit"
      }
     },
@@ -1099,13 +1119,31 @@
     },
     {
      "lane": "pocket",
+     "t0": 0,
+     "t1": 1.3,
+     "label": "入った穴の口が最大の白で閃く",
+     "pat": "pburst",
+     "p": {
+      "color": "#ffffff",
+      "peak": 4.4,
+      "decay": 2.0,
+      "hz": 7,
+      "targets": "hit"
+     }
+    },
+    {
+     "lane": "pocket",
      "t0": 1.0,
      "t1": 3.0,
-     "label": "未点灯2口が金",
-     "pat": "pulse",
+     "label": "未点灯2口が金で強く脈打つ",
+     "pat": "pbeat",
      "p": {
       "color": "#ffc83a",
-      "hz": 1.4,
+      "hz": 1.9,
+      "wave": 0.12,
+      "sharp": 2,
+      "floor": 0.1,
+      "peak": 5.8,
       "targets": "unlit"
      }
     },
@@ -1249,13 +1287,31 @@
     },
     {
      "lane": "pocket",
+     "t0": 0,
+     "t1": 1.3,
+     "label": "入った穴の口が最大の白で閃く",
+     "pat": "pburst",
+     "p": {
+      "color": "#ffffff",
+      "peak": 4.4,
+      "decay": 2.0,
+      "hz": 7,
+      "targets": "hit"
+     }
+    },
+    {
+     "lane": "pocket",
      "t0": 1.0,
      "t1": 3.6,
-     "label": "最後の1口が白金で脈打つ",
-     "pat": "pulse",
+     "label": "最後の1口が白金で最大に脈打つ",
+     "pat": "pbeat",
      "p": {
       "color": "#fff0b0",
-      "hz": 1.6,
+      "hz": 2.4,
+      "wave": 0,
+      "sharp": 1.6,
+      "floor": 0.1,
+      "peak": 7.0,
       "targets": "unlit"
      }
     },
@@ -1356,11 +1412,13 @@
     {
      "lane": "pocket",
      "t0": 0,
-     "t1": 1.0,
-     "label": "重複した穴が2回きらり",
-     "pat": "pulse",
+     "t1": 1.1,
+     "label": "重複した穴が赤く2回強く閃く",
+     "pat": "pburst",
      "p": {
-      "color": "#ffffff",
+      "color": "#ff3a4a",
+      "peak": 5.0,
+      "decay": 1.4,
       "hz": 4,
       "targets": "hit"
      }
@@ -1491,6 +1549,20 @@
       "color": "#ffffff",
       "hz": 3,
       "limit": 1
+     }
+    },
+    {
+     "lane": "pocket",
+     "t0": 0,
+     "t1": 1.0,
+     "label": "重複した穴が赤く強く閃く",
+     "pat": "pburst",
+     "p": {
+      "color": "#ff3a4a",
+      "peak": 5.0,
+      "decay": 1.6,
+      "hz": 5,
+      "targets": "hit"
      }
     },
     {
@@ -1720,12 +1792,15 @@
      "lane": "pocket",
      "t0": 0.3,
      "t1": 1.6,
-     "label": "当たりの穴が金で点滅(白でなく濃い金)",
-     "pat": "pulse",
+     "label": "当たりの穴(灯のない穴)が金で強く、端から端へ波打つ",
+     "pat": "pbeat",
      "p": {
       "color": "#ffc83a",
-      "hz": 3,
-      "depth": 3.2,
+      "hz": 2.2,
+      "wave": 0.14,
+      "sharp": 2,
+      "floor": 0.2,
+      "peak": 6.8,
       "targets": "unlit"
      }
     },
@@ -1733,11 +1808,11 @@
      "lane": "pocket",
      "t0": 0.3,
      "t1": 1.6,
-     "label": "外れの穴は白い基底を消して深紅に沈む",
+     "label": "外れの穴(灯っている穴)は白い基底を消して暗い赤に沈む",
      "pat": "solid",
      "p": {
       "color": "#d0101e",
-      "level": 0.55,
+      "level": 0.3,
       "targets": "lit"
      }
     },
@@ -1924,12 +1999,15 @@
      "lane": "pocket",
      "t0": 0,
      "t1": 6,
-     "label": "当たり(灯のない)穴が濃い金で点滅",
-     "pat": "pulse",
+     "label": "当たり(灯のない)穴が金で強く、端から端へ波打つ",
+     "pat": "pbeat",
      "p": {
       "color": "#ffc83a",
-      "hz": 3,
-      "depth": 3.2,
+      "hz": 2.2,
+      "wave": 0.14,
+      "sharp": 2,
+      "floor": 0.2,
+      "peak": 6.8,
       "targets": "unlit"
      }
     },
@@ -1937,11 +2015,11 @@
      "lane": "pocket",
      "t0": 0,
      "t1": 6,
-     "label": "外れ(灯っている)穴は白い基底を消して深紅に沈む",
+     "label": "外れ(灯っている)穴は白い基底を消して暗い赤に沈む",
      "pat": "solid",
      "p": {
       "color": "#d0101e",
-      "level": 0.55,
+      "level": 0.3,
       "targets": "lit"
      }
     },
@@ -2050,6 +2128,20 @@
      "p": {
       "color": "#ffc83a",
       "turns": 1
+     }
+    },
+    {
+     "lane": "pocket",
+     "t0": 0,
+     "t1": 1.6,
+     "label": "入った穴が白金で最大に閃く",
+     "pat": "pburst",
+     "p": {
+      "color": "#fff0b0",
+      "peak": 7.0,
+      "decay": 1.6,
+      "hz": 6,
+      "targets": "hit"
      }
     },
     {
@@ -2187,6 +2279,20 @@
      "p": {
       "color": "rainbow",
       "period": 1.2
+     }
+    },
+    {
+     "lane": "pocket",
+     "t0": 0,
+     "t1": 1.6,
+     "label": "入った穴が白金で最大に閃く",
+     "pat": "pburst",
+     "p": {
+      "color": "#fff0b0",
+      "peak": 7.0,
+      "decay": 1.6,
+      "hz": 6,
+      "targets": "hit"
      }
     },
     {
@@ -2390,6 +2496,20 @@
       "color": "#46d6ff",
       "hz": 3,
       "limit": 1
+     }
+    },
+    {
+     "lane": "pocket",
+     "t0": 0,
+     "t1": 1.5,
+     "label": "外れた穴が赤く強く閃く(どこに入ったかを穴で見せる)",
+     "pat": "pburst",
+     "p": {
+      "color": "#ff3a4a",
+      "peak": 5.4,
+      "decay": 1.5,
+      "hz": 4,
+      "targets": "hit"
      }
     },
     {

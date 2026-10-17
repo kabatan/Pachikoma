@@ -2,6 +2,7 @@
 // ?seed=N &manual &nolog &quiet &debug &pack=<manifest URLまたはディレクトリ>
 import RAPIER from '../physics/node_modules/@dimforge/rapier3d-compat/dist/rapier.mjs';
 import { PhysicsAdapter, RAPID_SUPPLY } from '../physics/adapter.mjs';
+import { attachTrayVisual } from '../physics/tray_visual.mjs';
 import { createMedalApp } from '../ui/demo_host.mjs';
 import { HybridRenderer } from '../web/src/hybrid_renderer.mjs';
 import { Gen } from '../web/src/dummy.mjs';
@@ -30,9 +31,10 @@ const pa = await PhysicsAdapter.create(RAPIER, {
 pa.playConfig = { ...config, seed, pinCount: pa.board.layout.pins.length };
 const hr = new HybridRenderer({ canvas: document.getElementById('c'), maxBalls: 700, lutUrl: new URL('../web/assets/lut/pbrneutral_lg2_57_lin', import.meta.url).href });
 await hr.init();
+attachTrayVisual(hr, pa);
 hr.setBallBounce(Number(q.get('ballbounce') ?? 0.5));   // 玉の下半球の照り返し（既定0.5で銀色に見える。?ballbounce=0 で従来）
 const setAssemblyBalls = connectAssemblyBalls(hr, pa.transforms);
-const pack = await connectLayerPack(hr, q.has('pack') ? q.get('pack') : DEFAULT_PACK, { dummyEntries: Gen.makeLayerManifest(12, { seed: 1 }) });
+const pack = await (await import('../render_r2/select_render.mjs')).connectRender(hr, q, DEFAULT_PACK);   // 既定R2、?render=legacy。生成packが無ければstage2cへ戻す
 const app = await createMedalApp(document.getElementById('stage'), {
   hooks: { launchBall(shot, aim, dir) { pa.setAim(aim, dir); pa.launch(shot.id); }, cancelFlights() { pa.reset(); }, canReset() { return app.presenter.count.done; } },
   rulesUrl: config.rules, seed, quiet: q.has('quiet'), music: false, log: !q.has('nolog'), human: !q.has('nolog') && !q.has('qa') && !q.has('manual'), manual: true,
@@ -45,6 +47,38 @@ const howtoDur = await fetch(new URL('../../effects/spec/events.json', import.me
 ctrl.howtoSeconds = Number(q.get('howto') ?? howtoDur ?? 5.2);   // 開始前のルール説明(時計に含めない・もう一度押すと飛ばせる)。?howto=0 で無効
 window.__effects = effects;
 if (q.get('effects_log') === '1') effects.on('*', e => console.log('[effects]', e));
+// 公開音響はr2既定。?audio=legacyで従来音響。声は明示指定時のみ。読込失敗時は従来音響を維持する。
+let r2Audio = null;
+if (q.get('audio') !== 'legacy') {
+  try {
+    const { connectAudio } = await import('../../audio/runtime/connect_audio.mjs');
+    const bgmManifest = new URL('../../audio/bgm/manifest.json', import.meta.url);
+    const bgmOverride = q.get('bgm');
+    let releaseBgmOn = false;
+    if (bgmOverride !== '1' && bgmOverride !== '0') {
+      try {
+        const response = await fetch(bgmManifest, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`BGM manifest HTTP ${response.status}`);
+        releaseBgmOn = (await response.json()).release_default_on === true;
+      } catch (error) { console.warn('[r2-bgm-default]', error); }
+    }
+    r2Audio = await connectAudio({ pa, bus: effects,
+      voiceProvider: q.get('voice') ?? 'off',
+      bgmEnabled: bgmOverride === '1' || (bgmOverride !== '0' && releaseBgmOn),
+      bgmManifest, getPhase: () => ctrl.game.phase,
+    });
+    const { bindBgmControls } = await import('../../audio/runtime/bgm_controls.mjs');
+    bindBgmControls(r2Audio.engine, document.getElementById('audio-panel'));
+    const { VOICE_CREDITS } = await import('../../audio/runtime/voice_catalog.mjs');
+    const voiceCredit = VOICE_CREDITS[r2Audio.engine.voiceProvider];
+    document.getElementById('audio-credits').hidden = r2Audio.engine.voiceProvider === 'off' || !voiceCredit;
+    document.getElementById('audio-voice-credit').textContent = voiceCredit ?? '';
+    app.audio.dispose(); presenter.audio = null;  // 旧SE/釘/皿/計数ループの二重発音を止める
+    app.audio.unlock = () => r2Audio.engine.unlock();  // attachInput が保持する旧オブジェクトの解除口
+    document.getElementById('audio-panel').hidden = false;
+    document.getElementById('audio-master').addEventListener('input', e => r2Audio.engine.setMaster(e.target.value));
+  } catch (error) { console.error('[r2-audio]', error); }
+}
 const runtime = createRuntime({ ctrl, presenter, pa, log: app.log, effects });
 // 演出側(work/effects)の液晶・光の接続。?nofx で無効。演出側の1ファイルだけを読む。
 let fxApi = null;
@@ -56,6 +90,7 @@ if (!q.has('nofx')) {
 }
 // 初回だけ重い処理(画像デコード・GPUアップロード・シェーダ)を遊技の前に済ませる。?prewarm=0 で無効
 if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi });
+window.__r2Audio = r2Audio;
 const stats = runtime.stats;
 const launcherBody = q.has('nolauncher') ? null : createLauncherBody({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) });   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
@@ -70,6 +105,7 @@ function draw() {
 function frame(dt, render = true) {
   const t0 = performance.now(), timing = runtime.advance(dt);
   if (fxApi) fxApi.frame(dt);
+  if (ctrl.phase === 'Fault') r2Audio?.engine.stopAll();
   let s = null; if (render) s = draw();
   window.__play.lastTiming = { ...timing, totalMs: performance.now() - t0 };
   return s;
@@ -99,6 +135,7 @@ document.addEventListener('visibilitychange', () => { last = null; app.log.write
 let audioStarted = false;
 async function startAudio() {
   if (audioStarted) return; audioStarted = true;
+  if (r2Audio) { await r2Audio.engine.unlock(); document.getElementById('start')?.remove(); return; }
   await app.audio.unlock();
   const files = JSON.parse(await readText(new URL('./audio_files.json', import.meta.url)));
   await app.audio.preload({ files, music: false });

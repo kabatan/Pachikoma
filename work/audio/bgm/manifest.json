@@ -1,0 +1,412 @@
+{
+ "project": "パチコマ BGM 本アレンジ (案4 弱起の引っ張り, 現代寄り)",
+ "release_default_on": true,
+ "sample_rate": 48000,
+ "bit_depth_wav": 24,
+ "channels": 2,
+ "ogg": "Vorbis q6 (libvorbis, ffmpeg)",
+ "bpm": 168,
+ "bpm_exact": 167.9986,
+ "bpm_note": "拍=17143サンプルの整数時計(167.996BPM)。表記は168",
+ "time_signature": "4/4",
+ "key": "F# minor (成功・JPは平行調 A major)",
+ "clock": {
+  "sixteenth_samples": 4285.75,
+  "beat_samples": 17143,
+  "bar_samples": 68572,
+  "loop_bars": 32,
+  "loop_samples": 2194304
+ },
+ "sections_normal_pink_focus": {
+  "A 提示(弱起の問い→引っ張る答え)": [
+   0,
+   7
+  ],
+  "A' 応答(対旋律が答える)": [
+   8,
+   15
+  ],
+  "B 展開(上昇して頂点へ)": [
+   16,
+   23
+  ],
+  "A'' 回帰(ループへ)": [
+   24,
+   31
+  ]
+ },
+ "chord_per_bar_0based": [
+  [
+   {
+    "step": 0,
+    "chord": "F#m"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "D"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "A"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "E"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "F#m"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "D"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "A"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "E"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "F#m"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "D"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "A"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "E"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "F#m"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "D"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "A"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "E"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "D"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "E"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "F#m"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "C#m"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "Bm"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "A"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "E"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "E"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "F#m"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "D"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "A"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "E"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "F#m"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "D"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "A"
+   }
+  ],
+  [
+   {
+    "step": 0,
+    "chord": "E"
+   }
+  ]
+ ],
+ "reentry_bars_after_success": [
+  0,
+  4,
+  8,
+  12,
+  16,
+  24,
+  28
+ ],
+ "reentry_note": "成功・JPの終止はAメジャー。normalのF#m小節頭(0,4,8,12,24,28)またはD小節頭(16)へ戻ると A→F#m(共通音A・C#)・A→D で和声がつながる。",
+ "transitions": {
+  "same_clock": "normal/pink/focus は同じ32小節時計・同じ和声・同じ主旋律(揺れも同一)。切替は同じサンプル位置からの直線クロスフェード。",
+  "pink_enter": "点灯SEは即時、音楽の差分は次の拍まで。",
+  "focus_enter": "宣言SEは即時、0.15秒で focus へ。"
+ },
+ "files": {
+  "normal": {
+   "desc": "通常 0〜3灯 / 32小節 A→A'(対旋律)→B(展開)→A''(回帰)",
+   "bars": 32,
+   "kind": "loop",
+   "bpm": 168,
+   "time_signature": "4/4",
+   "key": "F# minor",
+   "loop_start": 0,
+   "loop_end": 2194304,
+   "loop_samples": 2194304,
+   "bar_samples": 68572,
+   "file_wav": "wav/normal.wav",
+   "file_ogg": "ogg/normal.ogg",
+   "samples": 2194304,
+   "seconds": 45.7147,
+   "lufs_i": -20.0,
+   "true_peak_db": -4.6
+  },
+  "pink": {
+   "desc": "4灯以降 / 同じ時計・同じ和声・同じ主旋律の上で、対旋律・ノコギリ重ね・スタブ・パッド・4つ打ちが加わる",
+   "bars": 32,
+   "kind": "loop",
+   "bpm": 168,
+   "time_signature": "4/4",
+   "key": "F# minor",
+   "loop_start": 0,
+   "loop_end": 2194304,
+   "loop_samples": 2194304,
+   "bar_samples": 68572,
+   "file_wav": "wav/pink.wav",
+   "file_ogg": "ogg/pink.ogg",
+   "samples": 2194304,
+   "seconds": 45.7147,
+   "lufs_i": -19.0,
+   "true_peak_db": -4.29
+  },
+  "focus": {
+   "desc": "勝負の一球 / 主旋律は黙り弱起2音の問いかけだけ。16分の低いパルス・暗いパッド・心拍のキック・小節末のスネアの高まり",
+   "bars": 32,
+   "kind": "loop",
+   "bpm": 168,
+   "time_signature": "4/4",
+   "key": "F# minor",
+   "loop_start": 0,
+   "loop_end": 2194304,
+   "loop_samples": 2194304,
+   "bar_samples": 68572,
+   "file_wav": "wav/focus.wav",
+   "file_ogg": "ogg/focus.ogg",
+   "samples": 2194304,
+   "seconds": 45.7147,
+   "lufs_i": -25.0,
+   "true_peak_db": -5.64
+  },
+  "success": {
+   "kind": "oneshot",
+   "desc": "成功の応答 2小節(D→E→A 長調で着地、Aの響きを残す)。先頭0.1sは成功SE頭を避ける予備",
+   "bpm": 168,
+   "bars": 2,
+   "preroll_s": 0.1,
+   "body_s": 2.857167,
+   "tail_s": 3.2,
+   "key": "A major",
+   "file_wav": "wav/success.wav",
+   "file_ogg": "ogg/success.ogg",
+   "samples": 295544,
+   "seconds": 6.1572,
+   "lufs_i": -17.24,
+   "true_peak_db": -1.59,
+   "reentry_bars_in_normal": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    24,
+    28
+   ]
+  },
+  "success_short": {
+   "kind": "oneshot",
+   "desc": "成功の短い応答 1小節(E→A のA長調着地のみ。低灯の成功用)",
+   "bpm": 168,
+   "bars": 1,
+   "preroll_s": 0.1,
+   "body_s": 1.428583,
+   "tail_s": 3.2,
+   "key": "A major",
+   "file_wav": "wav/success_short.wav",
+   "file_ogg": "ogg/success_short.ogg",
+   "samples": 226972,
+   "seconds": 4.7286,
+   "lufs_i": -17.03,
+   "true_peak_db": -1.58
+  },
+  "jp_intro": {
+   "kind": "oneshot",
+   "desc": "JP intro 2小節(上昇スケール+スネアロール。末尾の弱起2音からbodyのE6へ)",
+   "bpm": 168,
+   "bars": 2,
+   "preroll_s": 0.1,
+   "body_s": 2.857167,
+   "tail_s": 3.2,
+   "key": "A major",
+   "file_wav": "wav/jp_intro.wav",
+   "file_ogg": "ogg/jp_intro.ogg",
+   "samples": 295544,
+   "seconds": 6.1572,
+   "lufs_i": -17.0,
+   "true_peak_db": -2.23
+  },
+  "jp_body_loop": {
+   "kind": "loop",
+   "desc": "JP body 8小節ループ(A長調。継ぎ目なし。払出の長さに合わせて反復)",
+   "bpm": 168,
+   "bars": 8,
+   "key": "A major",
+   "loop_start": 0,
+   "loop_end": 548576,
+   "loop_samples": 548576,
+   "file_wav": "wav/jp_body_loop.wav",
+   "file_ogg": "ogg/jp_body_loop.ogg",
+   "samples": 548576,
+   "seconds": 11.4287,
+   "lufs_i": -17.0,
+   "true_peak_db": -2.4
+  },
+  "jp_outro": {
+   "kind": "oneshot",
+   "desc": "JP outro 2小節(D→E→A 着地)+残響",
+   "bpm": 168,
+   "bars": 2,
+   "preroll_s": 0.1,
+   "body_s": 2.857167,
+   "tail_s": 3.2,
+   "key": "A major",
+   "file_wav": "wav/jp_outro.wav",
+   "file_ogg": "ogg/jp_outro.ogg",
+   "samples": 295544,
+   "seconds": 6.1572,
+   "lufs_i": -17.0,
+   "true_peak_db": -1.99
+  }
+ },
+ "sources": {
+  "composition": "旋律・和声・ベース・ドラム・対旋律を compose/g4.py, g4_roles.py に明示的に記述(乱数の音符列なし)。乱数はタイミング/ベロシティの人間的な揺れ(シード固定)のみ。案4の旋律は compose/melody_round1.py。",
+  "synthesis": "主旋律は自前のパルス波(控えめ)+Surge XT 1.3.4(GPL-3、同梱工場パッチ)のスーパーソー(Uni Saw FB)の重ね。対旋律・アルペジオ・tease はパルス波。ベースは Square Bass(サブ)+Wide Bassline(倍音, 軽い飽和)でキックにサイドチェイン風のうねり。パッド・スタブは Surge XT でリバーブ/ディレイ送り。ドラムは FluidSynth(GeneralUser GS)の Electronic キットに Power キットを重ね、軽い飽和。ハットは帯域を絞った別stem。ピアノ系なし。",
+  "soundfont": {
+   "name": "GeneralUser GS v2.0.3",
+   "author": "S. Christian Collins",
+   "file": "third_party/GeneralUser_GS/GeneralUser-GS.sf2 (git管理外)",
+   "sha256": "9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe",
+   "license": "GeneralUser GS License v2.0（私用・商用の音楽制作に制限なく使用可。一部サンプルの完全な来歴は保証されない旨の記載あり。LICENSE.txt 参照）"
+  },
+  "music_ai": "使用なし"
+ },
+ "loudness_targets_lufs": {
+  "normal": -20.0,
+  "pink": -19.0,
+  "focus": -25.0,
+  "success": -17.0,
+  "jp": -17.0
+ },
+ "notes": "24bit WAV は .gitignore（compose/g4_build.py から再生成）。ogg は追跡。初稿(128BPM, B minor)は git履歴 cc9e486。チップ寄り版(G4_STYLE=chip)は『audio(bgm): 案4(チップ寄り)を release_default_on:true に』のコミット。"
+}

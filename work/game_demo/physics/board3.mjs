@@ -12,6 +12,8 @@ export class Board3 {
   constructor(RAPIER, world, { model, layout, dims, rng = Math.random, hz = 480, launchFrame = null }) {
     this.launchFrame = launchFrame;
     this.R = RAPIER; this.world = world; this.rng = rng; this.hz = hz; this.model = model; this.layout = layout; this.dims = dims;
+    this.allowStuckNudge = true;
+    this.collisionObservers = new Set();
     this.balls = new Map(); this.events = []; this.tick = 0; this.nudges = 0; this.pegOf = new Map();
     this.queue = new RAPIER.EventQueue(true); this.sensorY = model.phys.sensors[0].y;
     this.cups = layout.cups.map((c) => ({ n: c.n, x: c.xc / 1000, w: c.mouth_width / 1000 })); this.mouthY = layout.cups[0].ym / 1000;   // 口の入口線(仕切りの上端)
@@ -57,6 +59,7 @@ export class Board3 {
   step() {
     this.world.step(this.queue); this.tick++;
     this.queue.drainCollisionEvents((h1, h2, started) => {
+      for (const observer of this.collisionObservers) observer(h1, h2, started);
       if (!started) return; const pin = this.pegOf.get(h1) ?? this.pegOf.get(h2); if (pin === undefined) return;
       const sid = this.ballOf?.get(h1) ?? this.ballOf?.get(h2); const b = this.balls.get(sid); if (!b) return; const v = b.body.linvel();
       this.events.push({ type: 'peg', index: pin, speed: Math.hypot(v.x, v.y, v.z) / S, shotId: sid });
@@ -70,7 +73,7 @@ export class Board3 {
       if (this.tick % 8 === 0) {
         const v = b.body.linvel(); const sp = Math.hypot(v.x, v.y, v.z) / S;
         if (sp < 0.01) b.still += 8 / this.hz; else b.still = 0;
-        if (b.still > 1.5) { b.still = 0; this.nudges++; const m = 0.007057, dv = 0.02 * (this.rng() < 0.5 ? -1 : 1); b.body.applyImpulse({ x: m * dv * S, y: 0, z: 0 }, true); this.events.push({ type: 'stuck_nudge', shotId: id }); }
+        if (this.allowStuckNudge && b.still > 1.5) { b.still = 0; this.nudges++; const m = 0.007057, dv = 0.02 * (this.rng() < 0.5 ? -1 : 1); b.body.applyImpulse({ x: m * dv * S, y: 0, z: 0 }, true); this.events.push({ type: 'stuck_nudge', shotId: id }); }
       }
     }
   }

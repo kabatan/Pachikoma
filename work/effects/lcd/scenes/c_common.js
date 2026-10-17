@@ -215,9 +215,14 @@
   // 常設用。ホストが毎フレーム LCD.hud(ctx, {sec}) を呼ぶ。未接続時に時刻を捏造しない。
   // LCD.initのシーン絞り込み時には、この配列も LCD.load する。
   LCD.hudAssets = ['plate_A.png', 'glow_soft.png'];
+  // 常設の札の置き場(液晶 1280x720)。位置はここ1か所。外接矩形は LCD.layoutRects() で取れる(R2-TU の字幕の帯が重ならないことの検査用)。
+  //   mochi/nokori: 板 470x150 の中心。chip: 左上の角。caption: 字幕の帯(R2-TU 案。ここは札を置かない)
+  LCD.LAYOUT = LCD.LAYOUT || { mochi: { x: 285, y: 84, w: 470, h: 150 }, nokori: { x: 1030, y: 84, w: 470, h: 150 }, chip: { x: 24, y: 176, w: 400, h: 150 }, caption: { x: 24, y: 430, w: 616, h: 260 } };
+  LCD.layoutRects = () => { const L = LCD.LAYOUT, r = (o, centre) => centre ? { x: o.x - o.w / 2, y: o.y - o.h / 2, w: o.w, h: o.h } : { x: o.x, y: o.y, w: o.w, h: o.h };
+    return { mochi: r(L.mochi, 1), nokori: r(L.nokori, 1), chip: r(L.chip), caption: r(L.caption) }; };
   LCD.hud = (c, params = {}) => {
     if (typeof params.sec !== 'number' || !Number.isFinite(params.sec)) return;
-    const sec = Math.ceil(Math.max(0, params.sec)), danger = sec <= 10, x = params.x ?? 1030, y = params.y ?? 84;
+    const sec = Math.ceil(Math.max(0, params.sec)), danger = sec <= 10, x = params.x ?? LCD.LAYOUT.nokori.x, y = params.y ?? LCD.LAYOUT.nokori.y;
     // 遠くからでも読める大きさ(27型の縦画面では液晶全体が小さい。筐体全体の画で「のこり」まで読めること): 板 470x150、数字 112px
     LCD.blit(c, 'plate_A.png', x, y, { w: 470, h: 150, a: .96 });
     if (danger) LCD.add(c, 'glow_soft.png', x, y, { w: 520, h: 210, a: .3 + .14 * Math.sin((LCD.t || 0) * 12), tint: '#ff4260' });
@@ -226,12 +231,37 @@
     LCD.text(c, '秒', x + 160, y + 20, { size: 52, stroke: 4, fill2: danger ? '#ffa1ad' : '#d9ebfa' });
     C.prizeChip(c);
   };
+  // 常設: 持ち玉(手元で使える玉)。「のこり」と左右対称の同じ大きさの板を左上に。数字は筐体の7セグと同じ値(LCD.state.ballsShown = 皿に着いた分だけ増え、撃つと減る)。
+  // 増えた時は数字が跳ねて金色に、減る時はわずかに沈む。少ない時(3玉以下)はだいだいに脈打ち、0は赤。玉が液晶へ飛び込む表現はしない(物理にできない動きは禁止)。数字の変化だけで見せる。
+  LCD.hudMochi = (c, params = {}) => {
+    const v = LCD.state.ballsShown;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return;
+    const M = LCD.hudMochiS || (LCD.hudMochiS = { v, t: -9, d: 0, from: v });
+    if (M.v !== v) { M.d = v > M.v ? 1 : -1; M.from = M.v; M.v = v; M.t = LCD.t || 0; }
+    const age = (LCD.t || 0) - M.t, x = params.x ?? LCD.LAYOUT.mochi.x, y = params.y ?? LCD.LAYOUT.mochi.y, low = v <= 3, empty = v <= 0;
+    // JACKPOT の題が左上に収まる間は、板を小さくして左の端へ寄せる(題と重ねない)
+    const cdt = Math.min(.1, Math.max(0, (LCD.t || 0) - (M.lt ?? (LCD.t || 0)))); M.lt = LCD.t || 0;
+    const ctg = LCD.active.some((sc) => sc.id === 'jp') ? 1 : 0; if (!Number.isFinite(M.cs)) M.cs = 0; M.cs = M.cs + (ctg - M.cs) * Math.min(1, cdt * 9); const cs = M.cs < .01 ? 0 : M.cs;
+    const pop = M.d > 0 ? Math.exp(-age * 7) : 0, dip = M.d < 0 ? Math.exp(-age * 9) : 0;
+    const warn = empty ? '#ff5265' : low ? '#ffb347' : null, pulse = low ? .5 + .5 * Math.sin((LCD.t || 0) * (empty ? 9 : 6)) : 0;
+    if (cs > 0) { const k = 1 - .48 * cs; c.translate(50 + (18 - 50) * cs, 9 + (14 - 9) * cs); c.scale(k, k); c.translate(-50, -9); }
+    LCD.blit(c, 'plate_A.png', x, y, { w: 470, h: 150, a: .96 });
+    if (pop > .02) LCD.add(c, 'glow_soft.png', x + 30, y, { w: 460, h: 200, a: .5 * pop, tint: '#ffd96b' });
+    if (low) LCD.add(c, 'glow_soft.png', x, y, { w: 520, h: 210, a: .18 + .22 * pulse, tint: empty ? '#ff4260' : '#ffa23c' });
+    LCD.text(c, 'もちだま', x - 150, y + 4, { size: 36, stroke: 4, fill1: '#ffffff', fill2: warn ? (empty ? '#ffb3bd' : '#ffd9a0') : '#d9ebfa' });
+    const big = v >= 1000, size = (big ? 84 : 114) * (1 + .22 * pop - .08 * dip);
+    c.save(); c.translate(x + 62, y - 2 + 6 * dip);
+    LCD.text(c, String(v), 0, 0, { size, weight: 900, stroke: 6, fill1: pop > .1 ? '#fffbe0' : warn ? '#fff0e8' : '#f4fbff', fill2: pop > .1 ? '#ffd24a' : warn ? (empty ? '#ff5265' : '#ffa23c') : '#c8e9ff', glow: pop > .1 ? '#ff9a1a' : warn ? (empty ? '#de1c47' : '#e8761a') : '#5c9ccf' });
+    c.restore();
+    LCD.text(c, '玉', x + 190, y + 20, { size: 52, stroke: 4, fill2: warn ? (empty ? '#ffa1ad' : '#ffd9a0') : '#d9ebfa' });
+  };
   // 常設: いま勝負で当たると何玉か(灯の数ごと。数は規則から)と、いまの灯の数。旧UIの賞玉パネルの代わり(左側に小さく)。0灯と時間切れ後は出さない
   C.prizeChip = (c) => {
     const n = clamp(Math.floor(LCD.state.nDisp ?? LCD.state.n ?? 0), 0, 7), AW = LCD.rules().awards || [0, 1, 2, 3, 12, 30, 80];
     if (n < 1 || LCD.state.hudChip === false) return;
-    if (LCD.active.some((sc) => /^(challenge_|success|jp|fail|lamp[456]|dup_protect|roulette|ascend|timeup|add100|finish|result|ticket|start|howto|title|attract)/.test(sc.id))) return;   // 勝負・当たり・結果などの演出中は、その演出の邪魔をしない
-    const x = 24, y = 112, w = 400, h = 150, jp = n >= 6, big = n >= 4;
+    if (LCD.state.chipWait) return;   // 最初の「しょうぶ」の案内が済むまで出さない(effects.js が tutorial.js の済みの記録で決める)
+    if (LCD.active.some((sc) => /^(challenge_|success|jp|fail|lamp[456]|dup_protect|roulette|ascend|timeup|add100|finish|result|ticket|start|howto|title|attract|warn10)/.test(sc.id))) return;   // 勝負・当たり・結果などの演出中は、その演出の邪魔をしない
+    const x = LCD.LAYOUT.chip.x, y = LCD.LAYOUT.chip.y, w = LCD.LAYOUT.chip.w, h = LCD.LAYOUT.chip.h, jp = n >= 6, big = n >= 4;
     c.save();
     c.fillStyle = 'rgba(6,20,52,.74)'; c.strokeStyle = jp ? '#ffe27a' : big ? '#ffb347' : '#9fd0ff'; c.lineWidth = 4;
     c.beginPath(); c.roundRect(x, y, w, h, 20); c.fill(); c.stroke();

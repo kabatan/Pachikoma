@@ -31,47 +31,43 @@
     }
   });
 
-  // はじめて灯った時(各約2.4秒)。1) 入った穴のランプがつく  2) まだ暗い穴を狙う(矢印)
-  LCD.scene({id:'tut_first_lamp',dur:4.8,assets:[...B.assets,...E.assets],
-    draw(c,t,sc){
-      const a=smooth(t/.2)*B.exit(t,4.8,.3),lit=Math.max(1,Math.min(7,Math.round(sc.params.pocket||4)));
-      plate(c,420,a);
-      const step=t<2.4?0:1,st=[t,t-2.4][step],X=i=>640+(i-4)*138;
-      for(let i=0;i<2;i++){c.save();c.globalAlpha=a;c.fillStyle=i===step?'#ffd978':'rgba(255,255,255,.3)';c.beginPath();c.arc(640+(i-.5)*40,446,i===step?11:8,0,TAU);c.fill();c.restore();}
-      goldText(c,['入った 穴の ランプが つくよ!','ちがう 穴に 入れよう!'][step],640,486,{size:58,a});
-      const lev=Array(8).fill(0),flash=Array(8).fill(0),pulse=Array(8).fill(0);
-      if(step===0){
-        const u=(st-.3)/.7;drop(c,X(lit),520,560,u,a);
-        if(st>1.0){lev[lit]=smooth((st-1.0)/.15);flash[lit]=Math.max(0,1-(st-1.0)/.6);}
-      } else {
-        lev[lit]=1;for(let i=1;i<=7;i++)if(i!==lit)pulse[i]=1;
-      }
-      row(c,t,598,{s:.82,step:138,ly:86,ls:78,lev,flash,pulse,a});
-      if(step===1){const tg=lit<4?lit+2:lit-2;LCD.arrow(c,X(tg),534+Math.sin(t*7)*4,'down',t,{s:.5,a:a*smooth(st/.3)});}
-    }
-  });
+  // ───────── 字幕の段(ヒント)の共通部 ─────────
+  // 方針(R2-TU 設計 DESIGN.md): 1回に1概念・1文(12字以内)・起きた直後に・主役の演出が出たら引っ込める。
+  // 字幕は液晶の左下の「レーン」に出し、常設の札(もちだま・のこり・賞のチップ)と重ねない。穴を指す絵は液晶に出さない(穴は盤面のLED。fx.hint 参照)。
+  // 検査用の記録 LCD.tut.log: vis=読める濃さで出ていた秒、hid=主役に譲っていた秒、ovl=主役と同時に0.05以上の濃さで描いた秒。
+  const TUT=LCD.tut=LCD.tut||{log:[]};
+  TUT.HINTS=['tut_launch','tut_goal','tut_first_lamp','tut_aim','tut_dup1','tut_challenge','tut_win','tut_lose','tut_lamp4','tut_roul','tut_end'];
+  TUT.MAIN=/^(challenge_|success|jp|fail|lamp[456]|dup_protect|roulette|ascend|timeup|add100|finish|result|ticket|start|howto|title|attract|warn10|ladder)/;
+  TUT.LANE={x:24,y:440,w:616,h:250};   // 字幕の置ける範囲(1280x720の液晶上)。常設の札は上段(y<330)なので重ならない
+  const hint=(id,dur,paint,o={})=>LCD.scene({id,dur,hold:true,assets:[...B.assets,...E.assets],
+    start(sc){sc.ht=0;sc.wall=0;sc.gf=1;sc.rec={id,at:+LCD.t.toFixed(2),dur,vis:0,hid:0,ovl:0};TUT.log.push(sc.rec);},
+    update(sc,dt){
+      const busy=LCD.active.some(x=>x!==sc&&TUT.MAIN.test(x.id));
+      sc.gf=clamp(sc.gf+(busy?-1:1)*dt/.1,0,1);
+      if(!busy)sc.ht+=dt;
+      sc.wall+=dt;sc.busy=busy;
+      if(sc.gf>.85)sc.rec.vis+=dt;if(busy)sc.rec.hid+=dt;if(busy&&sc.gf>.05)sc.rec.ovl+=dt;
+      if(sc.ht>=dur||sc.wall>dur+5)LCD.stop(sc.uid);
+    },
+    draw(c,t,sc){const a=sc.gf*smooth(sc.ht/.18)*B.exit(sc.ht,dur,.3);if(a>.001)paint(c,sc.ht,sc,a);}});
+  // 字幕: 画面下の帯(あそびかたと同じ形)。lines は1〜2行(1行目は小さめ、2行目が大きい。1行だけなら大きく)。幅が画面に収まるよう縮める。
+  const cap=(c,a,lines,o={})=>{
+    c.save();const g=c.createLinearGradient(0,540,0,720);g.addColorStop(0,'rgba(4,10,30,0)');g.addColorStop(.28,'rgba(4,10,30,.82)');g.addColorStop(1,'rgba(4,10,30,.94)');c.globalAlpha=a;c.fillStyle=g;c.fillRect(0,540,1280,180);c.restore();
+    const n=lines.length;
+    lines.forEach((ln,i)=>{
+      const big=(i===n-1),sz0=big?64:48,cy=n===1?646:(i===0?604:668);
+      c.save();c.font=`900 ${sz0}px ${LCD.font}`;const w=c.measureText(ln).width;c.restore();
+      const sz=Math.min(sz0,sz0*1120/Math.max(1,w));
+      goldText(c,ln,640,cy,{size:sz,a,stroke:Math.max(7,sz*.17),...(big?{fill1:'#fff9e0',fill2:'#ffd24a',strokeColor:'#6e3f18'}:{})});
+    });
+    if(o.extra)o.extra(c,a);
+  };
+  const rbtn=(c,t,a)=>B.point(c,1196,636,'right',t,{s:.8,a});     // 右のボタン(筐体の右下)を指す
+  const lbtn=(c,t,a)=>B.point(c,128,636,'left',t,{s:.8,a});       // 左のボタン(筐体の左下)を指す
 
-  // 灯が増えた最初の勝負の案内(初回の1回だけ。灯の演出の後)。右のボタンへ。
-  LCD.scene({id:'tut_challenge',dur:2.8,hold:true,assets:[...B.assets,...E.assets],
-    draw(c,t){
-      const tail=smooth((t-2.55)/.25),a=smooth(t/.18)*(1-tail);
-      if(a>.001){
-        plate(c,420,a);
-        goldText(c,'右の ボタンで 勝負!',640,466,{size:66,a,stroke:11});
-        goldText(c,'ランプの ない 穴で 玉が ふえる!',640,534,{size:50,a,stroke:9,fill1:'#fff3d8',fill2:'#ffd9a0'});
-        const u=(t-.5)/.6,hit=t>1.1?1:0,lev=Array(8).fill(1),flash=Array(8).fill(0),pulse=Array(8).fill(0);
-        lev[4]=hit?smooth((t-1.1)/.15):0;pulse[4]=hit?0:1;flash[4]=hit?Math.max(0,1-(t-1.1)/.6):0;
-        row(c,t,616,{s:.72,step:114,ly:76,ls:64,lev,flash,pulse,a});
-        drop(c,640,572,614,u,a);
-        // 玉の山(ふえる)
-        const pile=smooth((t-1.25)/.45);
-        B.pile(c,150,700,Math.round(pile*15),14,{a:a*pile,gold:false});
-        if(pile>0)goldText(c,'ふえた!',150,628,{size:46,a:a*pile,stroke:8});
-      }
-      // 右の勝負ボタン(筐体の右下)を指す。液晶の右下の隅。
-      B.point(c,1180,646,'right',t,{s:lerp(.9,.55,tail),a:smooth(t/.2)});
-    }
-  });
+  hint('tut_goal',2.8,(c,t,sc,a)=>{const sec=Math.round(sc.params.sec||LCD.state.sec||100);cap(c,a,['たまを うって あなに いれて',`たまを ふやそう! (${sec}びょう)`]);});
+  hint('tut_first_lamp',2.2,(c,t,sc,a)=>cap(c,a,['はいった あなが ひかる!','ちがう あなに いれよう']));
+  hint('tut_aim',2.8,(c,t,sc,a)=>cap(c,a,['ひかっていない あなに','いれよう']));
 
   // ───────── 重複(保護中) ─────────
   // 「同じ穴」を、眠っている実物のルーレットと盾で見せる。初回だけ一行足す。
@@ -83,7 +79,7 @@
   };
   LCD.scene({id:'dup_protect',dur:1.4,assets:[...B.assets,...E.assets],
     draw(c,t,sc){
-      const first=sc.params.first===true,a=smooth(t/.12)*B.exit(t,1.4,.25),up=easeOut(t/.24);
+      const first=false,a=smooth(t/.12)*B.exit(t,1.4,.25),up=easeOut(t/.24);
       LCD.add(c,'glow_soft.png',640,565,{w:1150,h:380,a:.19*a,tint:'#9fdcff'});
       B.ribbon(c,640,560,1130,first?210:175,a);
       LCD.upa(c,170,lerp(830,572,up),{scale:5,mood:'smile',a});
@@ -95,29 +91,19 @@
       LCD.text(c,'おなじ あな! まだ セーフ!',860,ty+6,{size:62,weight:900,a:a*.8,fill1:'#10182a',fill2:'#10182a',stroke:17,strokeColor:'#10182a'});
       LCD.text(c,'おなじ あな! まだ セーフ!',856,ty,{size:62,weight:900,a,fill1:'#f2fbff',fill2:'#8ccff2',stroke:13,strokeColor:'#24527a'});
       LCD.text(c,'おなじ あな! まだ セーフ!',856,ty,{size:62,weight:900,a,fill1:'#ffffff',fill2:'#cfeeff',stroke:5,strokeColor:'#eaf8ff'});
-      if(first) LCD.text(c,'ふえると 同じ穴で ランプが 消えるかも',700,608,{size:52,weight:900,a,fill1:'#ffffff',fill2:'#c8ecff',stroke:11,strokeColor:'#1c4468'});
       LCD.add(c,'flare_ring.png',330,566,{w:100+300*smooth(t/.8),h:80+200*smooth(t/.8),a:.35*a*(1-smooth(t/.9)),tint:'#bfe6ff'});
     }
   });
 
-  // 4灯になった最初の1回だけ: ここから勝負が大きくなる。数字が主役。同じ穴の注意は実物のルーレットの絵つき。
-  LCD.scene({id:'tut_lamp4',dur:3.8,assets:[...B.assets,...E.assets],
-    draw(c,t){
-      const a=smooth(t/.2)*B.exit(t,3.8,.3);
-      plate(c,424,a);
-      goldText(c,'ここから 勝負が 大きいよ!',640,474,{size:58,a,stroke:10});
-      const AW=LCD.rules().awards||[0,1,2,3,12,30,80],items=[['4つで',`${AW[4]}こ`,370],['5つで',`${AW[5]}こ`,640],['6つで','JP!',910]];
-      items.forEach(([k,v,x],i)=>{
-        const q=smooth((t-.4-i*.25)/.3),b=1+.05*Math.sin(t*4+i);
-        LCD.text(c,k,x,544,{size:44,a:a*q,fill1:'#ffe3ee',fill2:'#ffb6d0',stroke:7});
-        LCD.text(c,v,x,612,{size:i===2?84:76,weight:900,a:a*q,fill1:i===2?'#fff7d0':'#fff3c8',fill2:i===2?'#ffd24a':'#ffcf7a',stroke:12,strokeColor:'#6e3f18',glow:i===2?'#ffd24a':'#d98a3a'});
-        LCD.add(c,'glow_soft.png',x,606,{w:260*b,h:150*b,a:a*q*.3,tint:i===2?'#ffe08a':'#ffcf7a'});
-      });
-      // 同じ穴の注意: 実物のルーレット(回る)つき
-      const q2=smooth((t-1.5)/.3);
-      E.wheel(c,118,664,50,{rot:t*3.2,needle:0,a:a*q2});
-      LCD.text(c,'同じ穴に 入ると ランプが 消えるかも',716,680,{size:46,a:a*q2,fill1:'#ffd9e4',fill2:'#ffb0c8',stroke:8,strokeColor:'#5a1a30'});
-      B.point(c,1196,560,'right',t,{s:.6,a:a*smooth((t-1)/.3)});
-    }
-  });
+
+  // おなじ あな(最初の保護)。直後に1回だけ。
+  // (「おなじ あな! まだ セーフ」は dup_protect 自身が言う。ここでは次の一言: 4つからは危ない)
+  hint('tut_dup1',2.8,(c,t,sc,a)=>cap(c,a,['おなじ あなは あぶない!','4つから ランプが きえる']));
+  // 勝負の案内(ランプ2つ以上・落ち着いた時)。右ボタンを指す。ボタンのLEDは fx.hint('button')。
+  hint('tut_challenge',3.6,(c,t,sc,a)=>{cap(c,a,['みぎボタンで しょうぶ!','ひかってない あなへ!']);rbtn(c,t,a*smooth(t/.2));});
+  hint('tut_win',2.6,(c,t,sc,a)=>cap(c,a,['せいこう!','たまが ふえた']));
+  hint('tut_lose',3.2,(c,t,sc,a)=>cap(c,a,['はずれ…','ランプが ぜんぶ きえた']));
+  hint('tut_lamp4',2.8,(c,t,sc,a)=>cap(c,a,['4つ! しょうぶで +12玉','ランプが おおいほど ふえる']));
+  hint('tut_roul',3.0,(c,t,sc,a)=>cap(c,a,['おなじ あなで ルーレット','ランプが きえた']));
+  hint('tut_end',3.4,(c,t,sc,a)=>cap(c,a,['のこり すくない!','もちだま 0 か じかん 0 で おわり']));
 })();
