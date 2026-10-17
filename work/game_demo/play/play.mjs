@@ -1,7 +1,7 @@
 // 通しプレイ: 規則+480Hz Rapier+光層+DOM UI。
 // ?seed=N &manual &nolog &quiet &debug &pack=<manifest URLまたはディレクトリ>
 import RAPIER from '../physics/node_modules/@dimforge/rapier3d-compat/dist/rapier.mjs';
-import { PhysicsAdapter } from '../physics/adapter.mjs';
+import { PhysicsAdapter, RAPID_SUPPLY } from '../physics/adapter.mjs';
 import { createMedalApp } from '../ui/demo_host.mjs';
 import { HybridRenderer } from '../web/src/hybrid_renderer.mjs';
 import { Gen } from '../web/src/dummy.mjs';
@@ -18,11 +18,12 @@ async function readText(url) { const r = await fetch(url); if (!r.ok) throw new 
 const DEFAULT_PLAY_CONFIG = 'work/game_tuning/proto/config.json', DEFAULT_PACK = '/assembly/sol61_v36_pack/stage2c/manifest.json';   // 引数なしで開いた時の本番構成(?config=&pack= で上書き、空文字で無効)
 const config = await loadPlayConfig(q.has('config') ? q.get('config') : DEFAULT_PLAY_CONFIG, readText);
 const seed = q.has('seed') ? Number(q.get('seed')) : config.seed ?? 1;
-await loadPlayRules(config.rules, readText);
+const playRules = await loadPlayRules(config.rules, readText);
 await RAPIER.init();
 const CAB = new URL('../../cabinet/', import.meta.url);
 const pa = await PhysicsAdapter.create(RAPIER, {
   readText: (p) => readText(new URL(p, CAB)), importModule: (p) => import(new URL(p, CAB).href), seed, stageDir: config.stageDir, jitter: config.jitter,
+  ...(playRules.MaxInFlight > 1 ? RAPID_SUPPLY : {}),   // 同時発射なら玉の補給も連射に合わせる
   boardTimeScale: Number(q.get('pscale') ?? 0.35),   // 盤上の玉の進み(1=実時間)。落下を目で追える速さ(平均0.72秒→約2秒)。?pscale=1 で実時間
 });
 pa.playConfig = { ...config, seed, pinCount: pa.board.layout.pins.length };
@@ -108,7 +109,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') document.documentElement.requestFullscreen();
   if (e.code === 'KeyD') { debugConfig.hidden = !debugConfig.hidden; hud.style.display = debugConfig.hidden ? 'none' : 'block'; }
 });
-window.__ready = true; draw();
+window.__ready = true; draw(); document.getElementById('loading')?.remove();
 if (!q.has('manual')) requestAnimationFrame(loop);
 }
 main().catch((error) => {

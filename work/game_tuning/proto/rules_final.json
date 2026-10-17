@@ -1,5 +1,7 @@
 {
   "RapidFire": false,
+  "MaxInFlight": 3,
+  "FireInterval": 0.6,
   "ClockStopOnReset": true,
   "ClockStopOnJackpot": true,
   "ClockStopBudget": 10,
@@ -23,7 +25,7 @@
   ],
   "LoanBalls": 15,
   "InitialSeconds": 72,
-  "ExtraSeconds": 25,
+  "ExtraSeconds": 22,
   "ContinueSeconds": 8,
   "Awards": [
     0,
@@ -73,14 +75,7 @@
     4,
     1
   ],
-  "PrizeThresholds": [
-    0,
-    8,
-    24,
-    44,
-    165,
-    543
-  ],
+  "PrizeThresholds": [0, 7, 29, 47, 165, 543],
   "PrizeNames": [
     "参加賞",
     "C賞",

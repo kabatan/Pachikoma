@@ -208,14 +208,14 @@ export class MedalPresenter {
     const lamps = this.displayLamps(), mode = this.mode(), wallet = this.displayWallet();
     const th = rules.PrizeThresholds; let ti = 0; th.forEach((t, i) => { if (t <= g.wallet) ti = i; });
     const next = ti + 1 < th.length ? { name: rules.PrizeNames[ti + 1], need: th[ti + 1] - g.wallet } : null;
-    const stake = this.reveal ? rules.Awards[this.reveal.r.before.length] : (g.shot?.award ?? g.award);
+    const stake = this.reveal ? rules.Awards[this.reveal.r.before.length] : (g.shot?.challenge ? g.shot.award : g.award);
     return {
       phase: g.phase, mode, secondsLeft: g.secondsLeft, secondsTotal: rules.InitialSeconds + (g.addedCredit ? rules.ExtraSeconds : 0),
       addedCredit: g.addedCredit, wallet, lamps, lampCount: lamps.length, armed: g.armed, challengeLive: mode === 'challenge' || mode === 'final',
       stake, stakeLabel: rules.hasJackpot && mode === 'final' ? 'JP' : '+' + stake, awards: rules.Awards, jackpotAwards: rules.JackpotAwards, hasJackpot: rules.hasJackpot,
       chipIndex: lamps.length - 1,
       prize: { name: g.prize, next }, prizeTable: rules.PrizeNames.map((n, i) => ({ name: n, from: th[i] })),
-      canFire: g.canFire && !c.confirmFinish, canAdd: g.canAdd, canChallenge: g.canFire && g.lampCount > 0 && g.lampCount < 6,
+      canFire: (g.overlap ? g.canAim : g.canFire) && !c.confirmFinish, canAdd: g.canAdd, canChallenge: (g.overlap ? g.canArm || !!c.preBuffer : g.canFire) && g.lampCount > 0 && g.lampCount < 6,
       confirmFinish: c.confirmFinish, endReason: g.endReason, offerLeft: g.offerLeft, offerTotal: rules.ContinueSeconds,
       aim: c.aim, banner: f.banner, roulette: f.roulette, jackpot: f.jackpot, cutin: f.cutin,
       result: { prize: g.prize, wallet: g.wallet, counted: this.count.counted, total: this.count.total, done: this.count.done, best: g.bestAward, maxLamps: g.maxLamps,

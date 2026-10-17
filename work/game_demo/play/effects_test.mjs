@@ -109,6 +109,23 @@ assert.equal(events.at(-1).data.reasonCode, 'balls');
 b.action('finish'); b.bridge.physics({ type: 'count_done', counted: 0 });
 assert.equal(events.at(-1).data.prizeRank, 'participation');
 
+{ // 同時発射: 盤上に玉があるあいだの勝負の先押しは challenge_wait で受け付けを知らせ、盤が空になってから challenge_declare が自動で出る
+  const ctrl = new MedalController({ rules: new MedalRules({ ...base, LoanBalls: 80, MaxInFlight: 3, FireInterval: 0.6, JackpotAwards: [80], JackpotWeights: [100] }), seed: 7 });
+  const presenter = new MedalPresenter(ctrl), bus = new EffectsBus(); bus.on('*', e => events.push(e));
+  const bridge = connectEffects({ ctrl, presenter, bus });
+  const tick = dt => { bridge.advance(dt); ctrl.update(dt); presenter.update(dt); bridge.sync(); };
+  const press = name => { ctrl.update(0); return ctrl.dispatch(name); };
+  press('start'); tick(ctrl.game.effectLeft + .01);
+  assert.ok(press('fire')); const a = ctrl.game.shot.id; bridge.physics({ type: 'launch', shotId: a });
+  tick(.65); assert.ok(press('fire')); const b2 = ctrl.game.shot.id; bridge.physics({ type: 'launch', shotId: b2 });
+  assert.equal(bus.snapshot().state.canLaunch, true);   // 狙いは止まらない
+  assert.ok(ctrl.landing(a, 1)); bridge.physics({ type: 'cup', cup: 1, shotId: a }); tick(.5);
+  const before = events.length; assert.ok(press('challenge'));
+  assert.equal(events.slice(before).map(e => e.id).join(), 'challenge_wait'); assert.equal(ctrl.game.armed, false);
+  assert.equal(press('fire'), false);   // 勝負待ちの間は新しい玉を撃たない
+  assert.ok(ctrl.landing(b2, 2)); bridge.physics({ type: 'cup', cup: 2, shotId: b2 }); tick(.5);
+  assert.equal(ctrl.game.armed, true); assert.ok(events.slice(before).some(e => e.id === 'challenge_declare'));
+}
 for (const e of events) {
   assert.ok(EFFECT_IDS.includes(e.id)); assert.equal(e.state.lit, e.state.pockets.length);
   assert.ok(e.state.pockets.every(l => l >= 1 && l <= 7));

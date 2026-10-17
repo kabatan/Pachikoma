@@ -4,7 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { loadPlayConfig, loadPlayRules } from '../play/config.mjs';
-import { PhysicsAdapter } from './adapter.mjs';
+import { PhysicsAdapter, RAPID_SUPPLY } from './adapter.mjs';
 import { MedalPhase } from '../rules/medal_rules.mjs';
 import { MedalController } from '../ui/controller.mjs';
 import { MedalPresenter } from '../ui/presenter.mjs';
@@ -15,8 +15,8 @@ const configPath = configIndex >= 0 ? args.splice(configIndex, 2)[1] : process.e
 if (configIndex >= 0 && !configPath) throw new Error('--configには設定ファイルのパスが必要です');
 const config = await loadPlayConfig(configPath ? (/^[a-z]+:/i.test(configPath) ? configPath : pathToFileURL(configPath).href) : null, async p => readFileSync(new URL(p), 'utf8'));
 const SECS = +(args[0] ?? 60), SEED = +(args[1] ?? config.seed ?? 1);
-const pa = await PhysicsAdapter.create(RAPIER, { readText: async (p) => readFileSync(new URL(p, CAB), 'utf8'), importModule: (p) => import(new URL(p, CAB).href), seed: SEED, stageDir:config.stageDir, jitter:config.jitter });
 const rules = await loadPlayRules(config.rules, async p => readFileSync(new URL(p), 'utf8'));
+const pa = await PhysicsAdapter.create(RAPIER, { readText: async (p) => readFileSync(new URL(p, CAB), 'utf8'), importModule: (p) => import(new URL(p, CAB).href), seed: SEED, ...(rules.MaxInFlight > 1 ? RAPID_SUPPLY : {}), stageDir:config.stageDir, jitter:config.jitter });
 const log = { cups: [0, 0, 0, 0, 0, 0, 0, 0], lost: 0, peg: 0, launched: 0, nudge: 0, overflow: 0, mism: 0 };
 const ctrl = new MedalController({ rules, seed: SEED, hooks: { launchBall(shot, aim, dir) { pa.setAim(aim, dir); pa.launch(shot.id); log.launched++; }, cancelFlights() { pa.reset(); } } });
 const pres = new MedalPresenter(ctrl, {}); pres.externalTray = true;
@@ -30,7 +30,7 @@ for (let f = 0, t = 0; t < SECS; f++, t += DT) {
   const n = pres.takePending(); if (n) { pa.payout(n, true, pres.pour.rate); log.poured = (log.poured ?? 0) + n; if (pres.pour.rate) log.rated = (log.rated ?? 0) + n; }
   if (HOLD) { const st = pres.trayStatus(); if (st.releasable > 0 && f % 90 === 0) pres.awardToTray(Math.ceil(st.releasable / 2), { rate: 12 }); }
   const g0 = ctrl.game;
-  if (g0.canFire && f % 7 === 0) { if (g0.lampCount > 0 && g0.lampCount < 6 && !g0.armed && process.env.ARM !== '0') ctrl.dispatch('challenge'); else ctrl.dispatch('fire'); }
+  if ((g0.overlap ? g0.canAim : g0.canFire) && f % 7 === 0) { if (g0.lampCount > 0 && g0.lampCount < 6 && !g0.armed && process.env.ARM !== '0') ctrl.dispatch('challenge'); else ctrl.dispatch('fire'); }
   if (g0.canAdd && g0.wallet === 0 && g0.phase === MedalPhase.Continue) ctrl.dispatch('add');
   if (ctrl.game.phase === MedalPhase.Continue) ctrl.dispatch('finish');
   if (ctrl.game.phase === MedalPhase.Result && !countStarted) { countStarted = true; pa.startCount(); }

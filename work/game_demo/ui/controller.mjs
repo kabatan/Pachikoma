@@ -15,7 +15,9 @@ export class MedalController {
     this.confirmFinish = false; this.aimClock = 0; this.aim = 0; this.aimDir = 1;
     this.frame = 0; this._lastActionFrame = -1; this.freezeRules = false;
     this.listeners = new Set(); this.sessionId = 0; this.resultAge = 0; this.replayAfter = 3;
-    this.preBuffer = null; this.preWindow = 0.3; this.droppedInputs = [];   // R-04: 勝負ボタンの先押しを0.3秒だけ1回保持。捨てた押しは記録
+    this.preBuffer = null; this.preWindow = 0.3; this.preWindowDrain = 5;
+    this.fireBuffer = null; this.fireWindow = 0.3;   // 同時発射: 間隔待ち(残り0.3秒以内)に押された発射は、狙いを押した瞬間に固定して解禁と同時に撃つ
+    this.droppedInputs = [];   // R-04: 勝負ボタンの先押しを0.3秒だけ1回保持。捨てた押しは記録
     this.howtoSeconds = 0; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
   }
   onAction(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
@@ -29,12 +31,17 @@ export class MedalController {
     if (!this.freezeRules) g.advance(dt);
     if (this.preBuffer) {
       this.preBuffer.left -= dt;
-      if (g.canFire && !this.confirmFinish) { this.preBuffer = null; if (g.toggleChallenge()) for (const fn of this.listeners) fn('challenge', this); else this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: 'not-allowed-after-wait' }); }
+      if ((g.overlap ? g.canArm : g.canFire) && !this.confirmFinish) { this.preBuffer = null; if (g.toggleChallenge()) for (const fn of this.listeners) fn('challenge', this); else this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: 'not-allowed-after-wait' }); }
       else if (this.preBuffer.left <= 0) { this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: 'expired' }); this.preBuffer = null; }
+    }
+    if (this.fireBuffer) {
+      this.fireBuffer.left -= dt;
+      if (g.canFire && !this.confirmFinish && !this.preBuffer) { const b = this.fireBuffer; this.fireBuffer = null; if (this._fire(b.aim, b.dir)) for (const fn of this.listeners) fn('fire', this); }
+      else if (this.fireBuffer.left <= 0 || !g.canAim) { this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'expired' }); this.fireBuffer = null; }
     }
     if (g.phase === MedalPhase.Continue || g.phase === MedalPhase.Result) this.confirmFinish = false;
     this.resultAge = g.phase === MedalPhase.Result ? (this.resultAge ?? 0) + dt : 0;   // 結果が出てからの秒(客の連打で飛ばさない)
-    if (g.canFire && !this.confirmFinish) this.aimClock += dt; // 狙いのスイープは入力受付中だけ進む
+    if (g.canAim && !this.confirmFinish) this.aimClock += dt; // 狙いのスイープは入力受付中だけ進む
     this.aim = triangle(this.aimClock / this.sweepPeriod);
     { const u = (this.aimClock / this.sweepPeriod) % 1; this.aimDir = (u < 0.25 || u >= 0.75) ? 1 : -1; } // +1: 右へ動いている
   }
@@ -53,15 +60,16 @@ export class MedalController {
       case 'fire': ok = this._fire(); break;
       case 'challenge':
         ok = g.toggleChallenge();
-        if (!ok && g.phase === MedalPhase.Effect && g.lampCount > 0 && g.lampCount < 6) {   // 演出中(次の発射可能が近い)の先押しだけ0.3秒保持(1回)
+        // 演出中(次の発射可能が近い)の先押しだけ0.3秒保持(1回)。同時発射では、盤上の玉が着いて空になるまで(最大 preWindowDrain 秒)保持し、その間は新しい玉を撃たない
+        if (!ok && (g.phase === MedalPhase.Effect || (g.overlap && g.shots.length > 0 && g.phase !== MedalPhase.Flight)) && g.lampCount > 0 && g.lampCount < 6) {
           if (this.preBuffer) this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: 'already-buffered' });
-          else { this.preBuffer = { left: this.preWindow }; this._lastActionFrame = this.frame; return true; }   // 'challenge'の通知は適用時に出す
+          else { this.preBuffer = { left: g.overlap ? this.preWindowDrain : this.preWindow }; this._lastActionFrame = this.frame; if (g.overlap) for (const fn of this.listeners) fn('challengeWait', this); return true; }   // 同時発射では、先押しを受け付けた合図を出す(宣言は盤が空になってから)   // 'challenge'の通知は適用時に出す
         } else if (!ok) this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: g.phase });
         break;
       case 'add': ok = g.addCredit(); break;
       case 'finish':
         if (g.phase === MedalPhase.Continue) ok = g.finish();
-        else if (g.canFire) { this.confirmFinish = true; ok = true; }
+        else if (g.overlap ? (g.canAim && g.shots.length === 0) : g.canFire) { this.confirmFinish = true; ok = true; }
         break;
       case 'confirmFinish': if (this.confirmFinish) { ok = g.finish(); this.confirmFinish = false; } break;
       case 'cancelFinish': if (this.confirmFinish) { this.confirmFinish = false; ok = true; } break;
@@ -70,7 +78,7 @@ export class MedalController {
         if ((this.resultAge ?? 0) < this.replayAfter) break;
         return this.dispatch('reset');
       case 'reset':
-        if (g.phase === MedalPhase.Result && (this.hooks.canReset?.() ?? true)) { this.hooks.cancelFlights?.(); this.game = new MedalGame(this.rules, this.seed == null ? undefined : this.seed + 1 + this.sessionId); this.aimClock = 0; this.confirmFinish = false; ok = true; }
+        if (g.phase === MedalPhase.Result && (this.hooks.canReset?.() ?? true)) { this.hooks.cancelFlights?.(); this.game = new MedalGame(this.rules, this.seed == null ? undefined : this.seed + 1 + this.sessionId); this.aimClock = 0; this.confirmFinish = false; this.fireBuffer = this.preBuffer = null; ok = true; }
         break;
       case 'quit': ok = true; break;
     }
@@ -85,9 +93,14 @@ export class MedalController {
     if (ok) { this._lastActionFrame = this.frame; for (const fn of this.listeners) fn('start', this); }
     return ok;
   }
-  _fire() {
-    const shot = this.game.launch(); if (!shot) return false;
-    this.lockedAim = this.aim; this.hooks.launchBall?.(shot, this.aim, this.aimDir);
+  _fire(aim = this.aim, dir = this.aimDir) {
+    const g = this.game;
+    if (this.preBuffer && g.overlap) return false;   // 勝負待ちの間は盤を空にする
+    if (g.overlap && !g.canFire && g.canAim && !g.armed && !this.fireBuffer && g.shots.length < g.rules.MaxInFlight && g.rules.FireInterval - g._sinceFire <= this.fireWindow) {
+      this.fireBuffer = { aim, dir, left: this.fireWindow }; return false;   // 間隔待ちの先押しを保持(通知は撃った時に出す)
+    }
+    const shot = g.launch(); if (!shot) return false;
+    this.lockedAim = aim; this.hooks.launchBall?.(shot, aim, dir);
     return true;
   }
   /** 物理の着地確定。reached=false は判定不能(故障): その1球だけ返金して Fault。 */

@@ -19,6 +19,8 @@ import { loadStageTransforms } from './stage_transforms.mjs';
 export const KIND = { board: 0, ret: 1, tray: 2, lift: 3, shuttle: 4 };
 const HZ = 480, DT = 1 / HZ;
 export const STOCK0 = 5, STOCK_MAX = 4, DISH_CAP = 125;
+/** 同時発射(MaxInFlight>1)用の補給: 装填・取込を0.45秒、昇降管を0.25m/s、予備球を最大9個。0.6秒間隔の連射でも射出待ちが出ない(physics/rapid_supply_test.mjs)。 */
+export const RAPID_SUPPLY = Object.freeze({ reloadSeconds: 0.45, feedGap: 0.45, liftSpeed: 0.25, stockMax: 9 });
 
 function polyline(pts) { const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2])); return { pts, L, len: L[L.length - 1] }; }
 function at(poly, s) {
@@ -29,11 +31,12 @@ function at(poly, s) {
 
 export class PhysicsAdapter {
   static async create(RAPIER, opts) { const pa = new PhysicsAdapter(RAPIER, opts); await pa.init(); return pa; }
-  constructor(RAPIER, { readText, importModule, seed = 1, overflow = 'open', maxBalls = 700, loadTransforms = loadStageTransforms, stageDir = 'stage3', jitter = {}, boardTimeScale = 1 } = {}) {
+  constructor(RAPIER, { readText, importModule, seed = 1, overflow = 'open', maxBalls = 700, loadTransforms = loadStageTransforms, stageDir = 'stage3', jitter = {}, boardTimeScale = 1, reloadSeconds = 1.0, feedGap = 0.9, liftSpeed = 0.09, stockMax = STOCK_MAX } = {}) {
     this.stageDir = (stageDir.startsWith('work/') ? new URL('../../' + stageDir.slice(5), import.meta.url).href : stageDir).replace(/\/$/, ''); this.jitter = normalizeJitter(jitter);
     this.loadTransforms = loadTransforms;
     this.R = RAPIER; this.readText = readText; this.importModule = importModule; this.maxBalls = maxBalls; this.overflowPolicy = overflow;
     this.seed = seed >>> 0; this.s = this.seed; this.rng = () => { this.s = (this.s + 0x6D2B79F5) >>> 0; let t = this.s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    this.reloadSeconds = reloadSeconds; this.feedGap = feedGap; this.liftSpeed = liftSpeed; this.stockMax = stockMax;   // 連射用: 射出器の装填間隔 / 皿から昇降管への取込間隔 / 昇降管の速さ(m/s)
     this.events = []; this.acc = 0; this.tick = 0; this.boardAcc = 0; this.boardTimeScale = Math.min(1, Math.max(0.05, Number(boardTimeScale) || 1));
   }
   async init() {
@@ -68,7 +71,7 @@ export class PhysicsAdapter {
     this.board.tick = 0; this.board.nudges = 0; this.board.events.length = 0; this._lastPeg = -9999;
     this.tray.balls.clear(); this.tray.events.length = 0; this.tray.stored = { overflow: 0, count: 0 }; this.tray.payoutExited = 0; this.tray.latched.clear(); this.tray.nextBall = 0; this.tray.countOpen = false; if (this.tray.rr) { this.tray.rr.scale = 1; this.tray.rr.prev.clear(); }
     this.transit = []; this.travel = []; this.payQueue = 0; this.payRate = null; this.payTimer = 0; this.payEarned = false; this.skipPayout = 0; this.stock = 0; this.shuttleHas = false; this.refillAt = null; this.feedAt = 0;
-    this.pendingLaunch = []; this.aim = 0; this.dir = 1; this.counting = null; this.stored = { overflow: 0, count: 0, returned: 0 }; this.evIdx = 0; this.t = 0; this.tick = 0; this.acc = 0; this.boardAcc = 0; this.seq = 0; this.events = []; this.inputs = new Map(); this.dryFor = 0; this.shots = 0; this.valve = 0;
+    this.pendingLaunch = []; this.pendingAim?.clear(); this.aim = 0; this.dir = 1; this.counting = null; this.stored = { overflow: 0, count: 0, returned: 0 }; this.evIdx = 0; this.t = 0; this.tick = 0; this.acc = 0; this.boardAcc = 0; this.seq = 0; this.events = []; this.inputs = new Map(); this.dryFor = 0; this.shots = 0; this.valve = 0;
     this.tray.tick = 0; this.tray.blockSince = this.tray.idleSince = null; this.tray.ovfWant = false;
   }
   beginGame(loanBalls) { this.reset(); this.stock = STOCK0 - 1; this.shuttleHas = true; this.skipPayout = Math.min(STOCK0, loanBalls); this.stockOnTray = 0; }
@@ -83,10 +86,11 @@ export class PhysicsAdapter {
   }
   setAim(aim, dir) { this.aim = aim; this.dir = dir; }
   launch(shotId) {
-    if (this.shuttleHas) this._release(shotId); else this.pendingLaunch.push(shotId);
+    if (this.shuttleHas) this._release(shotId); else { this.pendingLaunch.push(shotId); (this.pendingAim ??= new Map()).set(shotId, { aim: this.aim, dir: this.dir }); }   // 待たされる玉は押した瞬間の狙いで出す
   }
   _release(shotId) {
-    this.board.launch(shotId, this.aim, this.dir); this.shuttleHas = false; this.shots++; this.refillAt = this.t + 1.0;
+    const held = this.pendingAim?.get(shotId); if (held) { this.pendingAim.delete(shotId); this.aim = held.aim; this.dir = held.dir; }
+    this.board.launch(shotId, this.aim, this.dir); this.shuttleHas = false; this.shots++; this.refillAt = this.t + this.reloadSeconds;
     const delta = this.board.launchDelta;
     const event = { type: 'launch', tick: this.tick + (this._stepping ? 0 : 1), shotId, part_id: 'SOCKET_MUZZLE', x: this.transforms.point('stage2', [this.board.shuttle(this.aim, this.dir).x + delta.x, this.muzzle[1], this.muzzle[2]])[0], launchDelta: { ...delta } }; this._stamp(event); this.events.push(event);
   }
@@ -165,9 +169,9 @@ export class PhysicsAdapter {
   // 取込ゲート〜昇降管〜シャトル(代用): 予備球が STOCK_MAX 未満なら、0.9 秒ごとに皿の取込口に最も近い玉を 1 つ昇降管へ
   _feed() {
     if (this.counting) return;
-    const inPipe = this.travel.length; for (let i = this.travel.length - 1; i >= 0; i--) { const q = this.travel[i]; q.s += 0.09 * DT; if (q.s >= this.liftPath.len * 0.999) { this.travel.splice(i, 1); this.stock++; } }
-    if (this.t >= this.feedAt && this.stock + inPipe < STOCK_MAX && this.tray.dishCount() > 0) {
-      const id = this.tray.takeNearestIntake(); this.feedAt = this.t + 0.9;
+    const inPipe = this.travel.length; for (let i = this.travel.length - 1; i >= 0; i--) { const q = this.travel[i]; q.s += this.liftSpeed * DT; if (q.s >= this.liftPath.len * 0.999) { this.travel.splice(i, 1); this.stock++; } }
+    if (this.t >= this.feedAt && this.stock + inPipe < this.stockMax && this.tray.dishCount() > 0) {
+      const id = this.tray.takeNearestIntake(); this.feedAt = this.t + this.feedGap;
       if (id) { this.travel.push({ id, s: 0 }); this.events.push({ type: 'feed' }); }
     }
   }

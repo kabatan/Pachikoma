@@ -17,6 +17,10 @@ const isAscending = (a) => a.every((v, i) => i === 0 || a[i - 1] <= v);
 export class MedalRules {
   constructor(o = {}) {
     this.RapidFire = o.RapidFire ?? false;
+    // 同時発射: MaxInFlight>1 のとき、玉が落ちている間も次を撃てる(既定1=従来の1球ずつ)。FireInterval=発射の最短間隔(秒)。
+    // 勝負(と6灯の最終球)は盤上が空のときだけ撃て、その間は他の玉を撃てない。灯の数+盤上の通常球が6を超える発射は受け付けない。
+    this.MaxInFlight = o.MaxInFlight ?? 1;
+    this.FireInterval = o.FireInterval ?? 0;
     this.ClockStopOnReset = o.ClockStopOnReset === undefined ? false : o.ClockStopOnReset;
     this.ClockStopOnJackpot = o.ClockStopOnJackpot === undefined ? false : o.ClockStopOnJackpot;
     this.ClockStartsAfterLoan = o.ClockStartsAfterLoan === undefined ? false : o.ClockStartsAfterLoan;   // true: 貸玉の払い出し演出(Loan)が終わってから時計を動かす
@@ -47,7 +51,7 @@ export class MedalRules {
   validate() {
     const r = this;
     const bad =
-      typeof r.RapidFire !== 'boolean' ||
+      typeof r.RapidFire !== 'boolean' || !Number.isInteger(r.MaxInFlight) || r.MaxInFlight < 1 || r.MaxInFlight > 6 || !Number.isFinite(r.FireInterval) || r.FireInterval < 0 ||
       typeof r.ClockStopOnReset !== 'boolean' || typeof r.ClockStopOnJackpot !== 'boolean' || typeof r.ClockStartsAfterLoan !== 'boolean' ||
       typeof r.ClockStopBudgetIncludesJackpot !== 'boolean' ||
       (r.ClockStopBudget !== null && (!Number.isFinite(r.ClockStopBudget) || r.ClockStopBudget < 0)) ||
@@ -96,14 +100,39 @@ export class MedalGame {
     this.clockStopBudgetUsed = 0; this.clockStoppedSeconds = 0;
     this.receipt = null; this.shot = null; this.endReason = '';
     this._lamps = new Set(); this._sequence = 0;
+    this.shots = []; this._pendingLandings = []; this._now = 0; this._sinceFire = Infinity; this._receiptAt = -1;   // 同時発射(MaxInFlight>1)用
   }
   get lamps() { return [...this._lamps].sort((a, b) => a - b); }
   get lampCount() { return this._lamps.size; }
   get award() { return this.rules.Awards[this.lampCount]; }
+  get overlap() { return this.rules.MaxInFlight > 1; }
+  /** 狙いのスイープを進めてよいか(同時発射では、間隔待ちや盤上の玉数に関わらず、入力を受ける局面なら進める)。 */
+  get canAim() {
+    if (!this.overlap) return this.canFire;
+    return this._acceptingPhase() && this.wallet > 0 && this.secondsLeft > 0;
+  }
+  _acceptingPhase() {
+    if (this.phase === MedalPhase.Ready) return true;
+    // 演出の入力ロックが短い(点灯・保護・低灯の重複)間は次を撃てる。長いロック(勝負・払い出し・4/5灯の重複・JP)は撃てない。
+    return this.phase === MedalPhase.Effect && !!this.receipt && this.receipt.duration <= 0.6 &&
+      [MedalEvent.Fresh, MedalEvent.Protected, MedalEvent.Reset].includes(this.receipt.kind);
+  }
   get canFire() {
+    if (this.overlap) {
+      if (!this._acceptingPhase() || this.wallet <= 0 || this.secondsLeft <= 0) return false;
+      if (this.shots.length >= this.rules.MaxInFlight || this._sinceFire < this.rules.FireInterval) return false;
+      if (this.shots.some((x) => x.challenge)) return false;
+      if (this.armed || this.lampCount === 6) return this.shots.length === 0;   // 勝負と最終球は盤上が空のときだけ
+      return this.lampCount + this.shots.length < 6;
+    }
     const normalEffect = this.rules.RapidFire && this.phase === MedalPhase.Effect &&
       [MedalEvent.Fresh, MedalEvent.Protected].includes(this.receipt?.kind);
     return (this.phase === MedalPhase.Ready || normalEffect) && this.wallet > 0 && this.secondsLeft > 0;
+  }
+  /** 勝負を宣言できるか(同時発射: 盤上が空で、入力を受ける局面)。 */
+  get canArm() {
+    if (!this.overlap) return this.canFire && this.lampCount > 0 && this.lampCount < 6;
+    return this._acceptingPhase() && this.wallet > 0 && this.secondsLeft > 0 && this.shots.length === 0 && this.lampCount > 0 && this.lampCount < 6;
   }
   get canAdd() { return !this.addedCredit && (this.phase === MedalPhase.Ready || this.phase === MedalPhase.Continue); }
   get prize() {
@@ -133,34 +162,49 @@ export class MedalGame {
     this._loan(); return true;
   }
   toggleChallenge() {
+    if (this.overlap) { if (this.armed) { this.armed = false; return true; } if (!this.canArm) return false; this.armed = true; return true; }
     if (!this.canFire || this.lampCount === 0 || this.lampCount === 6) return false;
     this.armed = !this.armed; return true;
   }
   launch() {
     if (!this.canFire) return null;
     this.wallet--; this.spent++; this.cycleSpent++;
-    this.shot = { id: ++this._sequence, challenge: this.armed || this.lampCount === 6, award: this.award, lamps: this.lamps };
-    if (this.shot.challenge) { this.attempts++; this.firstProtection = false; }
-    this.phase = MedalPhase.Flight;
-    return this.shot;
+    const shot = { id: ++this._sequence, challenge: this.armed || this.lampCount === 6, award: this.award, lamps: this.lamps };
+    this.shot = shot;
+    if (shot.challenge) { this.attempts++; this.firstProtection = false; }
+    if (this.overlap) { this.shots.push(shot); this._sinceFire = 0; if (shot.challenge) this.phase = MedalPhase.Flight; }
+    else this.phase = MedalPhase.Flight;
+    return shot;
   }
   /** 物理の着地結果。lane は 1..7(口)。reachedReceiver=false は判定不能(故障: その1球だけ返す)。 */
   resolve(shotId, lane, reachedReceiver = true) {
+    if (this.overlap) {
+      const shot = this.shots.find((x) => x.id === shotId);
+      if (!shot || this._pendingLandings.some((x) => x.shotId === shotId)) return false;
+      // 長い入力ロックの演出(勝負結果・払い出し・4/5灯の重複・JP)の間に着いた玉は、演出が終わってから反映する。
+      if (this.phase === MedalPhase.Effect && !this._acceptingPhase()) { this._pendingLandings.push({ shotId, lane, reachedReceiver }); return true; }
+      return this._land(shot, lane, reachedReceiver);
+    }
     if (this.phase !== MedalPhase.Flight || !this.shot || this.shot.id !== shotId) return false;
+    return this._land(this.shot, lane, reachedReceiver);
+  }
+  _land(shot, lane, reachedReceiver) {
     const before = this.lamps; const walletBefore = this.wallet;
     if (!reachedReceiver || lane < 1 || lane > 7) {
       // 物理の着地が無いのは故障であり、捏造した負けではない。
       this.wallet++; this.spent--; this.cycleSpent--;
       this.receipt = this._receipt(MedalEvent.Fault, 0, 0, 0, before, before, walletBefore, 0);
       this.phase = MedalPhase.Fault; this.endReason = '玉の判定を確認してください'; this.shot = null;
+      for (const o of this.shots) if (o !== shot) { this.wallet++; this.spent--; this.cycleSpent--; }   // 盤上のほかの玉も返す
+      this.shots = []; this._pendingLandings = [];
       return true;
     }
     let kind, award = 0, removed = 0, cost = 0, resetChoice = -1, jackpot = -1, duration;
-    if (this.shot.challenge) {
+    if (shot.challenge) {
       cost = this.cycleSpent; this.cycleSpent = 0;
-      const win = !this.shot.lamps.includes(lane);
-      award = win ? this.shot.award : 0;
-      if (win && this.shot.lamps.length === 6 && this.rules.hasJackpot) {
+      const win = !shot.lamps.includes(lane);
+      award = win ? shot.award : 0;
+      if (win && shot.lamps.length === 6 && this.rules.hasJackpot) {
         jackpot = this._pick(this.rules.JackpotWeights); award = this.rules.JackpotAwards[jackpot];
       }
       this.wallet += award; this.won += award;
@@ -189,7 +233,8 @@ export class MedalGame {
         (before.length === 1 ? this.rules.ResetEffectSecondsSingle : this.rules.ResetEffectSeconds);
     }
     this.receipt = this._receipt(kind, lane, award, removed, before, this.lamps, walletBefore, duration, cost, resetChoice, jackpot);
-    this.shot = null; this._beginEffect();
+    this.shots = this.shots.filter((x) => x !== shot); this.shot = this.shots[this.shots.length - 1] ?? null;
+    this._beginEffect();
     return true;
   }
   _pick(weights) {
@@ -207,6 +252,7 @@ export class MedalGame {
       return;
     }
     if (this.phase !== MedalPhase.Ready && this.phase !== MedalPhase.Flight && this.phase !== MedalPhase.Effect) return;
+    this._sinceFire += seconds;
     if (this.phase === MedalPhase.Effect && this.rules.ClockStartsAfterLoan && this.receipt?.kind === MedalEvent.Loan) {
       const used = Math.min(seconds, this.effectLeft);   // 払い出し中は残り時間を減らさない
       this.effectLeft -= used; seconds -= used;
@@ -230,12 +276,22 @@ export class MedalGame {
       if (this.effectLeft > 0) return;
       this.phase = MedalPhase.Ready;
     }
+    if (this.overlap) {
+      // 待たされていた着地を1つずつ反映する(反映するとまた演出に入る)。盤上に玉がある間は終了判定をしない。
+      if (this._pendingLandings.length) {
+        const q = this._pendingLandings.shift(), shot = this.shots.find((x) => x.id === q.shotId);
+        if (shot) this._land(shot, q.lane, q.reachedReceiver);
+        return;
+      }
+      if (this.shots.length) return;
+    }
     if (this.wallet > 0 && this.secondsLeft > 0) return;
     this.endReason = this.wallet === 0 ? '持ち玉を使いきりました' : '時間になりました';
     if (this.addedCredit) this.finish();
     else { this.phase = MedalPhase.Continue; this.offerLeft = this.rules.ContinueSeconds; }
   }
   finish() {
+    if (this.shots.length) return false;
     if (![MedalPhase.Ready, MedalPhase.Continue, MedalPhase.Fault].includes(this.phase) && !this.canFire) return false;
     if (!this.endReason) this.endReason = 'ここで計数';
     this.phase = MedalPhase.Result; this.armed = false;

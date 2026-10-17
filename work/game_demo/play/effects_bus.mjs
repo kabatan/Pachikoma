@@ -1,5 +1,5 @@
 // 演出モジュール向けの通知専用バス。規則・物理を操作しない。
-export const EFFECT_IDS = Object.freeze(('attract title howto ticket start ambient launch lamp123 lamp4 lamp5 lamp6 dup_protect roulette ascend challenge_declare challenge_flight success_small success_big fail jp tray_overflow warn10 timeup add100 finish_count result challenge_cancel').split(' '));
+export const EFFECT_IDS = Object.freeze(('attract title howto ticket start ambient launch lamp123 lamp4 lamp5 lamp6 dup_protect roulette ascend challenge_declare challenge_wait challenge_flight success_small success_big fail jp tray_overflow warn10 timeup add100 finish_count result challenge_cancel').split(' '));
 const FIRST = ['shot', 'light', 'duplicate', 'challenge', 'success', 'failure'];
 const copy = value => structuredClone(value);
 const freeze = value => { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
@@ -36,7 +36,7 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
   let seen = new Set(), levels = new Set(), shots = new Map(), pending = [], receiptSeen = -1;
   bus.context = () => ({ t: clock, state: { lit: ctrl.game.lampCount, pockets: ctrl.game.lamps,
     balls: ctrl.game.wallet, secondsLeft: ctrl.game.secondsLeft,
-    canLaunch: ctrl.game.canFire && !ctrl.confirmFinish && !ctrl.freezeRules, declared: ctrl.game.armed } });
+    canLaunch: (ctrl.game.overlap ? ctrl.game.canAim : ctrl.game.canFire) && !ctrl.confirmFinish && !ctrl.freezeRules, declared: ctrl.game.armed } });
   const nextRank = (rules, balls) => {   // 次の景品までの実数(結果画面・計数の「あと○玉でA賞」用)
     const th = rules.PrizeThresholds; let rank = 0; th.forEach((n, i) => { if (balls >= n) rank = i; });
     return rank + 1 < th.length ? { rankIndex: rank, next_rank: rank + 1, to_next: th[rank + 1] - balls, next_threshold: th[rank + 1] } : { rankIndex: rank, next_rank: null, to_next: 0, next_threshold: null };
@@ -52,6 +52,7 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
     if (action === 'howto') { reset(); send('howto', { seconds: ctrl.howtoSeconds }); }
     if (action === 'start') { reset(); send('ticket', { balls: g.rules.LoanBalls, duration: g.receipt.duration }); }
     if (action === 'add') { warned = false; send('add100', { balls: g.rules.LoanBalls, seconds: g.rules.ExtraSeconds, duration: g.receipt.duration }); }
+    if (action === 'challengeWait') send('challenge_wait', { award: g.award, onBoard: g.shots.length });
     if (action === 'challenge') send(g.armed ? 'challenge_declare' : 'challenge_cancel', { award: g.award }, g.armed ? 'challenge' : undefined);
     if (action === 'fire') shots.set(g.shot.id, { shotId: g.shot.id, aim: ctrl.lockedAim, dir: ctrl.aimDir, challenge: g.shot.challenge, lamps: [...g.shot.lamps] });
     if (action === 'reset') { reset(); phase = g.phase; send('attract'); }
