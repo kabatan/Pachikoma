@@ -2,6 +2,9 @@
 // lights. A common intensity factor reuses the same normalized basis.
 import * as T from '../web/vendor/three/three.module.js';
 const EA=['uEaLo','uEaHi','uEbLo','uEbHi'],TEX=['uA','uB','uM0','uM1','uR2Detail'];
+// Uniform objects are supplied explicitly below. Avoid cloning render textures
+// and the full light arrays only to immediately replace those unused copies.
+const cloneShader=m=>new T.ShaderMaterial().copy({...m,uniforms:{}});
 export function installEnvironmentBasis(hr){
  if(!hr.gl.getExtension('EXT_color_buffer_float'))return;
  const r=hr.renderer,records=[],stats=hr.stats.environmentBasis={baked:0,reused:0,dynamic:0,reflections:0};
@@ -16,13 +19,13 @@ export function installEnvironmentBasis(hr){
   a.disabled=false;a.sourceVersion=m.version;a.sourceShader=fs;
   a.baseMat?.dispose();a.dynamicMat?.dispose();a.reflectMat?.dispose();
   const baseUniforms={...m.uniforms};for(const key of EA)baseUniforms[key]={value:m.uniforms[key].value.clone()};
-  a.baseMat=m.clone();a.baseMat.uniforms=baseUniforms;a.baseMat.blending=T.NoBlending;
-  a.baseMat.fragmentShader=fs.replace(/if\s*\(uBLn\s*>\s*0\)/,'if(false)');
+  a.baseMat=cloneShader(m);a.baseMat.uniforms=baseUniforms;a.baseMat.blending=T.NoBlending;
+  a.baseMat.fragmentShader=fs.replace(/if\s*\(uBLn\s*>\s*0\)/g,'if(false)');
   a.baseScene=new T.Scene();const bm=new T.Mesh(a.mesh.geometry,a.baseMat);bm.frustumCulled=false;a.baseScene.add(bm);
-  a.dynamicMat=m.clone();a.dynamicMat.uniforms={...m.uniforms,uCachedBase:{value:a.baseRT.texture},uBaseScale:{value:1}};
+  a.dynamicMat=cloneShader(m);a.dynamicMat.uniforms={...m.uniforms,uCachedBase:{value:a.baseRT.texture},uBaseScale:{value:1}};
   if(reflect){
    a.reflectRT??=rt();a.dynamicMat.uniforms.uCachedReflect={value:a.reflectRT.texture};
-   a.reflectMat=m.clone();a.reflectMat.uniforms=m.uniforms;a.reflectMat.blending=T.NoBlending;
+   a.reflectMat=cloneShader(m);a.reflectMat.uniforms=m.uniforms;a.reflectMat.blending=T.NoBlending;
    a.reflectMat.fragmentShader=fs.slice(0,fs.indexOf(col))+reflect[0]+'\ngl_FragColor=vec4(refl,0.0);\n}';
    a.reflectScene=new T.Scene();const rm=new T.Mesh(a.mesh.geometry,a.reflectMat);rm.frustumCulled=false;a.reflectScene.add(rm);
    a.dynamicMat.fragmentShader='uniform highp sampler2D uCachedBase,uCachedReflect;uniform float uBaseScale;\n'+fs.replace(col,'vec3 col = texelFetch(uCachedBase,p,0).rgb * uBaseScale;').replace(reflect[0],'vec3 refl = texelFetch(uCachedReflect,p,0).rgb;');

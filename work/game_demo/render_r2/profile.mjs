@@ -1,3 +1,4 @@
+import { installSharedLightField } from './shared_light_field.mjs';
 import { installProbeReuse } from './probe_reuse.mjs';
 // Selected by select_render.mjs. Keep the tray renderer's render wrapper intact.
 import * as THREE from '../web/vendor/three/three.module.js';
@@ -122,6 +123,6 @@ export async function installRenderR2(hr, { nativePack = false, trimBox = [1100,
   const enabled=selection!=='reference'&&(selection==='exact'||software);
   hr.stats.renderReuse={enabled,software,selection:selection||'auto',device};
   if(enabled){
-    installSparseLayers(hr);installFloatTargets(hr);installMergedBack(hr);installAffineLut(hr);installEnvironmentBasis(hr);installProbeReuse(hr,{visibleOnly:true});
+    installSparseLayers(hr);installFloatTargets(hr);installMergedBack(hr);installAffineLut(hr);installEnvironmentBasis(hr);installProbeReuse(hr,{visibleOnly:true});installSharedLightField(hr);
   }
 }

@@ -76,6 +76,7 @@ export class PhysicsAdapter {
     this.tray.balls.clear(); this.tray.activeBalls.clear(); this.tray.activePayout = 0; this.tray._countCache = null; this.tray.events.length = 0; this.tray.stored = { overflow: 0, count: 0 }; this.tray.payoutExited = 0; this.tray.latched.clear(); this.tray.nextBall = 0; this.tray.countOpen = false; this.tray.setMech('MECH_SEP_NEEDLE', 0); if (this.tray.rr) { this.tray.rr.scale = 1; this.tray.rr.prev.clear(); this.tray.rr.dfac.clear(); }
     this.transit = []; this.travel = []; this.payQueue = 0; this.payRate = null; this.payTimer = 0; this.payEarned = false; this.skipPayout = 0; this.stock = 0; this.shuttleHas = false; this.refillAt = null; this.feedAt = 0;
     this.pendingLaunch = []; this.pendingAim?.clear(); this.aim = 0; this.dir = 1; this.counting = null; this.stored = { overflow: 0, count: 0, returned: 0 }; this.evIdx = 0; this.t = 0; this.tick = 0; this.acc = 0; this.boardAcc = 0; this.seq = 0; this.events = []; this.inputs = new Map(); this.dryFor = 0; this.shots = 0; this.valve = 0;
+    this._transitPointA = [0, 0, 0]; this._transitPointB = [0, 0, 0];
     this.tray.tick = 0; this.tray.blockSince = this.tray.idleSince = null; this.tray.ovfWant = false; this.tray.levelLast = null;
   }
   beginGame(loanBalls) { this.reset(); this.stock = this.stock0 - 1; this.shuttleHas = true; this.skipPayout = Math.min(this.stock0, loanBalls); this.stockOnTray = 0; }
@@ -125,14 +126,16 @@ export class PhysicsAdapter {
     this.boardAcc += this.boardTimeScale;
     const boardSteps = this.boardAcc >= 1 - 1e-9 ? (this.boardAcc -= 1, 1) : 0;
     if (boardSteps) this.board.step();
-    for (const e of boardSteps ? this.board.drain() : []) {
-      if (e.type === 'cup') { this.events.push(e); this._startTransit(e); }
-      else if (e.type === 'peg') { if (this.tick - (this._lastPeg ?? -9999) > 12) { this._lastPeg = this.tick; this.events.push(e); } }
-      else { if (e.type === 'lost') this.stock++; this.events.push(e); }
+    if (boardSteps) {
+      for (const e of this.board.drain()) {
+        if (e.type === 'cup') { this.events.push(e); this._startTransit(e); }
+        else if (e.type === 'peg') { if (this.tick - (this._lastPeg ?? -9999) > 12) { this._lastPeg = this.tick; this.events.push(e); } }
+        else { if (e.type === 'lost') this.stock++; this.events.push(e); }
+      }
     }
     // 戻り管: PATH_RETURN をなぞって落ちる(1次元。回転して転がる球の加速 = 5/7 g sinθ)
     for (let i = this.transit.length - 1; i >= 0; i--) {
-      const q = this.transit[i]; const a = at(q.poly, q.s), b = at(q.poly, q.s + 0.002); const ds = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1; const slope = Math.max(0, -(b[1] - a[1]) / ds);
+      const q = this.transit[i]; const a = at(q.poly, q.s, this._transitPointA), b = at(q.poly, q.s + 0.002, this._transitPointB); const ds = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1; const slope = Math.max(0, -(b[1] - a[1]) / ds);
       q.v = Math.min(2.5, Math.max(0.15, q.v + (5 / 7) * 9.81 * slope * DT)); q.s += q.v * DT;
       if (q.s >= q.poly.len) { this.transit.splice(i, 1); this.stored.returned++; this.events.push({ type: 'returned', shotId: q.shotId }); }
     }

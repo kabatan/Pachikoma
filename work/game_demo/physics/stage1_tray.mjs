@@ -46,7 +46,7 @@ export class Stage1Tray {
     this.tilt = TRAY_MOTION.tilt;
     world.numSolverIterations = 4;
     this.S = scale; // 物理空間の倍率(m→物理単位)。Rapier の凸包は mm 級の形をメートルで作ると玉との接触が壊れる(素通り・横滑り)ため、10倍にして使う。world の重力と lengthUnit も同倍率にすること
-    this.R = RAPIER; this.world = world; this.readText = readText; this.base = base; this.overflow = overflow; this.rng = rng;
+    this.R = RAPIER; this.world = world; this.readText = readText; this.base = base; this.overflow = overflow; this.rng = rng; this._rawVelocity = { x: 0, y: 0, z: 0 };
     this.statics = []; this.mechBodies = new Map(); this.balls = new Map(); this.events = []; this.hash = null;
     this.mech = {}; this.sensors = []; this.latched = new Map(); this.tick = 0; this.nextBall = 0;
     this.stored = { overflow: 0, count: 0 }; this.payoutExited = 0;
@@ -199,7 +199,7 @@ export class Stage1Tray {
   counts() {
     if (this._countCache) return this._countCache;
     const b = this.trayBox; let inDish = 0, tunnel = 0, resting = 0;
-    for (const x of this.activeBalls.values()) { if (x.stored) continue; const t = x.prev; if (t.x > b.x[0] && t.x < b.x[1] && t.z > b.z[0] && t.z < b.z[1] && t.y > b.y[0] && t.y < b.y[1] + 0.03) { inDish++; if (x.body.isSleeping() || Math.hypot(...Object.values(x.body.linvel())) < 0.02 * this.S) resting++; } else tunnel++; }
+    for (const x of this.activeBalls.values()) { if (x.stored) continue; const t = x.prev; if (t.x > b.x[0] && t.x < b.x[1] && t.z > b.z[0] && t.z < b.z[1] && t.y > b.y[0] && t.y < b.y[1] + 0.03) { inDish++; if (x.body.isSleeping()) resting++; else { const v = x.body.linvel(this._rawVelocity); if (Math.hypot(v.x, v.y, v.z) < 0.02 * this.S) resting++; } } else tunnel++; }
     return this._countCache = { inDish, outside: tunnel, resting };
   }
   _overflowWantsOpen() {
@@ -207,7 +207,7 @@ export class Stage1Tray {
     if (o.type === 'mouth') {
       if (!this.activePayout && !this.ovfWant) return false; // 払出口の出口が詰まった(トンネル最後の12mmに球が0.5秒動かない)ら開き、払出が終わって1秒で閉じる
       const PX = 0.0263 + this.T[0], ZB = -0.137 + this.T[2]; let blocked = false;
-      for (const x of this.activeBalls.values()) { if (x.stored || x.state !== 'payout') continue; const t = x.prev; const v = x.body.linvel();
+      for (const x of this.activeBalls.values()) { if (x.stored || x.state !== 'payout') continue; const t = x.prev; const v = x.body.linvel(this._rawVelocity);
         if (Math.abs(t.x - PX) < 0.014 && t.z > ZB - 0.012 && t.z < ZB + 0.002 && Math.hypot(v.x, v.y, v.z) < 0.02 * this.S) blocked = true; }
       const now = this.tick / (this.hz ?? 480);
       if (blocked) { this.blockSince ??= now; if (now - this.blockSince >= 0.5) this.ovfWant = true; } else this.blockSince = null;
@@ -229,7 +229,7 @@ export class Stage1Tray {
     if (o.type === 'count') return c.inDish + this._inFlightToDish() >= o.n;
     // reach: 溢れ口の手前(x±22mm, z±20mm)に、静止した球が2層以上(中心高さが床+9mm超)で届いたら開く
     const h = this.ovfHole, floor = this.floorY ?? (-0.2686 + this.T[1]); let reach = false;
-    for (const x of this.activeBalls.values()) { if (x.stored) continue; const t = x.prev; const v = x.body.linvel(); /* 物理単位/s */
+    for (const x of this.activeBalls.values()) { if (x.stored) continue; const t = x.prev; const v = x.body.linvel(this._rawVelocity); /* 物理単位/s */
       if (t.x > h.x[0] - 0.022 && t.x < h.x[1] + 0.022 && t.z > h.z[0] - 0.02 && t.z < h.z[1] + 0.02 && t.y > floor + 0.009 + 0.006 && Math.hypot(v.x, v.y, v.z) < 0.05 * this.S) reach = true; }
     return reach;
   }
@@ -237,20 +237,24 @@ export class Stage1Tray {
 
   /** 床の実傾斜と垂直重力だけで転がす。互換用の空hook。 */
   beforeStep(dt) {}
+  _updateFlap(fid, want, hole, dt) {
+    const m = this.mechBodies.get(fid); if (!m) return;
+    const speed = (Math.PI / 2) / 0.25 * dt; let v = m.value;
+    const occupied = this._ballOnHole(hole);
+    if (want || (occupied && v < -.05)) v = Math.max(-Math.PI / 2, v - speed); else if (!occupied) v = Math.min(0, v + speed);
+    if (v !== m.value) this.setMech(fid, v);
+    if (hole === 'ovf') this.flapOpen = v < -Math.PI / 4; else this.cntFlapOpen = v < -Math.PI / 4;
+  }
   /** 480Hz などの固定刻みの1step後に呼ぶ。蓋の開閉・センサー・球の収納を処理。 */
   afterStep(dt) {
     this.tick++; this._countCache = null; this._dishCount = null;
     // 蓋(溢れ・計数): 0.25s で 0→-90°。穴の上に沈みかけた球がいる間は閉じない(parts.json の interlock)
     this.hz = 1 / dt;
-    for (const [fid, want, hole] of [['MECH_OVF_FLAP', this._overflowWantsOpen(), 'ovf'], ['MECH_CNT_FLAP', this.countOpen, 'cnt']]) {
-      const m = this.mechBodies.get(fid); if (!m) continue;
-      const speed = (Math.PI / 2) / 0.25 * dt; let v = m.value;
-      const occupied=this._ballOnHole(hole);
-      if (want || (occupied && v < -.05)) v = Math.max(-Math.PI / 2, v - speed); else if (!occupied) v = Math.min(0, v + speed);
-      if (v !== m.value) this.setMech(fid, v);
-      if (hole === 'ovf') this.flapOpen = v < -Math.PI / 4; else this.cntFlapOpen = v < -Math.PI / 4;
-    }
-    for (const [id, b] of this.activeBalls) {
+    const ovfWant = this._overflowWantsOpen(), countWant = this.countOpen;
+    this._updateFlap('MECH_OVF_FLAP', ovfWant, 'ovf', dt);
+    this._updateFlap('MECH_CNT_FLAP', countWant, 'cnt', dt);
+    for (const b of this.activeBalls.values()) {
+      const id = b.id;
       if (b.stored || b.body.isSleeping()) continue; const t = this.pos(b.body, this._stepPosition ??= {x:0,y:0,z:0});
       for (let si = 0; si < this.sensors.length; si++) {
         const s = this.sensors[si], mask = 1 << si; if (b.sensorMask & mask) continue;
