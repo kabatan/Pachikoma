@@ -18,7 +18,7 @@ nice -n 10 node work/game_demo/play/serve.mjs 8792
 
 `http://127.0.0.1:8792/game_demo/play/index.html?config=work/game_tuning/proto/config.json`を開く。音を有効にするボタンを押す。
 
-Space: 開始・発射、C: 挑戦、A: 100円追加、B: 計数（もう一度Bで確定）、計数後R: 次のプレイ、F: 全画面、D: 設定表示の出し入れ（既定は非表示）。開始画面と画面内の「発射」「CHALLENGE」等もクリック／タップで操作できる。
+Space / ESP32左ボタン: 開始・発射、ESP32右ボタン: 遊技中は挑戦・時間切れ画面では100円追加、C: 挑戦、A: 100円追加、B: 計数（もう一度Bで確定）、計数後R: 次のプレイ、F: 全画面、D: 設定表示の出し入れ（既定は非表示）。開始画面と画面内の「発射」「CHALLENGE」等もクリック／タップで操作できる。
 
 ## 調整結果を載せる
 

@@ -1,5 +1,13 @@
 // USB serial bridge for the ESP32 cabinet controller. No serial port is trusted
 // until it replies to PING with the Pachikoma protocol signature.
+import { primaryButtonAction } from '../ui/input.mjs';
+
+export function cabinetButtonAction(ctrl, name) {
+  if (name === 'FIRE') return primaryButtonAction(ctrl);
+  if (name === 'CHALLENGE') return ctrl.phase === 'Continue' ? 'add' : 'challenge';
+  return null;
+}
+
 export function parseCabinetLine(line) {
   if (line === 'PACHIKOMA,READY,1') return { type: 'ready' };
   if (line === 'BTN,FIRE') return { type: 'button', name: 'FIRE' };
@@ -9,9 +17,10 @@ export function parseCabinetLine(line) {
 
 export function buttonLeds(ctrl, now) {
   const g = ctrl.game;
-  const fire = g.canFire && !ctrl.confirmFinish && !ctrl.freezeRules;
-  const challenge = fire && g.lampCount > 0 && g.lampCount < 6;
-  return [Number(fire), Number(challenge && (!g.armed || Math.floor(now / 250) % 2 === 0))];
+  const playable = g.canFire && !ctrl.confirmFinish && !ctrl.freezeRules;
+  const primary = playable || ctrl.phase === 'Attract' || (ctrl.phase === 'Result' && ctrl.resultAge >= ctrl.replayAfter);
+  const secondary = ctrl.phase === 'Continue' ? g.canAdd : playable && g.lampCount > 0 && g.lampCount < 6;
+  return [Number(primary), Number(secondary && (ctrl.phase === 'Continue' || !g.armed || Math.floor(now / 250) % 2 === 0))];
 }
 
 export class CabinetSerial {
@@ -118,7 +127,8 @@ export class CabinetSerial {
       this.setStatus('ESP32: 接続済み');
       this.tick(performance.now());
     } else if (this.ready && message?.type === 'button') {
-      this.ctrl.dispatch(message.name === 'FIRE' ? 'fire' : 'challenge');
+      const action = cabinetButtonAction(this.ctrl, message.name);
+      if (action) this.ctrl.dispatch(action);
     }
   }
 
