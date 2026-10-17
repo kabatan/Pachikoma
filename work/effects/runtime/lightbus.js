@@ -27,7 +27,7 @@
   }
   const COL = { pink: [1, .08, .38], sakura: [1, .27, .52], gold: [1, .36, .012], white: [1, 1, 1], crimson: [1, .012, .03], cyan: [.08, .62, 1], paleGold: [1, .62, .22] };
   // ランクの色(0参加賞 1C 2B 3A 4S 5SS): 虹はJPと大成功だけなので、S・SSも虹にしない(Sは濃い金橙、SSはマゼンタ寄りの赤金)
-  const RK = [COL.sakura, [.85, .45, .2], [.8, .85, 1], COL.gold, [1, .5, .01], [1, .06, .4]];
+  const RK = [COL.sakura, [.85, .45, .2], [.1, .4, 1], COL.gold, [1, .5, .01], [1, .06, .4]];
 
   class Director {
     constructor({ events, geom, seed = 1 }) {
@@ -238,6 +238,9 @@
         case 'stutter': {   // 点く前の明滅: 花びらが勝手にチカチカ(消灯と点灯が入れ替わる。だんだん速く)。一斉に点く前の予感
           const rate = 5 + 7 * u, bin = Math.floor(lt0 * rate), e = smooth(lt0 / .06), allOff = hash(77, bin) > .55;   // 離れた塊ごと(6枚単位)に消灯/点灯が入れ替わり、ときどき全消灯。映像でも消えたと分かる
           for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: e, v: allOff ? .02 : hash(Math.floor(i / 6), bin + 5) > .45 ? 1.4 : .02 }); break; }
+        case 'blinkN': {   // 全体がはっきり消えて点く、を times 回(4灯前の予告。回を重ねるごとに強く)
+          const n = p.times || 3, cyc = dur / n, k = Math.min(n - 1, Math.floor(lt0 / cyc)), ph = (lt0 - k * cyc) / cyc, on = ph < .55;
+          for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: 1, v: on ? 1.1 + .35 * k : .02 }); break; }
         case 'breathe': {
           const per = p.period || 3; const w = lerp(.55, 1.15, .5 + .5 * Math.sin(TAU * lt0 / per - Math.PI / 2)) * smooth(lt0 / .25);
           for (let i = 0; i < N; i++) if (sel[i]) over(i, colAt(i), { a: smooth(lt0 / .25) * fadeEnv(.25, .3), v: w * (isE ? 1.4 : 1) }); break; }
@@ -303,7 +306,7 @@
         case 'drain': {
           for (let i = 0; i < N; i++) { const v = this.G.petals[i].v; const th = u * 1.3 - .15 + 0; const w = smooth((th - (v - .0)) / .18); const f = 1 - clamp(w); F.petal[i * 3] *= f; F.petal[i * 3 + 1] *= f; F.petal[i * 3 + 2] *= f; } break; }
         case 'ascendPetals': {
-          const k = Math.max(1, inst.params.k || 1), from = Math.max(inst.params.n_from || this.state.lastN || 1, k);
+          const k = Math.max(1, Number(inst.params.k) || 1), from = Math.max(inst.params.n_from || this.state.lastN || 1, k);
           const slot = dur / (k + .2); const idx = Math.min(k, Math.floor(lt0 / slot)); this.dispN = Math.max(0, from - idx);
           const ph = (lt0 % slot) / slot; const head = 1.15 - ph * 1.4;
           for (let i = 0; i < N; i++) { const v = this.G.petals[i].v; const d = Math.abs(v - head); add(i, COL.paleGold, Math.exp(-Math.pow(d / .13,2)) * 1.3); }

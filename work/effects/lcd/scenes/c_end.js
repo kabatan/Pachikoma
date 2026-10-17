@@ -95,7 +95,7 @@
     for (let j = 0; j < n; j++) { const a = j / n * TAU + sc.rand() * .2, v = 150 + sc.rand() * 170; s.P.emit({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 130, drag: 1.6, life: .9 + sc.rand() * .5, s0: .28, s1: .05, tint: cols[j % cols.length], img: j % 5 ? 'spark.png' : 'glint_1.png' }); }
     s.P.emit({ x, y, life: .35, s0: .3, s1: 1.4, a0: .7, img: 'flare_ring.png', tint: cols[0] });
   }
-  LCD.scene({ id: 'finish_count', dur: 6, cover: true, assets: [...C.assets, ...EXTRA, ...C.titleAssets(...KEYS), ...C.digitAssets(), 'flip:impact_2'],
+  LCD.scene({ id: 'finish_count', dur: 6, hold: true, cover: true, assets: [...C.assets, ...EXTRA, ...C.titleAssets(...KEYS), ...C.digitAssets(), 'flip:impact_2'],
     start(sc, p) {
       recolor();
       sc.S.rules = LCD.rules(); sc.S.total = C.total(p.total);
@@ -149,6 +149,7 @@
   LCD.scene({ id: 'result', dur: 9, cover: true,
     assets: [...C.assets, ...EXTRA, ...C.titleAssets(...KEYS, 'arigato'), 'flip:pillar_2', 'flip:shock_2', 'flip:impact_2', 'flip:digitburst_2'],
     start(sc, p) {
+      LCD.stop('finish_count');   // 計数の画面は、結果の画面が重なる瞬間に畳む
       recolor();
       sc.S.rules = LCD.rules(); sc.S.rank = clamp(Math.floor(Number(p.rank) || 0), 0, RANKS.length - 1);
       const passed = p.prize_name ?? p.prizeName;

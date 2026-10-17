@@ -19,7 +19,7 @@
       this.dir = new LB.Director({ events, geom, seed });
       this.events = events; this.lcdOk = false;
       // 重複ルーレット+昇天の目標秒(消える前の灯数別。調整担当の確定表: 1〜3灯は0.5秒だけ操作を止め、昇天は液晶で約3秒続く(操作は可能)、4灯6秒、5灯12秒で時計停止)
-      this.rouletteTargets = { 1: 1.4, 2: 1.5, 3: 2.1, 4: 6, 5: 12 };   // 調整担当メモ(10/17): 1〜2灯1.0〜1.5s, 3灯1.5〜2.2s, 4灯6s, 5灯12s
+      this.rouletteTargets = { 1: 3.0, 2: 3.2, 3: 3.4, 4: 6, 5: 12 };   // 1〜3灯は再生倍率が高いと開始の山で33msを超える(最適化担当の実測: 倍率8.5→63ms, 2.1→9ms)ため約3秒。操作ロック(0.5秒)はこの長さに関係しない。4灯6秒、5灯12秒
        this.first = {}; this.tutorial = true;
       this.setState({ n: 0, litPockets: [], canLaunch: true, declared: false, first: { firstShot: false, firstDeclare: false } });
     }
@@ -64,10 +64,12 @@
         const want = params.target || this.rouletteTargets[Math.max(1, Math.min(5, n))];
         const rate = params.rate || (want ? Math.max(1, natural / want) : 1);
         params = Object.assign({}, params, { rate, scale: 1 / rate });
-        this._asc = false; this._k = params.k; this._rate = rate; this._block = n >= 4;   // 時計を止めるのは4灯以上
+        this._asc = false; this._k = k; this._rate = rate; this._block = n >= 4;   // 時計を止めるのは4灯以上
       }
       // 同時に複数の玉が落ちる時(最大3球・0.6秒間隔): 着地の演出は新しい着地を優先して上書きする。前の着地の演出(別の種類)は途中で畳み、1.0秒の山場を重ねない(調整担当メモ 10/17)
       if (['lamp123', 'dup_protect', 'lamp4', 'lamp5'].includes(id)) for (const o of ['lamp123', 'dup_protect', 'lamp4', 'lamp5']) if (o !== id) this.stop(o);
+      // 1〜3灯の重複ルーレット(約3秒、時計は止めない)の最中に次の玉が着いたら、ルーレットも畳んで新しい着地を優先する(調整担当の条件 10/17)。4灯以上は規則が着地を遅らせるので対象外
+      if (['lamp123', 'dup_protect', 'lamp4', 'lamp5'].includes(id) && !this._block) for (const o of ['roulette', 'ascend']) if (this.dir.isActive(o)) this.stop(o);
       if (this.lcdOk) {                                  // 残り時間(右上)は start から timeup/結果まで常設
         if (id === 'start' || id === 'add100') root.LCD.setState({ hudOn: true });
         if (id === 'add100') this._pendingStart = { params: { duration: 0 }, t: this.dir.t };   // 追加も ticket と同じ順: 玉が皿に注がれたあと「スタート!」(時計が動く)

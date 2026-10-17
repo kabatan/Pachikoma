@@ -118,15 +118,17 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   if (BL && BL.setMask) BL.setMask([150, 760, 1330, 1445], Number(qs.get('lcdmask') ?? .12), 30);   // 液晶の面は盤面の照射を弱める(通常画面の純青を紫・ピンクに染めない。点検 新e09)
   if (BL && BL.setClip && !qs.has('noclip')) BL.setClip([140, 650, 1345, 2020], Number(qs.get('clipsoft') ?? 22));   // 盤の洗いは囲い(ガラス窓の内側)だけ。外の枠・花びら周りは照らさない(10/17 ディレクター)
+  if (qs.has('ebk')) adapter.bottomK = Number(qs.get('ebk'));   // 皿の縁(下辺)の縁LEDの強さ(0〜1)。省略=1
   const wash = BL && !qs.has('nowash') ? makeBoardWash(geom, adapter, { gain: Number(qs.get('washgain') ?? 2.2) }) : null;   // 盤面全体の電飾(花びら・縁の色を盤へ)
   const _v = new THREE.Vector3();
   const trail = new Map(), TRAIL = [[.05, .5], [.1, .4], [.17, .28], [.26, .17], [.38, .09]], BALL_R = Number(qs.get('ballr') ?? 34), BALL_G = Number(qs.get('ballg') ?? 3.5);
   const ballLights = (snap) => {
     if (!BL) return;
     const act = (last && last.active) || [], nl = last ? last.n ?? fx.dir.state.n : 0;
+    if (!qs.has('ebk')) adapter.bottomK = act.some((id) => id === 'result' || id === 'finish_count') ? Number(qs.get('ebkr') ?? .3) : 1;   // 結果の頭で皿の縁まで光らない(ディレクター: 囲いの内側のみ)
     const hot = act.some((id) => /^(roulette|ascend|challenge_|success|jp|fail|lamp[456]|warn10|timeup|add100|finish_count|result|attract|title|howto|ticket|start)/.test(id));
     const redHot = act.some((id) => /^(roulette|challenge_declare|challenge_flight)$/.test(id));
-    const list = wash && last ? wash.compute(last, clock, { ambientMin: redHot ? .8 : 0, red: redHot ? 1 : 0, navy: nl <= 3 && !hot ? 1 : 0, k: act.some((id) => id === 'jp' || id === 'success_big') ? .85 : act.includes('fail') ? .6 : act.includes('timeup') ? .45 : act.some((id) => id === 'lamp4' || id === 'lamp5' || id === 'lamp6') ? .7 : act.some((id) => id === 'result' || id === 'finish_count') ? .55 : 1, sat: act.some((id) => id === 'result' || id === 'finish_count') ? Number(new URLSearchParams(location.search).get('sat') ?? 2.4) : act.includes('lamp6') ? 2.1 : act.includes('lamp5') ? 1.7 : act.includes('lamp4') ? 1.5 : 1 }) : [];   // 大成功・JPは液晶が主役。盤面の照射が液晶をかすませないよう半分に
+    const list = wash && last ? wash.compute(last, clock, { ambientMin: redHot ? .8 : 0, red: redHot ? 1 : 0, navy: nl <= 3 && !hot ? 1 : 0, k: act.some((id) => id === 'jp' || id === 'success_big') ? .85 : act.includes('fail') ? .6 : act.includes('timeup') ? .45 : act.some((id) => id === 'lamp4' || id === 'lamp5' || id === 'lamp6') ? .7 : act.some((id) => id === 'result' || id === 'finish_count') ? .55 : 1, rainbow: act.includes('jp') ? Number(qs.get('jprb') ?? .85) : 0, sat: act.some((id) => id === 'result' || id === 'finish_count') ? Number(new URLSearchParams(location.search).get('sat') ?? 2.4) : act.includes('lamp6') ? 2.1 : act.includes('lamp5') ? 1.7 : act.includes('lamp4') ? 1.5 : 1 }) : [];   // 大成功・JPは液晶が主役。盤面の照射が液晶をかすませないよう半分に
     // 重複ルーレット: 針の位置(花びらの輪)に追従する赤いスポット
     if (act.includes('roulette') && last && last.__needle != null) {
       const th = last.__needle, P = fx.dir.pAng, G = geom.petals; let sx = 0, sy = 0, sw = 0;

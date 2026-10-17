@@ -927,11 +927,23 @@
      "lane": "petal",
      "t0": 0.0,
      "t1": 0.85,
-     "label": "点く前の桜色の明滅(消灯と点灯が入れ替わり、だんだん速く)",
-     "pat": "stutter",
+     "label": "点く前の桜色の明滅(はっきり消えて点くを3回。回を重ねるごとに強く)",
+     "pat": "blinkN",
      "p": {
       "color": "#ff7fb2",
+      "times": 3,
       "targets": "all"
+     }
+    },
+    {
+     "lane": "edge",
+     "t0": 0.0,
+     "t1": 0.85,
+     "label": "縁も同じ拍で3回明滅",
+     "pat": "blinkN",
+     "p": {
+      "color": "#ff7fb2",
+      "times": 3
      }
     },
     {
@@ -1066,10 +1078,10 @@
      "lane": "petal",
      "t0": 0.4,
      "t1": 1.2,
-     "label": "全体が強く咲く",
+     "label": "全体が金で強く咲く(4灯はピンク)",
      "pat": "bloom",
      "p": {
-      "color": "#ff2f86",
+      "color": "#ffc83a",
       "targets": "all"
      }
     },
@@ -1101,12 +1113,12 @@
      "lane": "petal",
      "t0": 0.2,
      "t1": 3.0,
-     "label": "桜と金が交互にちかちか(最後まで続く。4灯は静かなピンク)",
+     "label": "金と橙が交互にちかちか(最後まで続く。4灯は静かなピンクの呼吸)",
      "pat": "alt",
      "p": {
-      "color": "#ff2f86",
-      "color2": "#ffc83a",
-      "hz": 4,
+      "color": "#ffc83a",
+      "color2": "#ff6a1a",
+      "hz": 3,
       "targets": "all"
      }
     },
@@ -1114,11 +1126,11 @@
      "lane": "petal",
      "t0": 1.0,
      "t1": 3.0,
-     "label": "金の光が花びらを周回",
+     "label": "白金の光が花びらを周回",
      "pat": "orbit",
      "p": {
-      "color": "#ffc83a",
-      "speed": 0.6,
+      "color": "#fff2b0",
+      "speed": 0.9,
       "targets": "all"
      }
     },
@@ -3285,11 +3297,11 @@
      "lane": "edge",
      "t0": 0.6,
      "t1": 9.0,
-     "label": "ランク色の土台",
+     "label": "ランク色の土台(皿の縁まで光らせない)",
      "pat": "baseTint",
      "p": {
       "color": "rank",
-      "level": 0.9
+      "level": 0.45
      }
     },
     {

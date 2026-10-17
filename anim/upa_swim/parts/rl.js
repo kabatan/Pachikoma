@@ -148,7 +148,7 @@ function rlStart(id){
   const cfg=typeof id==='object'?id:RL_CASES[id];if(!cfg||!SPR)return;
   rl3Init();rlAscInit();
   RL.on=true;RL.t=-0.8;RL.cfg=cfg;RL.done=0;RL.ev=[];RL.bubbles.forEach(b=>b.s.destroy());RL.bubbles=[];
-  RL.nAsc=rlAscCount(cfg);RL.ascT0=RLT.T+1.5;RL.ascGap=0.38;
+  RL.nAsc=rlAscCount(cfg);RL.ascT0=RLT.T+1.5;RL.allAsc=RL.nAsc>=cfg.n&&cfg.n>=2;RL.ascGap=RL.allAsc?0.09:0.38;   // 灯が全部消える時は、全員がほぼ同時に昇天する(ディレクター 10/17)
   RL.retAt=RL.ascT0+(RL.nAsc-1)*RL.ascGap+2.45;      // 昇天が終わったら通常画面へ
   RL.endAt=RL.retAt+2.0;
   RL.discOn=false;RL.discOut=99;RL.shatT=null;RL.litSave=lit;lit=cfg.n;RL.ascs=[];RL.sparks=0;
@@ -221,7 +221,8 @@ function rlAscStart(idx,j){
   const a={u,idx,j,t0:RL.t,x0:u.x,y0:u.y,lamp:false,done:false,sp:0,tAcc:0};
   RL.ascs.push(a);u.asc=a;
   a.glow=S('glow_soft.png',{add:true,tint:0xfff2d8,alpha:0});Lrlfx.addChild(a.glow);
-  rlFlashAdd(0.14);
+  rlFlashAdd(RL.allAsc?0.06:0.14);
+  if(RL.allAsc&&j===0){rlFlashAdd(0.35);rlFX('shock_1',{size:3800,tint:0xfff0d0,a:.85});rlFX('shock_2',{size:3000,tint:0xffffff,a:.5,delay:.08});rlFX('pillar_1',{size:3000,tint:0xffe9a0,a:.7})}
   addFB(Lrlfx,fbHas('shock_1')?'shock_1':'impact_1',{x:u.x,y:u.y,size:900,tint:0xfff0d8,a:.45});
   for(let i=0;i<10;i++)addP(Lrlfx,'glint_'+(1+i%3),{add:true,tint:0xfff4d8,x:u.x,y:u.y,vx:rnd(-600,600),vy:rnd(-600,600),drag:2.4,sc0:rnd(0.5,1.0),sc1:0.1,life:rnd(0.4,0.8),a:0.9,fin:0.02,fout:0.5,rot:rnd(0,6.28),vr:rnd(-4,4)});
 }

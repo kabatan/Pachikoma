@@ -44,7 +44,8 @@ export class LightAdapter {
     const e = F.edge, pf = this.geom.edge[i].pf, base = e.base || { amount: 1, speed: 1 };
     const hue = ((pf - t * .12 * (base.speed || 1)) % 1 + 1) % 1, c = hsv(hue, 1, 1).map(toLin);
     const g = (base.amount ?? 1) * this.rainbowGain, a = e.ovrA[i], m = e.mul[i], A = F.ambient ?? 1;
-    return [0, 1, 2].map((q) => ((c[q] * g * m) * (1 - a) + e.ovr[i * 3 + q] * a + e.add[i * 3 + q]) * A);
+    const k = this.geom.edge[i].name.startsWith('EDGE_BOTTOM') ? (this.bottomK ?? 1) : 1;   // 皿の縁(下辺)の縁LEDは、囲いの内側だけ照らす指示のため弱められる
+    return [0, 1, 2].map((q) => ((c[q] * g * m) * (1 - a) + e.ovr[i * 3 + q] * a + e.add[i * 3 + q]) * A * k);
   }
   /** 定常E(ロゴ・入賞口7・7セグ5・ボタン2)の目標値。花びら/縁の q とは独立の受け口。
    *  stage2a の env は0灯の常時E(口の赤LED・ロゴ・表示)をAに折り込み済みで、灯数で ea/eb が下がると一緒に暗くなる。
