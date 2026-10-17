@@ -7,8 +7,43 @@
     },
     {
       "path": "work/game_demo/render_r2/profile.mjs",
-      "bytes": 7301,
-      "sha256": "8d169e42aedc6326c8cb0591ea7f72ac586980dfe91c610f5576a1206bd7ee21"
+      "bytes": 8462,
+      "sha256": "153317f99bf6a4aae17dee0b7d0e78f1c240c840aeead4b3b38a08ec92a2c116"
+    },
+    {
+      "path": "work/game_demo/render_r2/sparse_layers.mjs",
+      "bytes": 5295,
+      "sha256": "1e23c1204519b1fd9fb7b465e6bb2fe2d097c6780b05171ff3c4ed974fa071f4"
+    },
+    {
+      "path": "work/game_demo/render_r2/merged_back.mjs",
+      "bytes": 1294,
+      "sha256": "7c97c2f6cfb2a1ca3f457367c0bd03d617ae72f81e19d2018c2dd35ffc6e52a8"
+    },
+    {
+      "path": "work/game_demo/render_r2/float_targets.mjs",
+      "bytes": 774,
+      "sha256": "8c1019fbd81eceb61871c56945e251e2a76308d0453ffa0d3582c7a25137dd7c"
+    },
+    {
+      "path": "work/game_demo/render_r2/affine_lut.mjs",
+      "bytes": 2566,
+      "sha256": "f9e62cb287b7e00fce04ac99b0b2f697ee1a2e9096f2d80afc8972a140aaf7d3"
+    },
+    {
+      "path": "work/game_demo/render_r2/environment_basis.mjs",
+      "bytes": 5287,
+      "sha256": "f1c2e370a617d4a923a39b0cf9c4b8bc67c5e94bdc2c8d3f16d39e0e08e170af"
+    },
+    {
+      "path": "work/game_demo/render_r2/probe_reuse.mjs",
+      "bytes": 2926,
+      "sha256": "20d53ab81d4191f7aacbbc2563f1d2d6caef3ed1875b6d1fff951ea8b5c762dc"
+    },
+    {
+      "path": "work/game_demo/render_r2/SOFTWARE_RENDER.md",
+      "bytes": 1618,
+      "sha256": "23c642cfefe46cfa60fd6a9043314a09e7211025b2291700201f6729253fd848"
     },
     {
       "path": "work/game_demo/render_r2/data/pack/layers.pack",
@@ -26,7 +61,7 @@
       "sha256": "b070e6af0e3a9d3da9989c331ff135f754f214f91643efc7496a57e267c8bab6"
     }
   ],
-  "total_bytes": 71125391,
+  "total_bytes": 71146312,
   "shared_probe_parts": [
     "/assembly/sol61_v36_pack/stage2c/probes.f16.gz.part00",
     "/assembly/sol61_v36_pack/stage2c/probes.f16.gz.part01",

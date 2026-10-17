@@ -49,10 +49,10 @@ export class Board3 {
     if (this.launchFrame) { position = this.launchFrame.point(position); velocity = this.launchFrame.vector(velocity); angular = this.launchFrame.vector(angular); }
     const body = this.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(...position.map(v => v * S)).setLinvel(...velocity.map(v => v * S)).setAngvel({ x: angular[0], y: angular[1], z: angular[2] }).setCcdEnabled(true).setCanSleep(true));
     const col = this.world.createCollider(R.ColliderDesc.ball(R_BALL * S).setDensity(RHO / S ** 3).setFriction(0.12).setRestitution(0.45).setActiveEvents(R.ActiveEvents.COLLISION_EVENTS), body);
-    this.balls.set(shotId, { id: shotId, body, col, born: this.tick, still: 0 }); this.ballOf = this.ballOf ?? new Map(); this.ballOf.set(col.handle, shotId);
+    this.balls.set(shotId, { id: shotId, body, col, born: this.tick, still: 0, _p: { x: 0, y: 0, z: 0 }, _v: { x: 0, y: 0, z: 0 } }); this.ballOf = this.ballOf ?? new Map(); this.ballOf.set(col.handle, shotId);
     return shotId;
   }
-  pos(body) { const t = body.translation(); return { x: t.x / S, y: t.y / S, z: t.z / S }; }
+  pos(body, out = { x: 0, y: 0, z: 0 }) { const t = body.translation(out); out.x = t.x / S; out.y = t.y / S; out.z = t.z / S; return out; }
   _cupOf(x) { let best = this.cups[0], bd = 1e9; for (const c of this.cups) { const d = Math.abs(x - c.x); if (d < bd) { bd = d; best = c; } } return best.n; }
 
   /** 1 刻み。events に {type:'cup', shotId, cup, x, vy} / {type:'peg', index, speed} / {type:'stuck_nudge'} / {type:'lost', shotId} を積む。 */
@@ -61,17 +61,17 @@ export class Board3 {
     this.queue.drainCollisionEvents((h1, h2, started) => {
       for (const observer of this.collisionObservers) observer(h1, h2, started);
       if (!started) return; const pin = this.pegOf.get(h1) ?? this.pegOf.get(h2); if (pin === undefined) return;
-      const sid = this.ballOf?.get(h1) ?? this.ballOf?.get(h2); const b = this.balls.get(sid); if (!b) return; const v = b.body.linvel();
+      const sid = this.ballOf?.get(h1) ?? this.ballOf?.get(h2); const b = this.balls.get(sid); if (!b) return; const v = b.body.linvel(b._v);
       this.events.push({ type: 'peg', index: pin, speed: Math.hypot(v.x, v.y, v.z) / S, shotId: sid });
     });
     for (const [id, b] of this.balls) {
-      const p = this.pos(b.body);
+      const p = this.pos(b.body, b._p);
       if (b.approach === undefined && p.y <= this.mouthY) b.approach = { cup: this._cupOf(p.x), x: p.x };   // 入口線を通過した時の位置(惜しい判定: R-22)
-      if (p.y < this.sensorY) { const v = b.body.linvel(); const cup = this._cupOf(p.x), ap = b.approach ?? { cup, x: p.x }; this.events.push({ type: 'cup', shotId: id, cup, x: p.x, vy: v.y / S, approachCup: ap.cup, approachX: ap.x, crossed: ap.cup !== cup }); this._remove(id); continue; }
+      if (p.y < this.sensorY) { const v = b.body.linvel(b._v); const cup = this._cupOf(p.x), ap = b.approach ?? { cup, x: p.x }; this.events.push({ type: 'cup', shotId: id, cup, x: p.x, vy: v.y / S, approachCup: ap.cup, approachX: ap.x, crossed: ap.cup !== cup }); this._remove(id); continue; }
       if (p.y < -0.3 || (this.tick - b.born) / this.hz > 60) { this.events.push({ type: 'lost', shotId: id, at: [p.x, p.y, p.z] }); this._remove(id); continue; }
       // 山の頂点の釣り合い: 口の高さより上で 1.5 秒ほぼ静止していたら微小な横インパルス（実機では不安定平衡）
       if (this.tick % 8 === 0) {
-        const v = b.body.linvel(); const sp = Math.hypot(v.x, v.y, v.z) / S;
+        const v = b.body.linvel(b._v); const sp = Math.hypot(v.x, v.y, v.z) / S;
         if (sp < 0.01) b.still += 8 / this.hz; else b.still = 0;
         if (this.allowStuckNudge && b.still > 1.5) { b.still = 0; this.nudges++; const m = 0.007057, dv = 0.02 * (this.rng() < 0.5 ? -1 : 1); b.body.applyImpulse({ x: m * dv * S, y: 0, z: 0 }, true); this.events.push({ type: 'stuck_nudge', shotId: id }); }
       }

@@ -149,6 +149,11 @@ export class HybridRenderer {
     r.setPixelRatio(1); r.setSize(W, H, false);                 // backing 1440×2560 固定、DPR=1
     r.toneMapping = THREE.NoToneMapping; r.autoClear = false; r.info.autoReset = true;
     this.gl = r.getContext();
+    this._restoreLayerSums = () => {
+      for (const side of ['back','front']) for (const b of this.layerBuckets?.[side] || []) for (const m of b.mappings) m.dirty = true;
+      this._sumDirty = true;
+    };
+    r.domElement.addEventListener('webglcontextrestored', this._restoreLayerSums);
     this.camera = makeWindowCamera();
     this.fsCam = new THREE.Camera();
     this.gen = new Gen(r);
@@ -341,7 +346,7 @@ export class HybridRenderer {
       const map = new Map();
       g.list.forEach((e,i) => {
         const key = [...e.bbox,...e.resolution].join(',');
-        if (!map.has(key)) { const m = { entry:e, indices:[], sumLayer:-1, sumActive:false }; map.set(key,m); }
+        if (!map.has(key)) { const m = { entry:e, indices:[], sumLayer:-1, sumActive:false, dirty:true }; map.set(key,m); }
         map.get(key).indices.push(i);
       });
       g.mappings = [...map.values()];
@@ -426,10 +431,10 @@ export class HybridRenderer {
         const out = b.geo.attributes, sum = b.sumGeo.attributes;
         for (const rec of b.records) {
           const v = q[rec.id], rgb = v && (v.rgb || v);
-          rec.w0 = rgb ? rgb[0] * rec.s0 : 0;
-          rec.w1 = rgb ? rgb[1] * rec.s1 : 0;
-          rec.w2 = rgb ? rgb[2] * rec.s2 : 0;
-          rec.active = !!v && !(rec.w0 + rec.w1 + rec.w2 < 1e-6);
+          const w0 = rgb ? rgb[0] * rec.s0 : 0, w1 = rgb ? rgb[1] * rec.s1 : 0, w2 = rgb ? rgb[2] * rec.s2 : 0;
+          const on = !!v && !(w0 + w1 + w2 < 1e-6);
+          rec.changed = rec.active !== on || Math.fround(rec.w0) !== Math.fround(w0) || Math.fround(rec.w1) !== Math.fround(w1) || Math.fround(rec.w2) !== Math.fround(w2);
+          rec.w0 = w0; rec.w1 = w1; rec.w2 = w2; rec.active = on;
           if (rec.active) active++;
         }
         if (this._layerDiagnostics?.direct) {
@@ -451,7 +456,10 @@ export class HybridRenderer {
         for (const m of b.mappings) {
           m.sumActive = false;
           let count = 0, first = -1;
-          for (const i of m.indices) if (b.records[i].active) { count++; if (first < 0) first = i; }
+          for (const i of m.indices) {
+            if (b.records[i].changed) m.dirty = true;
+            if (b.records[i].active) { count++; if (first < 0) first = i; }
+          }
           if (!count) continue;
           const e = m.entry, [rw, rh] = e.resolution;
           putAttribute(out.aRect, k, ...e.bbox);
@@ -489,11 +497,12 @@ export class HybridRenderer {
     this._updateEnvUniforms(); this._updateLayers();
     if(this._sumDirty) {
       for (const side of ['back', 'front']) for (const b of this.layerBuckets[side]) {
-        for (const m of b.mappings) if (m.sumActive) {
+        for (const m of b.mappings) if (m.sumActive && (m.dirty || this._layerDiagnostics?.uncachedSums)) {
           b.sumMat.uniforms.uLayer.value = m.sumLayer;
           r.setRenderTarget(b.sumRT, m.sumLayer); r.setViewport(0, 0, b.sumRT.width, b.sumRT.height);
           r.setClearColor(0x000000, 0); r.clear(true, false, false);
           r.render(b.sumScene, this.fsCam);
+          m.dirty = false;
         }
       }
       this._sumDirty = false;
@@ -536,6 +545,7 @@ export class HybridRenderer {
     for (const side of ['back', 'front']) for (const b of this.layerBuckets[side]) {
       b.geo.dispose(); b.mat.dispose(); b.rt.dispose(); b.sumGeo.dispose(); b.sumMat.dispose(); b.sumRT.dispose();
     }
+    this.renderer.domElement.removeEventListener('webglcontextrestored', this._restoreLayerSums);
     this.renderer.dispose();
   }
 }

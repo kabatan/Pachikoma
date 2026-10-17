@@ -1,0 +1,93 @@
+// Draw the original light shader only where a source can contribute nonzero RGB.
+// Native texels, linear filtering, MSAA, draw order and float operations remain.
+import * as THREE from '../web/vendor/three/three.module.js';
+
+function support(mapping,list,tile=32){
+  const e=mapping.entry,[w,h]=e.resolution,[,,bw,bh]=e.bbox;
+  const mask=new Uint8Array(w*h);
+  for(const index of mapping.indices){
+    const pixels=list[index].pixels;
+    if(!pixels)return [[0,0,1,1]];
+    const half=pixels instanceof Uint16Array;
+    for(let i=0;i<mask.length;i++)if(!mask[i]){
+      const k=i*4;
+      if(half?((pixels[k]&32767)||(pixels[k+1]&32767)||(pixels[k+2]&32767)):(pixels[k]!==0||pixels[k+1]!==0||pixels[k+2]!==0))mask[i]=1;
+    }
+  }
+  const stride=w+1,prefix=new Uint32Array(stride*(h+1));
+  for(let y=0;y<h;y++){let sum=0;for(let x=0;x<w;x++){sum+=mask[y*w+x];prefix[(y+1)*stride+x+1]=prefix[y*stride+x+1]+sum;}}
+  const rects=[],previous=new Map();let pixels=0;
+  for(let y=0;y<bh;y+=tile){
+    const y1=Math.min(bh,y+tile),sy0=Math.max(0,Math.floor(y/bh*h-.5)-1),sy1=Math.min(h,Math.ceil(y1/bh*h+.5)+1),runs=[];
+    let begin=-1;
+    for(let x=0;x<bw;x+=tile){
+      const x1=Math.min(bw,x+tile),sx0=Math.max(0,Math.floor(x/bw*w-.5)-1),sx1=Math.min(w,Math.ceil(x1/bw*w+.5)+1);
+      const n=prefix[sy1*stride+sx1]-prefix[sy0*stride+sx1]-prefix[sy1*stride+sx0]+prefix[sy0*stride+sx0];
+      if(n){pixels+=(x1-x)*(y1-y);if(begin<0)begin=x;}
+      if(begin>=0&&(!n||x1===bw)){runs.push([begin,n?x1:x]);begin=-1;}
+    }
+    const next=new Map();
+    for(const [x0,x1]of runs){
+      const key=x0+':'+x1,old=previous.get(key);
+      if(old!==undefined&&rects[old][3]===y/bh){rects[old][3]=y1/bh;next.set(key,old);}
+      else{next.set(key,rects.length);rects.push([x0/bw,y/bh,x1/bw,y1/bh]);}
+    }
+    previous.clear();for(const [key,index]of next)previous.set(key,index);
+  }
+  rects.pixels=pixels;return rects;
+}
+const keyFor=(bbox,res)=>[...bbox,...res].join(',');
+export function installSparseLayers(hr){
+  const stats=hr.stats.sparseLayers={groups:0,rectangles:0,fullPixels:0,supportedPixels:0,drawInstances:0},records=[];
+  for(const side of ['back','front'])for(const b of hr.layerBuckets[side]){
+    const masks=new Map();let capacity=0;
+    for(const m of b.mappings){
+      const rects=support(m,b.list);masks.set(keyFor(m.entry.bbox,m.entry.resolution),rects);capacity+=rects.length;
+      stats.groups++;stats.rectangles+=rects.length;stats.fullPixels+=m.entry.bbox[2]*m.entry.bbox[3];stats.supportedPixels+=rects.pixels??m.entry.bbox[2]*m.entry.bbox[3];
+    }
+    const geo=new THREE.InstancedBufferGeometry();geo.setIndex(b.geo.index);geo.setAttribute('position',b.geo.attributes.position);
+    for(const name of ['aRect','aTex','aW','aTile','aClip']){
+      const a=new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1,capacity)*4),4);a.setUsage(THREE.DynamicDrawUsage);geo.setAttribute(name,a);
+    }
+    const meshes=[];
+    for(const scene of [hr.sBack,hr.sFront])for(const mesh of scene.children)if(mesh.geometry===b.geo){
+      const mat=mesh.material;
+      if(!mat.vertexShader.includes('vec2 c = position.xy;')){geo.dispose();throw new Error('Sparse layer vertex contract changed');}
+      mat.vertexShader='attribute vec4 aClip;\n'+mat.vertexShader.replace('vec2 c = position.xy;','vec2 c = mix(aClip.xy, aClip.zw, position.xy);');mat.needsUpdate=true;
+      mesh.geometry=geo;meshes.push(mesh);
+    }
+    records.push({b,geo,masks,meshes,versions:[],count:-1});
+  }
+  const update=hr._updateLayers.bind(hr);
+  hr._updateLayers=()=>{
+    update();stats.drawInstances=0;
+    for(const a of records){
+      const {b,geo,masks}=a,n=b.geo.instanceCount,attributes=b.geo.attributes,names=['aRect','aTex','aW','aTile'];
+      const layoutChanged=a.count!==n||[0,1,3].some(i=>a.versions[i]!==attributes[names[i]].version);
+      const weightsChanged=layoutChanged||a.versions[2]!==attributes.aW.version;
+      if(!weightsChanged){stats.drawInstances+=geo.instanceCount;continue;}
+      if(layoutChanged)a.clips=[];
+      const copyNames=layoutChanged?names:['aW'];
+      let out=0;
+      for(let i=0;i<n;i++){
+        const j=i*4,r=attributes.aRect.array,t=attributes.aTex.array;
+        if(layoutChanged)a.clips[i]=masks.get([r[j],r[j+1],r[j+2],r[j+3],t[j+1],t[j+2]].join(','))||[[0,0,1,1]];
+        for(const clip of a.clips[i]){
+          const offset=out++*4;
+          if(offset+4>geo.attributes.aClip.array.length)throw new Error('Sparse layer capacity mismatch');
+          for(const name of copyNames){
+            const src=attributes[name].array,dst=geo.attributes[name].array;
+            dst[offset]=src[j];dst[offset+1]=src[j+1];dst[offset+2]=src[j+2];dst[offset+3]=src[j+3];
+          }
+          if(layoutChanged)geo.attributes.aClip.array.set(clip,offset);
+        }
+      }
+      geo.instanceCount=out;stats.drawInstances+=out;a.count=n;a.versions=names.map(name=>attributes[name].version);
+      for(const name of layoutChanged?[...names,'aClip']:['aW']){
+        const attr=geo.attributes[name];attr.clearUpdateRanges();attr.addUpdateRange(0,out*4);attr.needsUpdate=true;
+      }
+    }
+  };
+  const dispose=hr.dispose.bind(hr);
+  hr.dispose=()=>{for(const a of records){for(const mesh of a.meshes)mesh.geometry=a.b.geo;a.geo.dispose();}dispose();};
+}

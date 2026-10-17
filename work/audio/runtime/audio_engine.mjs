@@ -40,7 +40,21 @@ export class AudioEngine {
     }));
     if(this.voiceProvider!=='off')await Promise.all(Object.keys(VOICE_FILES).map(p=>this._loadVoice(p)));   // 声オフなら声素材を読まない(公開版は声素材を同梱しない)。後から声を有効にしたときは setVoiceProvider が読む
     const timing=await fetch(new URL('./win_timing.json',import.meta.url));if(!timing.ok)throw new Error('win timing HTTP '+timing.status);this.winTiming=await timing.json();
+    if(!this.legacy)this._primeEventBuffers();
     return this;
+  }
+  _primeEventBuffers() {
+    const cacheWin=event=>{
+      const plan=winPlan(event,this.winTiming);if(!plan)return;
+      const key=plan.id+':'+plan.duration;
+      if(!this.winCache.has(key))this.winCache.set(key,createWinSound(this.ctx,this.buffers,this.winTiming,plan));
+    };
+    cacheWin({id:'success_small'}); cacheWin({id:'success_big'}); cacheWin({id:'jp'});
+    for(const duration of this.winTiming.jp_variants_s??[])cacheWin({id:'jp',data:{duration}});
+    for(let n=1;n<=8;n++) {
+      const samples=payoutSamples(n,this.ctx.sampleRate),buffer=this.ctx.createBuffer(2,samples[0].length,this.ctx.sampleRate);
+      buffer.copyToChannel(samples[0],0);buffer.copyToChannel(samples[1],1);this.payoutCache.set(n,buffer);
+    }
   }
   async unlock() { await this.ctx.resume(); await this.ready; }
   setMaster(value) { this.master.gain.setTargetAtTime(clamp(Number(value)||0,0,1),this.ctx.currentTime,.025); }
@@ -163,7 +177,7 @@ export class AudioEngine {
     let buffer=this.buffers.get(spec.cue);
     if(!this.legacy&&['success_small','success_big','jp'].includes(e.id)){
       const plan=winPlan(e,this.winTiming),key=plan.id+':'+plan.duration;
-      if(!this.winCache.has(key)){if(this.winCache.size>=3)this.winCache.delete(this.winCache.keys().next().value);this.winCache.set(key,createWinSound(this.ctx,this.buffers,this.winTiming,plan));}
+      if(!this.winCache.has(key)){if(this.winCache.size>=12)this.winCache.delete(this.winCache.keys().next().value);this.winCache.set(key,createWinSound(this.ctx,this.buffers,this.winTiming,plan));}
       buffer=this.winCache.get(key);spec={...spec,winPlan:plan};
     }
     const accepted=this._play(buffer,spec,{rate:e.id==='dup_protect'?[1,2,.5][this.sequence++%3]:1});

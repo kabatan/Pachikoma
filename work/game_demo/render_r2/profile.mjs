@@ -1,5 +1,11 @@
+import { installProbeReuse } from './probe_reuse.mjs';
 // Selected by select_render.mjs. Keep the tray renderer's render wrapper intact.
 import * as THREE from '../web/vendor/three/three.module.js';
+import { installSparseLayers } from './sparse_layers.mjs';
+import { installMergedBack } from './merged_back.mjs';
+import { installFloatTargets } from './float_targets.mjs';
+import { installAffineLut } from './affine_lut.mjs';
+import { installEnvironmentBasis } from './environment_basis.mjs';
 import { PROBES } from '../web/src/probes.mjs';
 
 export async function installRenderR2(hr, { nativePack = false, trimBox = [1100,680,1410,1510] } = {}) {
@@ -107,4 +113,15 @@ export async function installRenderR2(hr, { nativePack = false, trimBox = [1100,
   // Do not resolve a depth attachment that no later pass samples.
   hr.rtMain.resolveDepthBuffer = false;
   hr.stats.renderProfile = 'r2';
+  // Keep hardware rendering's existing formats and draw path. The software
+  // path computes the same image, with unchanged resolution and MSAA samples.
+  const selection=new URLSearchParams(location.search).get('reuse');
+  const debug=hr.gl.getExtension('WEBGL_debug_renderer_info');
+  const device=debug?String(hr.gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)):'';
+  const software=/SwiftShader|llvmpipe|softpipe|software rasterizer|Microsoft Basic Render/i.test(device);
+  const enabled=selection!=='reference'&&(selection==='exact'||software);
+  hr.stats.renderReuse={enabled,software,selection:selection||'auto',device};
+  if(enabled){
+    installSparseLayers(hr);installFloatTargets(hr);installMergedBack(hr);installAffineLut(hr);installEnvironmentBasis(hr);installProbeReuse(hr,{visibleOnly:true});
+  }
 }

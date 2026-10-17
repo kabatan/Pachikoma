@@ -30,6 +30,15 @@ export class StageTransforms {
   get(stage) { const t = this.stages.get(stage); if (!t) throw new Error(`Unknown stage: ${stage}`); return t; }
   vector(stage, p) { return this.get(stage).rotation.map(row => row.reduce((sum, v, i) => sum + v * p[i], 0)); }
   point(stage, p) { const t = this.get(stage); return this.vector(stage, p).map((v, i) => v + t.translation[i]); }
+  pointInto(stage, x, y, z, out) {
+    const t = this.get(stage), r = t.rotation;
+    for (let i = 0; i < 3; i++) {
+      const row = r[i]; let v = 0;
+      v += row[0] * x; v += row[1] * y; v += row[2] * z;
+      out[i] = v + t.translation[i];
+    }
+    return out;
+  }
   inverseVector(stage, p) { const { rotation: r } = this.get(stage); return [0, 1, 2].map(i => r.reduce((sum, row, j) => sum + row[i] * p[j], 0)); }
   inversePoint(stage, p) { const t = this.get(stage); return this.inverseVector(stage, p.map((v, i) => v - t.translation[i])); }
   pointBetween(from, to, p) { return this.inversePoint(to, this.point(from, p)); }

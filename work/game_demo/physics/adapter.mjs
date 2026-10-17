@@ -24,10 +24,13 @@ export const STOCK0 = 5, STOCK_MAX = 4;
 export const RAPID_SUPPLY = Object.freeze({ reloadSeconds: 0.45, feedGap: 0.45, liftSpeed: 0.4, stockMax: 3, stock0: 4 });
 
 function polyline(pts) { const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2])); return { pts, L, len: L[L.length - 1] }; }
-function at(poly, s) {
-  const { pts, L } = poly; if (s <= 0) return pts[0]; if (s >= poly.len) return pts[pts.length - 1];
+function at(poly, s, out = null) {
+  const { pts, L } = poly;
+  if (s <= 0) { if (!out) return pts[0]; const p = pts[0]; out[0] = p[0]; out[1] = p[1]; out[2] = p[2]; return out; }
+  if (s >= poly.len) { if (!out) return pts[pts.length - 1]; const p = pts[pts.length - 1]; out[0] = p[0]; out[1] = p[1]; out[2] = p[2]; return out; }
   let i = 1; while (L[i] < s) i++; const u = (s - L[i - 1]) / (L[i] - L[i - 1]); const a = pts[i - 1], b = pts[i];
-  return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+  const x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u, z = a[2] + (b[2] - a[2]) * u;
+  if (!out) return [x, y, z]; out[0] = x; out[1] = y; out[2] = z; return out;
 }
 
 export class PhysicsAdapter {
@@ -202,10 +205,11 @@ export class PhysicsAdapter {
     const buf = this._snapshotBuffer ??= { pos: new Float32Array(this.maxBalls * 3), kind: new Uint8Array(this.maxBalls), ids: [] };
     const { pos, kind, ids } = buf; ids.length = 0; // 次のsnapshotまで有効。描画側はsetBalls内でコピーする。
     let n = 0; const put = (x, y, z, k, id) => { if (n >= this.maxBalls) return; pos[3 * n] = x; pos[3 * n + 1] = y; pos[3 * n + 2] = z; kind[n] = k; ids.push(id); n++; };
-    for (const b of this.board.balls.values()) { const p = this.board.pos(b.body); put(...this.transforms.point('stage3', [p.x, p.y, p.z]), KIND.board, b.id); }
-    for (const q of this.transit) { const p = at(q.poly, q.s); put(...this.transforms.point('stage3', p), KIND.ret, q.shotId); }
-    for (const [id, b] of this.tray.activeBalls) { if (b.stored) continue; const p = b.prev; put(...this.transforms.point('stage1', [p.x, p.y, p.z].map((v, i) => v - this.tray.T[i])), KIND.tray, id); }
-    for (const q of this.travel) { const p = at(this.liftPath, q.s); put(...this.transforms.point('stage2', p), KIND.lift, q.id); }
+    const stagePoint = this._snapshotStagePoint ??= [0, 0, 0], assemblyPoint = this._snapshotAssemblyPoint ??= [0, 0, 0];
+    for (const b of this.board.balls.values()) { const p = this.board.pos(b.body, b._p), a = this.transforms.pointInto('stage3', p.x, p.y, p.z, assemblyPoint); put(a[0], a[1], a[2], KIND.board, b.id); }
+    for (const q of this.transit) { const p = at(q.poly, q.s, stagePoint), a = this.transforms.pointInto('stage3', p[0], p[1], p[2], assemblyPoint); put(a[0], a[1], a[2], KIND.ret, q.shotId); }
+    for (const [id, b] of this.tray.activeBalls) { if (b.stored) continue; const p = b.prev, T = this.tray.T, a = this.transforms.pointInto('stage1', p.x - T[0], p.y - T[1], p.z - T[2], assemblyPoint); put(a[0], a[1], a[2], KIND.tray, id); }
+    for (const q of this.travel) { const p = at(this.liftPath, q.s, stagePoint), a = this.transforms.pointInto('stage2', p[0], p[1], p[2], assemblyPoint); put(a[0], a[1], a[2], KIND.lift, q.id); }
     const sh = this.board.shuttle(this.aim, this.dir); const shuttleAssembly = this.transforms.point('stage2', [sh.x, this.muzzle[1], this.muzzle[2]]);
     if (this.shuttleHas) put(...shuttleAssembly, KIND.shuttle, 'shuttle');
     const T = this.tray;
