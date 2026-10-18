@@ -7,8 +7,18 @@
     },
     {
       "path": "work/game_demo/render_r2/profile.mjs",
-      "bytes": 9919,
-      "sha256": "a1cf782a7183a9325eb143f7fd16af107bada1f95fbabc8f5ccf75f9dbbdb86d"
+      "bytes": 10116,
+      "sha256": "c9991199043869003bada9f5433a02a9b3bdf2d26a53322c6514667287cc5198"
+    },
+    {
+      "path": "work/game_demo/render_r2/early_light_clip.mjs",
+      "bytes": 1719,
+      "sha256": "ddb1e8aba33a07f6f691950801c5bbd265c2e872d120015c9278caf1681f775d"
+    },
+    {
+      "path": "work/game_demo/render_r2/compact_env_masks.mjs",
+      "bytes": 3424,
+      "sha256": "7ccfdab162da1b04a80a63af2f693d7b8f761acc03c658883bd4464af9878a79"
     },
     {
       "path": "work/game_demo/render_r2/detail_channels.mjs",
@@ -86,7 +96,7 @@
       "sha256": "b070e6af0e3a9d3da9989c331ff135f754f214f91643efc7496a57e267c8bab6"
     }
   ],
-  "total_bytes": 71173095,
+  "total_bytes": 71178435,
   "shared_probe_parts": [
     "/assembly/sol61_v36_pack/stage2c/probes.f16.gz.part00",
     "/assembly/sol61_v36_pack/stage2c/probes.f16.gz.part01",

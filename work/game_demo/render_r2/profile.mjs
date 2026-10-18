@@ -1,3 +1,5 @@
+import { installCompactEnvironmentMasks } from './compact_env_masks.mjs';
+import {installEarlyLightClip} from './early_light_clip.mjs';
 import { createDetailChannels } from './detail_channels.mjs';
 import { installProbeUniforms } from './probe_uniforms.mjs';
 import { installGlobalSumAtlas } from './global_sum_atlas.mjs';
@@ -132,7 +134,7 @@ export async function installRenderR2(hr, { nativePack = false, trimBox = [1100,
   // Keep hardware rendering's existing formats and draw path. The software
   // path computes the same image, with unchanged resolution and MSAA samples.
   hr.stats.renderReuse={enabled,software,selection:selection||'auto',device};
-  if(!enabled&&selection!=='reference'&&!software){installGlobalSumAtlas(hr);installSparseLayers(hr,{textureWeights:true});installMergedBack(hr);installProbeUniforms(hr);installProbeReuse(hr,{visibleOnly:true});hr.stats.nativeReuse=true;}
+  if(!enabled&&selection!=='reference'&&!software){installCompactEnvironmentMasks(hr);installGlobalSumAtlas(hr);installSparseLayers(hr,{textureWeights:true});installMergedBack(hr);installProbeUniforms(hr);installProbeReuse(hr,{visibleOnly:true});installEarlyLightClip(hr);hr.stats.nativeReuse=true;}
   if(enabled){
     installSparseLayers(hr);installFloatTargets(hr);installMergedBack(hr);installAffineLut(hr);installEnvironmentBasis(hr);installProbeReuse(hr,{visibleOnly:true});installSharedLightField(hr);
   }

@@ -250,7 +250,7 @@
         // ボタン(筐体の下): 押す瞬間にまっすぐ下向きの矢印が光る。左=うつ、右=しょうぶ
         const bx=bt==='right'?1196:128;
         if(st===0||st===2||st===3)B.point(g,bx,632+btn*10,bt==='right'?'right':'left',t,{s:.8,a:sa});
-        LCD.text(g,st<NP-1?'ひかる ボタンで つぎへ ▶':'ひかる ボタンで スタート ▶',1262,708,{size:24,align:'right',a:smooth((lt-2.2)/.3)*(.75+.25*Math.sin(t*4)),fill1:'#f4f8ff',fill2:'#c8d4f2',stroke:6});
+        LCD.text(g,st<NP-1?'ひかる ボタンで つぎへ ▶':'ひかる ボタンで スタート ▶',1262,708,{size:24,align:'right',a:smooth((lt-.5)/.3)*(.75+.25*Math.sin(t*4)),fill1:'#f4f8ff',fill2:'#c8d4f2',stroke:6});
       });
     }
   });

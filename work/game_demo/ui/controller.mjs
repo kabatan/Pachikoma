@@ -18,7 +18,7 @@ export class MedalController {
     this.preBuffer = null; this.preWindow = 0.3; this.preWindowDrain = 5;
     this.fireBuffer = null; this.fireWindow = 0.3;   // 同時発射: 間隔待ち(残り0.3秒以内)に押された発射は、狙いを押した瞬間に固定して解禁と同時に撃つ
     this.droppedInputs = [];   // R-04: 勝負ボタンの先押しを0.3秒だけ1回保持。捨てた押しは記録
-    this.howtoSeconds = 0; this.howtoMinDwell = 2.5; this.howtoPanels = 5; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
+    this.howtoSeconds = 0; this.howtoMinDwell = 0.5; this.howtoPanels = 5; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
   }
   onAction(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   get phase() { return this.game.phase; }
@@ -58,7 +58,7 @@ export class MedalController {
     switch (action) {
       case 'start':
         if (g.phase !== MedalPhase.Attract) break;
-        if (this.howto) {   // 説明は howtoPanels コマ(等分)。押すと次のコマへ、最後のコマで押すと開始。各コマ最低 howtoMinDwell 秒は読ませる(連打で一気に飛ばさない)
+        if (this.howto) {   // 説明は howtoPanels コマ(等分)。押すと次のコマへ、最後のコマで押すと開始。各コマ最低 howtoMinDwell 秒(0.5秒)は押しても進まない(タイトルからの二度押しや連打で一気に飛ばさない)
           const h = this.howto, per = this.howtoSeconds / this.howtoPanels, dwell = Math.min(this.howtoMinDwell, per * 0.6);
           const k = Math.min(this.howtoPanels - 1, Math.floor(h.t / per));
           if (h.t - k * per >= dwell) { if (k >= this.howtoPanels - 1) { this._startNow(); return true; } h.t = (k + 1) * per; this._lastActionFrame = this.frame; return true; }

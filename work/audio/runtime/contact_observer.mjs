@@ -60,6 +60,13 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
       pairState.nextImpulse=0;
       pairState.nextLast=pairState.frame===pairFrame?pairState.last:-10;
       nextPairs.push(pairState);
+      if(region==='tray') {
+        const qa=pre.get(sourceBall.body.handle), bodyB=cb.parent(), qb=bodyB&&pre.get(bodyB.handle);
+        // Sleeping-sleeping and sleeping-static pairs cannot emit a contact sound.
+        // Their solver impulse is unchanged while both bodies remain asleep, so
+        // retain the last exact value for the next wake-up comparison.
+        if(qa?.sleeping&&(!bodyB||(qb?.sleeping))) { pairState.nextImpulse=pairState.impulse; return; }
+      }
       queryImpulse=0; querySpeed=0;
       sourceBall.body.translation(queryPoint);
       world.contactPair(sourceCollider,cb,visitManifold);
@@ -94,7 +101,7 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
           let q=statePool[stateCount];
           if(!q) q=statePool[stateCount]={v:{x:0,y:0,z:0},w:{x:0,y:0,z:0},p:{x:0,y:0,z:0}};
           stateCount++;
-          body.linvel(q.v); body.angvel(q.w); body.translation(q.p); pre.set(body.handle,q);
+          body.linvel(q.v); body.angvel(q.w); body.translation(q.p); q.sleeping=region==='tray'&&body.isSleeping(); pre.set(body.handle,q);
           let entry=ballPool[ballCount];
           if(!entry) entry=ballPool[ballCount]={id:null,label:'',body:null,rank:0};
           if(entry.id!==id) { entry.id=id; entry.label=String(id); }
