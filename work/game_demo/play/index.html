@@ -10,7 +10,7 @@
  .oldui #start,.oldui #fullscreen{opacity:1;width:auto;height:auto}
  #serial-panel{position:fixed;left:8px;top:48px;z-index:9;display:flex;align-items:center;gap:8px;color:#fff;background:#111a;padding:5px 8px;font:12px sans-serif;border-radius:4px}
  #serial-connect{padding:4px 8px;font:12px sans-serif}
- #audio-panel{width:240px;max-width:calc(100vw - 32px);display:flex;flex-wrap:wrap;align-items:center;gap:4px;position:fixed;left:8px;top:100px;z-index:9;background:#111b;color:white;padding:5px 8px;font:12px sans-serif}
+ #audio-panel{max-width:calc(100vw - 32px);display:flex;flex-wrap:wrap;align-items:center;gap:4px;position:fixed;right:8px;top:48px;z-index:9;background:#111b;color:white;padding:5px 8px;font:12px sans-serif}
  #audio-panel[hidden]{display:none}
  #audio-credits{position:fixed;right:8px;bottom:40px;z-index:9;max-width:320px;background:#111e;color:#fff;padding:6px 10px;font:12px sans-serif}
  #audio-credits[hidden]{display:none}
@@ -18,6 +18,10 @@
  #fullscreen{position:fixed;right:8px;bottom:8px;z-index:9;padding:8px 16px;font:16px sans-serif;opacity:0;width:1px;height:1px;overflow:hidden}
  #config-debug{position:fixed;left:8px;bottom:8px;z-index:9;color:#bde;background:#000b;font:12px monospace;white-space:pre-wrap;pointer-events:none;max-width:75vw}
  #config-error{position:fixed;inset:60px 12px auto;z-index:60;padding:16px;background:#300;color:#fff;font:16px sans-serif;white-space:pre-wrap;overflow-wrap:anywhere}
+ /* Rotate the complete stage (canvas, LCD/tutorial and DOM controls) in the compositor. */
+ html[data-display="portrait"] #stage,html[data-display="portrait-flip"] #stage{position:fixed;left:50%;top:50%;margin:0;width:min(100vh,56.25vw);height:min(100vw,calc(100vh * 16 / 9));transform:translate(-50%,-50%) rotate(90deg)}
+ html[data-display="portrait-flip"] #stage{transform:translate(-50%,-50%) rotate(270deg)}
+ html[data-display="portrait"] :is(#serial-panel,#audio-panel,#audio-credits,#hud,#config-debug,#fullscreen,#start),html[data-display="portrait-flip"] :is(#serial-panel,#audio-panel,#audio-credits,#hud,#config-debug,#fullscreen,#start){display:none!important}
 </style></head>
 <body>
 <button id="start">音を有効にする(クリック)</button>
@@ -35,5 +39,6 @@
 <div id="config-debug" hidden></div>
 <div id="config-error" role="alert" hidden></div>
 <div id="stage"><canvas id="c" width="1440" height="2560"></canvas><div id="loading">読み込み中…</div></div>
+<script type="module" src="./display_mode.mjs"></script>
 <script type="module" src="./play.mjs"></script>
 </body></html>

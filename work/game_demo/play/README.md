@@ -20,6 +20,23 @@ nice -n 10 node work/game_demo/play/serve.mjs 8792
 
 Space / ESP32左ボタン: 開始・発射、ESP32右ボタン: 遊技中は挑戦・時間切れ画面では100円追加、C: 挑戦、A: 100円追加、B: 計数（もう一度Bで確定）、計数後R: 次のプレイ、F: 全画面、D: 設定表示の出し入れ（既定は非表示）。開始画面と画面内の「発射」「CHALLENGE」等もクリック／タップで操作できる。
 
+## 本番モニタの表示切り替え
+
+**K** を押すたびに **0 通常 → 1 縦置き（時計回り90°）→ 2 縦置き反転（270°）→ 0**。
+Windows の解像度は横長の **2560×1440** のまま、モニタを物理的に縦置きにする。状態1・2では ESP32・音量/BGM・クレジット・デバッグ・全画面/音開始ボタンを隠し、Fullscreen API で全画面にする。状態0では元の UI の表示条件と盤の配置へ戻し、全画面を解除する。D で非表示にした情報等は、その設定を保つ。入力欄編集中・修飾キー併用・キーの長押しでは切り替えない。
+
+表示状態は `localStorage` の `pachikoma.display` に保存する。URL の `?display=normal` / `?display=portrait` / `?display=portrait-flip` は保存値より優先し、その状態も保存する。再読み込み後は最初のキー入力（Esc以外）またはクリック/タップで全画面に戻る。ブラウザが全画面を許可しない場合も回転は有効で、次の操作で再試行する。Escで全画面を抜けても回転状態は保つ。
+
+回転は `#stage` の CSS transform のみ。canvas の内部解像度 **1440×2560**、描画ループは変えない。2560×1440・DPR 1 の状態1・2では等倍で画面を埋める。それ以外の縦横比では盤を切らず、余白を付けて収める。チュートリアル・液晶・DOM のゲームボタンも同じ盤と一緒に回る。マウス/タッチ座標を直接使う処理はなし（DOM の `data-action` で判定）。ESP32 は CSS で表示を隠すだけで接続・入力を維持し、既存の自動接続（許可済みポートが1つなら PING で識別）も継続する。
+
+Windows でタスクバーを確実に隠す補助として、通常どおりサーバーを起動したあと、Edge をキオスクで起動できる（URL/ポートはサーバー表示に合わせる）:
+
+```powershell
+& "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe" --kiosk "http://127.0.0.1:8800/game_demo/play/index.html?display=portrait" --edge-kiosk-type=fullscreen
+```
+
+キオスクから終了する場合は Alt+F4。通常の起動手順と K の3状態切り替えも使用できる。
+
 ## 調整結果を載せる
 
 `work/game_tuning/proto/config.json`を書き換えてページを再読込する。例は同じ場所の`config.example.json`（mix_n75_10、釘81本）。設定を指定しないURLも従来どおり動く。

@@ -428,15 +428,20 @@ export class HybridRenderer {
     for (const side of ['back', 'front']) {
       for (const b of this.layerBuckets[side]) {
         let k = 0, sk = 0;
+        const packKey=(this._layerDiagnostics?.direct?1:0)|(this._layerDiagnostics?.groupOrder?2:0);
+        let repack=b._packedKey!==packKey;
         const out = b.geo.attributes, sum = b.sumGeo.attributes;
         for (const rec of b.records) {
           const v = q[rec.id], rgb = v && (v.rgb || v);
           const w0 = rgb ? rgb[0] * rec.s0 : 0, w1 = rgb ? rgb[1] * rec.s1 : 0, w2 = rgb ? rgb[2] * rec.s2 : 0;
           const on = !!v && !(w0 + w1 + w2 < 1e-6);
           rec.changed = rec.active !== on || Math.fround(rec.w0) !== Math.fround(w0) || Math.fround(rec.w1) !== Math.fround(w1) || Math.fround(rec.w2) !== Math.fround(w2);
+          repack ||= rec.changed;
           rec.w0 = w0; rec.w1 = w1; rec.w2 = w2; rec.active = on;
           if (rec.active) active++;
         }
+        if(!repack) continue;
+        b._packedKey=packKey;
         if (this._layerDiagnostics?.direct) {
           const indices = this._layerDiagnostics.groupOrder ? b.mappings.flatMap(m => m.indices) : b.records.keys();
           for (const i of indices) {

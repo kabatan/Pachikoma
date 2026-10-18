@@ -37,9 +37,18 @@ function support(mapping,list,tile=32){
   rects.pixels=pixels;return rects;
 }
 const keyFor=(bbox,res)=>[...bbox,...res].join(',');
-export function installSparseLayers(hr){
+export function installSparseLayers(hr,{textureWeights=false}={}){
   const stats=hr.stats.sparseLayers={groups:0,rectangles:0,fullPixels:0,supportedPixels:0,drawInstances:0},records=[];
+  const total=['back','front'].reduce((n,side)=>n+hr.layerBuckets[side].reduce((s,b)=>s+b.n,0),0);
+  let table=null,nextOffset=0;
+  if(textureWeights&&total>0&&total<=hr.gl.getParameter(hr.gl.MAX_TEXTURE_SIZE)){
+    table=new THREE.DataTexture(new Float32Array(total*4),total,1,THREE.RGBAFormat,THREE.FloatType);table.minFilter=table.magFilter=THREE.NearestFilter;table.needsUpdate=true;
+  }
+  stats.textureWeights=!!table;stats.weightBytes=table?total*16:0;
   for(const side of ['back','front'])for(const b of hr.layerBuckets[side]){
+    const originalWeightArray=b.geo.attributes.aW.array,weightOffset=nextOffset;nextOffset+=b.n;
+    if(table){table.image.data.set(originalWeightArray,weightOffset*4);b.geo.attributes.aW.array=table.image.data.subarray(weightOffset*4,(weightOffset+b.n)*4);}
+
     const masks=new Map();let capacity=0;
     for(const m of b.mappings){
       const rects=support(m,b.list);masks.set(keyFor(m.entry.bbox,m.entry.resolution),rects);capacity+=rects.length;
@@ -54,17 +63,26 @@ export function installSparseLayers(hr){
       const mat=mesh.material;
       if(!mat.vertexShader.includes('vec2 c = position.xy;')){geo.dispose();throw new Error('Sparse layer vertex contract changed');}
       mat.vertexShader='attribute vec4 aClip;\n'+mat.vertexShader.replace('vec2 c = position.xy;','vec2 c = mix(aClip.xy, aClip.zw, position.xy);');mat.needsUpdate=true;
+      if(table){
+        if(!mat.vertexShader.includes('vW = aW.rgb;'))throw new Error('Sparse weight shader changed');
+        mat.vertexShader='uniform highp sampler2D uSparseWeights;uniform int uSparseOffset;\n'+mat.vertexShader.replace('vW = aW.rgb;','vW = texelFetch(uSparseWeights,ivec2(uSparseOffset+int(aW.w),0),0).rgb;');
+        mat.uniforms.uSparseWeights={value:table};mat.uniforms.uSparseOffset={value:weightOffset};mat.needsUpdate=true;
+      }
       mesh.geometry=geo;meshes.push(mesh);
     }
-    records.push({b,geo,masks,meshes,versions:[],count:-1});
+    records.push({b,geo,masks,meshes,versions:[],count:-1,originalWeightArray});
   }
   const update=hr._updateLayers.bind(hr);
   hr._updateLayers=()=>{
-    update();stats.drawInstances=0;
+    update();stats.drawInstances=0;let weightDirty=false;
     for(const a of records){
       const {b,geo,masks}=a,n=b.geo.instanceCount,attributes=b.geo.attributes,names=['aRect','aTex','aW','aTile'];
       const layoutChanged=a.count!==n||[0,1,3].some(i=>a.versions[i]!==attributes[names[i]].version);
       const weightsChanged=layoutChanged||a.versions[2]!==attributes.aW.version;
+      if(table){
+        weightDirty||=a.versions[2]!==attributes.aW.version;
+        if(!layoutChanged){a.versions[2]=attributes.aW.version;stats.drawInstances+=geo.instanceCount;continue;}
+      }
       if(!weightsChanged){stats.drawInstances+=geo.instanceCount;continue;}
       if(layoutChanged)a.clips=[];
       const copyNames=layoutChanged?names:['aW'];
@@ -79,6 +97,7 @@ export function installSparseLayers(hr){
             const src=attributes[name].array,dst=geo.attributes[name].array;
             dst[offset]=src[j];dst[offset+1]=src[j+1];dst[offset+2]=src[j+2];dst[offset+3]=src[j+3];
           }
+          if(table)geo.attributes.aW.array[offset+3]=i;
           if(layoutChanged)geo.attributes.aClip.array.set(clip,offset);
         }
       }
@@ -87,7 +106,8 @@ export function installSparseLayers(hr){
         const attr=geo.attributes[name];attr.clearUpdateRanges();attr.addUpdateRange(0,out*4);attr.needsUpdate=true;
       }
     }
+    if(table&&weightDirty)table.needsUpdate=true;
   };
   const dispose=hr.dispose.bind(hr);
-  hr.dispose=()=>{for(const a of records){for(const mesh of a.meshes)mesh.geometry=a.b.geo;a.geo.dispose();}dispose();};
+  hr.dispose=()=>{for(const a of records){if(table){a.originalWeightArray.set(a.b.geo.attributes.aW.array);a.b.geo.attributes.aW.array=a.originalWeightArray;}for(const mesh of a.meshes)mesh.geometry=a.b.geo;a.geo.dispose();}table?.dispose();dispose();};
 }

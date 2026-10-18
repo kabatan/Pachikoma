@@ -7,13 +7,13 @@
     },
     {
       "path": "work/game_demo/render_r2/profile.mjs",
-      "bytes": 8558,
-      "sha256": "d5294332cad87e61e99f520e89309d85a3f8d26e099305e1c951d930098181eb"
+      "bytes": 8903,
+      "sha256": "7bbd554511d72aa6ee55e5a25124e1a1e85bc598f809c780beeb03324294d763"
     },
     {
       "path": "work/game_demo/render_r2/sparse_layers.mjs",
-      "bytes": 5295,
-      "sha256": "1e23c1204519b1fd9fb7b465e6bb2fe2d097c6780b05171ff3c4ed974fa071f4"
+      "bytes": 6979,
+      "sha256": "00e002e80385bf20bd24deb6feb85725ce70faa340ac87cc8584463e511fbdfa"
     },
     {
       "path": "work/game_demo/render_r2/merged_back.mjs",
@@ -46,9 +46,19 @@
       "sha256": "f725dc18164b3984b098a86206c5cf2a0c5cdb575edce979c357f11a19592f27"
     },
     {
+      "path": "work/game_demo/render_r2/sum_atlas.mjs",
+      "bytes": 5717,
+      "sha256": "f492f7f335a5eb64664b4268188b216cd12db1c230759956de94ed69ebcf7e5e"
+    },
+    {
+      "path": "work/game_demo/render_r2/probe_uniforms.mjs",
+      "bytes": 1816,
+      "sha256": "76fca9bcce3af0704409f9097e42a805e3c19b501965fcaa04fc0507151a6bcf"
+    },
+    {
       "path": "work/game_demo/render_r2/SOFTWARE_RENDER.md",
-      "bytes": 1971,
-      "sha256": "a56b839fcb04432784237c11b884153756d4558bac9a99458aeff490d1088205"
+      "bytes": 2991,
+      "sha256": "28c683c883e9ccc19533f921d34092b63c96b2643aef296b02fe6aadf20863ec"
     },
     {
       "path": "work/game_demo/render_r2/data/pack/layers.pack",
@@ -66,7 +76,7 @@
       "sha256": "b070e6af0e3a9d3da9989c331ff135f754f214f91643efc7496a57e267c8bab6"
     }
   ],
-  "total_bytes": 71151395,
+  "total_bytes": 71161977,
   "shared_probe_parts": [
     "/assembly/sol61_v36_pack/stage2c/probes.f16.gz.part00",
     "/assembly/sol61_v36_pack/stage2c/probes.f16.gz.part01",
