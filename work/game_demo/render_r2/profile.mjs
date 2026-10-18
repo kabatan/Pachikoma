@@ -1,6 +1,6 @@
 import { createDetailChannels } from './detail_channels.mjs';
 import { installProbeUniforms } from './probe_uniforms.mjs';
-import { installSumAtlas } from './sum_atlas.mjs';
+import { installGlobalSumAtlas } from './global_sum_atlas.mjs';
 import { installSharedLightField } from './shared_light_field.mjs';
 import { installProbeReuse } from './probe_reuse.mjs';
 // Selected by select_render.mjs. Keep the tray renderer's render wrapper intact.
@@ -132,7 +132,7 @@ export async function installRenderR2(hr, { nativePack = false, trimBox = [1100,
   // Keep hardware rendering's existing formats and draw path. The software
   // path computes the same image, with unchanged resolution and MSAA samples.
   hr.stats.renderReuse={enabled,software,selection:selection||'auto',device};
-  if(!enabled&&selection!=='reference'&&!software){installSumAtlas(hr);installSparseLayers(hr,{textureWeights:true});installMergedBack(hr);installProbeUniforms(hr);installProbeReuse(hr,{visibleOnly:true});hr.stats.nativeReuse=true;}
+  if(!enabled&&selection!=='reference'&&!software){installGlobalSumAtlas(hr);installSparseLayers(hr,{textureWeights:true});installMergedBack(hr);installProbeUniforms(hr);installProbeReuse(hr,{visibleOnly:true});hr.stats.nativeReuse=true;}
   if(enabled){
     installSparseLayers(hr);installFloatTargets(hr);installMergedBack(hr);installAffineLut(hr);installEnvironmentBasis(hr);installProbeReuse(hr,{visibleOnly:true});installSharedLightField(hr);
   }

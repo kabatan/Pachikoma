@@ -103,7 +103,7 @@ function layerGeometry(n, tile = false) {
   geo.setIndex([0,1,2,2,1,3]);
   for (const name of tile ? ['aRect','aTex','aW','aTile'] : ['aRect','aTex','aW']) {
     const a = new THREE.InstancedBufferAttribute(new Float32Array(n*4),4);
-    a.setUsage(THREE.DynamicDrawUsage); geo.setAttribute(name,a);
+    a.setUsage(THREE.DynamicDrawUsage); a._lo=Infinity; a._hi=0; geo.setAttribute(name,a);
   }
   return geo;
 }
@@ -118,17 +118,17 @@ function putComponent(a, o, value) {
   const v = Math.fround(value);
   if (a.array[o] !== v) {
     a.array[o] = v;
-    a._lo = Math.min(a._lo ?? Infinity, o);
-    a._hi = Math.max(a._hi ?? 0, o + 1);
+    a._lo = Math.min(a._lo, o);
+    a._hi = Math.max(a._hi, o + 1);
   }
 }
 
 function uploadGeometry(geo, n) {
   let changed = false;
   for (const a of Object.values(geo.attributes)) {
-    if (a._lo !== undefined) {
+    if (a._hi > a._lo) {
       a.addUpdateRange(a._lo, a._hi-a._lo); a.needsUpdate = true;
-      delete a._lo; delete a._hi; changed = true;
+      a._lo=Infinity; a._hi=0; changed = true;
     }
   }
   changed ||= geo.instanceCount !== n; geo.instanceCount = n;
@@ -429,12 +429,13 @@ export class HybridRenderer {
       for (const b of this.layerBuckets[side]) {
         let k = 0, sk = 0;
         const packKey=(this._layerDiagnostics?.direct?1:0)|(this._layerDiagnostics?.groupOrder?2:0);
-        let repack=b._packedKey!==packKey;
+        let topology=b._packedKey!==packKey, repack=topology;
         const out = b.geo.attributes, sum = b.sumGeo.attributes;
         for (const rec of b.records) {
           const v = q[rec.id], rgb = v && (v.rgb || v);
           const w0 = rgb ? rgb[0] * rec.s0 : 0, w1 = rgb ? rgb[1] * rec.s1 : 0, w2 = rgb ? rgb[2] * rec.s2 : 0;
           const on = !!v && !(w0 + w1 + w2 < 1e-6);
+          topology ||= rec.active !== on;
           rec.changed = rec.active !== on || Math.fround(rec.w0) !== Math.fround(w0) || Math.fround(rec.w1) !== Math.fround(w1) || Math.fround(rec.w2) !== Math.fround(w2);
           repack ||= rec.changed;
           rec.w0 = w0; rec.w1 = w1; rec.w2 = w2; rec.active = on;
@@ -442,6 +443,30 @@ export class HybridRenderer {
         }
         if(!repack) continue;
         b._packedKey=packKey;
+        // Active membership and packed order are unchanged: retain rectangle,
+        // UV and tile attributes and update the identical float32 weights only.
+        if (!topology && !this._layerDiagnostics?.direct) {
+          for (const m of b.mappings) {
+            let count=0, first=-1;
+            for (const i of m.indices) {
+              if (b.records[i].changed) m.dirty=true;
+              if (b.records[i].active) {count++; if(first<0)first=i;}
+            }
+            if (!count) continue;
+            if (count===1) {
+              const rec=b.records[first];putAttribute(out.aW,k,rec.w0,rec.w1,rec.w2);
+            } else {
+              for (const i of m.indices) {
+                const rec=b.records[i];if(!rec.active)continue;
+                putAttribute(sum.aW,sk++,rec.w0,rec.w1,rec.w2);
+              }
+            }
+            k++;
+          }
+          uploadGeometry(b.geo,k);
+          if(uploadGeometry(b.sumGeo,sk))this._sumDirty=true;
+          continue;
+        }
         if (this._layerDiagnostics?.direct) {
           const indices = this._layerDiagnostics.groupOrder ? b.mappings.flatMap(m => m.indices) : b.records.keys();
           for (const i of indices) {

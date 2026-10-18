@@ -7,8 +7,8 @@
     },
     {
       "path": "work/game_demo/render_r2/profile.mjs",
-      "bytes": 9900,
-      "sha256": "8388e06f0ddc03f5177e42773640298d709d4a2540f52a06c1a744cfd9d700c0"
+      "bytes": 9919,
+      "sha256": "a1cf782a7183a9325eb143f7fd16af107bada1f95fbabc8f5ccf75f9dbbdb86d"
     },
     {
       "path": "work/game_demo/render_r2/detail_channels.mjs",
@@ -52,8 +52,13 @@
     },
     {
       "path": "work/game_demo/render_r2/sum_atlas.mjs",
-      "bytes": 5717,
-      "sha256": "f492f7f335a5eb64664b4268188b216cd12db1c230759956de94ed69ebcf7e5e"
+      "bytes": 5681,
+      "sha256": "ee3b757196d211a4baff5ac3b72e6124da68570413fb78bff2bfa0449e7fbdfc"
+    },
+    {
+      "path": "work/game_demo/render_r2/global_sum_atlas.mjs",
+      "bytes": 8700,
+      "sha256": "2719c06c5ebc1f605a8c02e61a9a8f981a50c37a3caae8c0369ce317c39c7cf8"
     },
     {
       "path": "work/game_demo/render_r2/probe_uniforms.mjs",
@@ -81,7 +86,7 @@
       "sha256": "b070e6af0e3a9d3da9989c331ff135f754f214f91643efc7496a57e267c8bab6"
     }
   ],
-  "total_bytes": 71164412,
+  "total_bytes": 71173095,
   "shared_probe_parts": [
     "/assembly/sol61_v36_pack/stage2c/probes.f16.gz.part00",
     "/assembly/sol61_v36_pack/stage2c/probes.f16.gz.part01",

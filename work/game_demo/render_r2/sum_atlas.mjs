@@ -47,16 +47,16 @@ export function installSumAtlas(hr){
     const dirty=[];let n=0;
     for(let k=0;k<a.mappings.length;k++){
      const m=a.mappings[k];if(!m.sumActive||!(m.dirty||hr._layerDiagnostics?.uncachedSums))continue;
-     dirty.push(m);const tile=a.pack.tiles[k];
+     dirty.push(k);const tile=a.pack.tiles[k];
      for(const i of m.indices){const rec=a.b.records[i];if(!rec.active)continue;const o=n++*4;
       a.geo.attributes.aRect.array.set(tile,o);put4(a.geo.attributes.aTex.array,o,i,0,0,0);put4(a.geo.attributes.aW.array,o,rec.w0,rec.w1,rec.w2,0);
      }
     }
     if(!n)continue;
     r.setRenderTarget(a.target);r.setViewport(0,0,a.pack.width,a.pack.height);r.setScissorTest(true);r.setClearColor(0,0);
-    for(let k=0;k<a.mappings.length;k++)if(dirty.includes(a.mappings[k])){r.setScissor(...a.pack.tiles[k]);r.clear(true,false,false);stats.clears++;stats.pixels+=a.pack.tiles[k][2]*a.pack.tiles[k][3];}
+    for(const k of dirty){r.setScissor(...a.pack.tiles[k]);r.clear(true,false,false);stats.clears++;stats.pixels+=a.pack.tiles[k][2]*a.pack.tiles[k][3];}
     r.setScissorTest(false);a.geo.instanceCount=n;for(const attr of Object.values(a.geo.attributes))if(attr.isInstancedBufferAttribute){attr.clearUpdateRanges();attr.addUpdateRange(0,n*4);attr.needsUpdate=true;}
-    r.render(a.scene,hr.fsCam);stats.draws++;for(const m of dirty)m.dirty=false;
+    r.render(a.scene,hr.fsCam);stats.draws++;for(const k of dirty)a.mappings[k].dirty=false;
    }
   }finally{r.setRenderTarget(old);r.setViewport(vp);r.setScissor(sc);r.setScissorTest(st);r.setClearColor(color,alpha);}
   // Unsupported banks retain their original path. Completed atlas mappings are
