@@ -1,3 +1,4 @@
+import { createDetailChannels } from './detail_channels.mjs';
 import { installProbeUniforms } from './probe_uniforms.mjs';
 import { installSumAtlas } from './sum_atlas.mjs';
 import { installSharedLightField } from './shared_light_field.mjs';
@@ -12,6 +13,11 @@ import { installEnvironmentBasis } from './environment_basis.mjs';
 import { PROBES } from '../web/src/probes.mjs';
 
 export async function installRenderR2(hr, { nativePack = false, trimBox = [1100,680,1410,1510] } = {}) {
+  const selection=new URLSearchParams(location.search).get('reuse');
+  const debug=hr.gl.getExtension('WEBGL_debug_renderer_info');
+  const device=debug?String(hr.gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)):'';
+  const software=/SwiftShader|llvmpipe|softpipe|software rasterizer|Microsoft Basic Render/i.test(device);
+  const enabled=selection!=='reference'&&(selection==='exact'||software);
   if (nativePack) {
     const url = new URL('./data/pack/layer_detail.f16.gz', import.meta.url);
     const response = await fetch(url); if (!response.ok) throw new Error(`R2 detail: HTTP ${response.status}`);
@@ -19,9 +25,13 @@ export async function installRenderR2(hr, { nativePack = false, trimBox = [1100,
     if (raw.byteLength !== 1440*2560*8) throw new Error('R2 detail size mismatch');
     const detail = new THREE.DataTexture(new Uint16Array(raw), 1440, 2560, THREE.RGBAFormat, THREE.HalfFloatType);
     detail.minFilter = detail.magFilter = THREE.NearestFilter; detail.needsUpdate = true;
+    const split=(!enabled&&selection!=='reference'&&!software)?createDetailChannels(new Uint16Array(raw),1440,2560,trimBox):null;
+    const layerDetail=split?.layer||detail,copyDetail=split?.copy||detail,copyOffset=split?.offset||[0,0];
+    hr.stats.detailChannels={enabled:!!split,layerBytesPerTexel:split?4:8,copyBytesPerTexel:split?2:8,bytes:split?.bytes||raw.byteLength,copyWidth:copyDetail.image.width,copyHeight:copyDetail.image.height};
+
     for (const side of ['back', 'front']) for (const bucket of hr.layerBuckets[side]) {
       const mat = bucket.mat;
-      mat.uniforms.uR2Detail = { value: detail };
+      mat.uniforms.uR2Detail = { value: layerDetail };
       mat.vertexShader = mat.vertexShader.replace('void main() {', 'flat varying vec2 vR2Bbox;\nvoid main() { vR2Bbox = aRect.zw;');
       mat.fragmentShader = mat.fragmentShader.replace('void main() {', 'uniform highp sampler2D uR2Detail; flat varying vec2 vR2Bbox;\nvoid main() {')
         .replace('gl_FragColor = vec4(t.rgb * vW, 0.0);', `
@@ -47,23 +57,26 @@ export async function installRenderR2(hr, { nativePack = false, trimBox = [1100,
       blendDst:THREE.OneFactor,blendSrcAlpha:THREE.ZeroFactor,blendDstAlpha:THREE.OneFactor };
     const envExpression = 'vec4(wa * a.rgb + wb * b.rgb, 0.0)';
     if (!hr.envBack.fragmentShader.includes(envExpression)) throw new Error('R2 environment shader changed');
+    const envCopy=split?`vec4((wa * a.rgb + wb * b.rgb) * texelFetch(uR2Detail, q-ivec2(${copyOffset[0]},${copyOffset[1]}), 0).r, 0.0)`:'vec4((wa * a.rgb + wb * b.rgb) * texelFetch(uR2Detail, q, 0).b, 0.0)';
     const envMat = new THREE.ShaderMaterial({vertexShader:hr.envBack.vertexShader,
       fragmentShader:hr.envBack.fragmentShader.replace('void main() {','uniform highp sampler2D uR2Detail;\nvoid main() {')
-        .replace(envExpression,'vec4((wa * a.rgb + wb * b.rgb) * texelFetch(uR2Detail, q, 0).b, 0.0)'),
-      uniforms:{...hr.envBack.uniforms,uR2Detail:{value:detail}},depthTest:false,depthWrite:false,...frontBlend});
+        .replace(envExpression,envCopy),
+      uniforms:{...hr.envBack.uniforms,uR2Detail:{value:copyDetail}},depthTest:false,depthWrite:false,...frontBlend});
     addCopy(hr.sBack.children.find(mesh=>mesh.material===hr.envBack).geometry,envMat,90);
     for (const bucket of hr.layerBuckets.back) {
       const expression = 't.rgb * vW * correction.g * (reduced ? correction.r : 1.0)';
       if (!bucket.mat.fragmentShader.includes(expression)) throw new Error('R2 layer shader changed');
+      let copyFragment=bucket.mat.fragmentShader.replace(expression,expression+(split?` * texelFetch(uR2Copy,ivec2(int(gl_FragCoord.x)-${copyOffset[0]},2559-int(gl_FragCoord.y)-${copyOffset[1]}),0).r`:' * correction.b'));
+      if(split)copyFragment='uniform highp sampler2D uR2Copy;\n'+copyFragment;
       const mat = new THREE.ShaderMaterial({ vertexShader:bucket.mat.vertexShader,
-        fragmentShader:bucket.mat.fragmentShader.replace(expression,expression+' * correction.b'),
-        uniforms:{...bucket.mat.uniforms},side:THREE.DoubleSide,depthTest:false,depthWrite:false,
+        fragmentShader:copyFragment,
+        uniforms:{...bucket.mat.uniforms,...(split?{uR2Copy:{value:copyDetail}}:{})},side:THREE.DoubleSide,depthTest:false,depthWrite:false,
         ...frontBlend });
       addCopy(bucket.geo,mat,100+copies.length);
     }
     hr.r2Detail = detail;
     const dispose = hr.dispose.bind(hr);
-    hr.dispose = () => { for(const mesh of copies){hr.sFront.remove(mesh);mesh.material.dispose();}detail.dispose();dispose(); };
+    hr.dispose = () => { for(const mesh of copies){hr.sFront.remove(mesh);mesh.material.dispose();}detail.dispose();if(split){split.layer.dispose();split.copy.dispose();}dispose(); };
   }
   // Probe selection depends on a sphere centre, not on its mesh vertices.
   // Move the identical nearest-zone/three-point calculation to per-instance CPU data.
@@ -118,11 +131,6 @@ export async function installRenderR2(hr, { nativePack = false, trimBox = [1100,
   hr.stats.renderProfile = 'r2';
   // Keep hardware rendering's existing formats and draw path. The software
   // path computes the same image, with unchanged resolution and MSAA samples.
-  const selection=new URLSearchParams(location.search).get('reuse');
-  const debug=hr.gl.getExtension('WEBGL_debug_renderer_info');
-  const device=debug?String(hr.gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)):'';
-  const software=/SwiftShader|llvmpipe|softpipe|software rasterizer|Microsoft Basic Render/i.test(device);
-  const enabled=selection!=='reference'&&(selection==='exact'||software);
   hr.stats.renderReuse={enabled,software,selection:selection||'auto',device};
   if(!enabled&&selection!=='reference'&&!software){installSumAtlas(hr);installSparseLayers(hr,{textureWeights:true});installMergedBack(hr);installProbeUniforms(hr);installProbeReuse(hr,{visibleOnly:true});hr.stats.nativeReuse=true;}
   if(enabled){

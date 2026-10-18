@@ -3,8 +3,8 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
   const removers=[], metrics={ steps:0, contacts:0, errors:0, milliseconds:0 };
   for(const [region, owner, world, scale] of [['board',pa.board,pa.bw,10],['tray',pa.tray,pa.tw,pa.tray.S]]) {
     const original=world.step, pre=new Map(), balls=new Map(), movingLabels=new Map();
-    const statePool=[], ballPool=[], pairRecords=new Map();
-    let previousPairs=[], nextPairs=[], stateCount=0, ballCount=0;
+    const statePool=[], ballPool=[], sourcePool=[], pairRecords=new Map();
+    let previousPairs=[], nextPairs=[], stateCount=0, ballCount=0, sourceCount=0;
     let lastTime=-1, exited=owner.payoutExited??0, pairFrame=0;
     let sourceBall=null, sourceCollider=null, sourceHandle=0, otherCollider=null, otherBall=null;
     let pairState=null, queryFrame=0, queryImpulse=0, querySpeed=0, queryPoint={x:0,y:0,z:0};
@@ -77,7 +77,7 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
     }
 
     const wrapper=function() {
-      const t0=performance.now(); stateCount=0; ballCount=0; pre.clear(); balls.clear(); movingLabels.clear();
+      const t0=performance.now(); stateCount=0; ballCount=0; sourceCount=0; pre.clear(); balls.clear(); movingLabels.clear();
       try {
         if(pa.t<lastTime) clearPairs(); lastTime=pa.t;
         if(region==='tray') {
@@ -86,7 +86,9 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
           exited=n;
         }
         let rank=0;
-        for(const [id,b] of owner.balls) {
+        const contactBalls=owner.activeBalls??owner.balls;
+        for(const b of contactBalls.values()) {
+          const id=b.id;
           if(b.stored) continue;
           const body=b.body;
           let q=statePool[stateCount];
@@ -97,7 +99,13 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
           if(!entry) entry=ballPool[ballCount]={id:null,label:'',body:null,rank:0};
           if(entry.id!==id) { entry.id=id; entry.label=String(id); }
           entry.body=body; entry.rank=rank++;
-          for(let j=0;j<body.numColliders();j++) balls.set(body.collider(j).handle,entry);
+          for(let j=0;j<body.numColliders();j++) {
+            const handle=body.collider(j).handle;
+            balls.set(handle,entry);
+            let source=sourcePool[sourceCount];
+            if(!source) source=sourcePool[sourceCount]={handle:0,ball:null};
+            source.handle=handle; source.ball=entry; sourceCount++;
+          }
           ballCount++;
         }
         for(const [id,m] of owner.mechBodies??[]) {
@@ -112,8 +120,9 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
       const result=original.apply(this,arguments), t1=performance.now();
       try {
         queryFrame=pairFrame+1; nextPairs.length=0;
-        for(const [handle,a] of balls) {
-          sourceHandle=handle; sourceBall=a; sourceCollider=world.getCollider(handle);
+        for(let i=0;i<sourceCount;i++) {
+          const source=sourcePool[i];
+          sourceHandle=source.handle; sourceBall=source.ball; sourceCollider=world.getCollider(sourceHandle);
           if(!sourceCollider) continue;
           world.contactPairsWith(sourceCollider,visitCollider);
         }
