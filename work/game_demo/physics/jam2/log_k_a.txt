@@ -1,0 +1,1 @@
+nudge true a {"cup2(28mm)":{"n":288,"stuck":0,"slow":8},"cup3(28mm)":{"n":288,"stuck":0,"slow":14},"cup5(28mm)":{"n":288,"stuck":0,"slow":10},"cup6(28mm)":{"n":288,"stuck":0,"slow":9},"cup7(28mm)":{"n":288,"stuck":0,"slow":9}} p95 0.935 max 1.531

@@ -5,6 +5,7 @@ const OFF = [1, 0.67, 0.45, 0.30];
 const MODE_GAIN = { base:1, reach:1.1, challenge:1.2, final:1.3 };
 const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 const mixLog = (a, b, u) => Math.exp(Math.log(Math.max(a, 1e-5)) * (1 - u) + Math.log(Math.max(b, 1e-5)) * u);
+const transitionValue = (s, time, log) => { const u = Math.min(1, Math.max(0, (time - s.at - s.delay) / .5)); return log ? mixLog(s.from, s.target, u) : s.from + (s.target - s.from) * u * u; };
 const RAINBOW = [[1, .04, .01], [1, .35, .01], [1, 1, .03], [.02, 1, .15], [.02, .3, 1], [.4, .02, 1], [1, .02, .4]];
 
 export class LightingDriver {
@@ -21,10 +22,9 @@ export class LightingDriver {
   }
   transition(key, target, time, delay = 0, log = false) {
     let s = this.state.get(key);
-    const value = () => { const u = Math.min(1, Math.max(0, (time - s.at - s.delay) / .5)); return log ? mixLog(s.from, s.target, u) : s.from + (s.target - s.from) * u * u; };
     if (!s) { s = { from: target, target, at: time, delay: 0 }; this.state.set(key, s); }
-    if (s.target !== target) { const from = value(); s = { from, target, at: time, delay }; this.state.set(key, s); }
-    return value();
+    if (s.target !== target) { const from = transitionValue(s, time, log); s = { from, target, at: time, delay }; this.state.set(key, s); }
+    return transitionValue(s, time, log);
   }
   frame(li, tick) {
     const time = li.clock, n = li.lamps.length, lit = new Set(li.lamps);

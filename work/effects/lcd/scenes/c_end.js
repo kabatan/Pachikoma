@@ -99,21 +99,25 @@
     start(sc, p) {
       recolor();
       sc.S.rules = LCD.rules(); sc.S.total = C.total(p.total);
+      // ランクのものさしは、数える玉(持ち玉)とは別の値で伸ばす。R3 は JP の合計(score)で景品が決まる。score が無ければ従来どおり持ち玉
+      // R3 の S は 500 を当てた時だけ(合計では A まで)なので、ゲームの判定したランク(rankIndex)を上限にする
+      sc.S.jp = Number.isFinite(p.score); sc.S.score = sc.S.jp ? C.total(p.score) : sc.S.total;
+      sc.S.cap = Number.isInteger(p.rankIndex) ? p.rankIndex : RANKS.length - 1;
       sc.S.thresholds = sc.S.rules.thresholds.slice(0, RANKS.length - 1);
-      sc.S.rank = sc.S.thresholds.filter(v => sc.S.total >= v).length;
+      sc.S.rank = Math.min(sc.S.cap, sc.S.thresholds.filter(v => sc.S.score >= v).length);
       sc.S.crossed = sc.S.thresholds.map(() => -99); sc.S.P = LCD.particles(260, 752);
     },
     update(sc, dt) {
-      sc.S.P.step(dt); const count = countAt(sc.t, sc.S.total);
+      sc.S.P.step(dt); const count = countAt(sc.t, sc.S.score);
       sc.S.thresholds.forEach((v, i) => {
-        if (count < v || sc.S.crossed[i] !== -99) return;
+        if (count < v || i >= sc.S.cap || sc.S.crossed[i] !== -99) return;
         sc.S.crossed[i] = sc.t; LCD.shake(5 + i * 2, .22); LCD.punch(.012 + i * .004);
         const x = 175 + 930 * i / Math.max(1, sc.S.thresholds.length - 1);
         for (let j = 0; j < 30; j++) { const angle = sc.rand() * TAU, v = 80 + sc.rand() * 220; sc.S.P.emit({ x, y: 470, vx: Math.cos(angle) * v, vy: Math.sin(angle) * v - 90, ay: 120, life: .6 + sc.rand() * .5, s0: .22 + sc.rand() * .2, s1: 0, tint: COLORS[i + 1], img: j % 4 ? 'spark.png' : 'glint_1.png' }); }
       });
     },
     draw(c, t, sc) {
-      const S = sc.S, count = countAt(t, S.total), cur = S.thresholds.filter(v => count >= v).length;
+      const S = sc.S, count = countAt(t, S.score), cur = Math.min(S.cap, S.thresholds.filter(v => count >= v).length);
       background(c, t, cur); confetti(c, t, cur, .45);
       LCD.text(c, 'たまを かぞえるよ', 395, 76, { size: 62, fill1: '#fffbe8', fill2: COLORS[cur] === '#ccd9ff' ? '#dfe9ff' : '#ffe0a0', glow: COLORS[cur] });
       LCD.add(c, 'flare_streak.png', 640, 238, { w: 1250, h: 150, a: .5, tint: COLORS[cur] });
@@ -122,9 +126,10 @@
       LCD.text(c, '玉', cx + cw / 2 + 62, 282, { size: 76, fill1: '#fffbe0', fill2: '#ffb000', glow: '#ff7a00' });
       // ランクのものさし
       const y = 478;
+      if (S.jp) LCD.text(c, `JPで もらった玉 ${count.toLocaleString('ja-JP')}`, 640, 348, { size: 32, fill1: '#fff6d0', fill2: '#ffd98a', glow: COLORS[cur] });   // ものさしは数えている玉でなく JP の合計
       c.save(); c.strokeStyle = '#e6d9ff'; c.lineWidth = 5; c.globalAlpha = .75; c.beginPath(); c.moveTo(175, y); c.lineTo(1105, y); c.stroke(); c.restore();
       S.thresholds.forEach((v, i) => {
-        const x = 175 + 930 * i / Math.max(1, S.thresholds.length - 1), since = t - S.crossed[i], reached = count >= v, col = COLORS[i + 1];
+        const x = 175 + 930 * i / Math.max(1, S.thresholds.length - 1), since = t - S.crossed[i], reached = count >= v && i < S.cap, col = COLORS[i + 1];
         if (reached) {
           LCD.add(c, 'glow_soft.png', x, y, { w: 190 + 110 * (1 - smooth(since / .6)), h: 250, a: .6, tint: col });
           LCD.add(c, 'glint_1.png', x, y, { w: 70 + 80 * (1 - smooth(since / .5)), h: 70 + 80 * (1 - smooth(since / .5)), a: .95 });

@@ -6,9 +6,9 @@ import { winPlan, createWinSound } from './win_sound.mjs';
 import { VOICE_FILES, voiceForEvent } from './voice_catalog.mjs';
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export class AudioEngine {
-  constructor({ context=null, base=new URL('../sfx/',import.meta.url), master=.45, autoTick=true, voiceProvider='amitaro',legacy=false,modalSynth=modalSamples,bgmEnabled=false,bgmVolume=.65,bgmManifest,onBgmError=console.error,getPhase=()=>null }={}) {
+  constructor({ context=null, base=new URL('../sfx/',import.meta.url), master=.45, autoTick=true, voiceProvider='amitaro',legacy=false,modalSynth=modalSamples,jpPrewarmEvents=[],bgmEnabled=false,bgmVolume=.65,bgmManifest,onBgmError=console.error,getPhase=()=>null }={}) {
     const AC=globalThis.AudioContext||globalThis.webkitAudioContext;
-    this.ctx=context||new AC({sampleRate:48000,latencyHint:'interactive'}); this.base=base;this.getPhase=getPhase;this.legacy=legacy;this.modalSynth=modalSynth;
+    this.ctx=context||new AC({sampleRate:48000,latencyHint:'interactive'}); this.base=base;this.getPhase=getPhase;this.legacy=legacy;this.modalSynth=modalSynth;this.jpPrewarmEvents=jpPrewarmEvents.map(event=>({...event}));
     this.buffers=new Map(); this.voices=[]; this.last=new Map(); this.pending=new Map(); this.cache=new Map();
     this.duckTargets=new WeakMap();this.automationStats={scheduled:0,skipped:0};
     this.winCache=new Map();this.winLog=[];this.winTiming=null;this.bgmPlaying=false;this.sequence=0; this.stats={played:0,dropped:0,merged:0,maxVoices:0,unknown:0};
@@ -51,6 +51,16 @@ export class AudioEngine {
     };
     cacheWin({id:'success_small'}); cacheWin({id:'success_big'}); cacheWin({id:'jp'});
     for(const duration of this.winTiming.jp_variants_s??[])cacheWin({id:'jp',data:{duration}});
+    let additionalWinBytes=0;
+    for(const data of this.jpPrewarmEvents){
+      try{
+        const event={id:'jp',data},plan=winPlan(event,this.winTiming);
+        if(!plan||this.winCache.has(plan.id+':'+plan.duration)||this.winCache.size>=12)continue;
+        const bytes=Math.round(plan.duration*this.ctx.sampleRate)*2*4;
+        if(additionalWinBytes+bytes>16*1024*1024)continue;
+        cacheWin(event);additionalWinBytes+=bytes;
+      }catch{break;}
+    }
     for(let n=1;n<=8;n++) {
       const samples=payoutSamples(n,this.ctx.sampleRate),buffer=this.ctx.createBuffer(2,samples[0].length,this.ctx.sampleRate);
       buffer.copyToChannel(samples[0],0);buffer.copyToChannel(samples[1],1);this.payoutCache.set(n,buffer);

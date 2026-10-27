@@ -2830,6 +2830,127 @@
    "length_note": "調整担当の確定表: 玉40/80/150/300/600で14/16/20/24/28秒。JP中はゲーム時計を止めるので、プレイ時間は食わない。ボタンで飛ばせるようにはしない。実機の大当たり告知は10〜20秒級が多い(一般的な印象。映像確認はこれから)。"
   },
   {
+   "id": "chain_choice",
+   "phase": "E JP・精算",
+   "name": "継続の選択(続ける/やめる)",
+   "tier": 4,
+   "dur": 0,
+   "blocking": false,
+   "trigger": "R3: JPのあと、または継続の当たりのあとの演出が終わり、継続するか選ぶ画面に入った時。選択中に時間切れ→追加の払い出しから戻った時も resumed=true で出る",
+   "feel": "未定(継続の演出の担当が決める)",
+   "precedent": [],
+   "tutorial": "なし",
+   "data": {
+    "pending": "積み増し(まだ払っていない玉)",
+    "chain": "ここまでの連チャン数(初回JPの直後は0)",
+    "lamps": "次の挑戦の灯の数L",
+    "base": "最初のJPの配当",
+    "resumed": "追加の払い出しから戻った時 true",
+    "secondsLeft": "残り秒"
+   },
+   "devices": {
+    "lcd": "未定",
+    "petal": "未定(継続の演出の担当が決める)",
+    "edge": "未定",
+    "logo": "未定",
+    "pocket": "未定",
+    "seg": "なし",
+    "tray": "なし",
+    "btn": "未定"
+   },
+   "tracks": [],
+   "snd": [
+    {
+     "t": 0,
+     "cue": "declare"
+    }
+   ],
+   "status": {
+    "lcd": "postponed",
+    "light": "postponed"
+   }
+  },
+  {
+   "id": "chain_continue",
+   "phase": "E JP・精算",
+   "name": "継続する(灯がまとめて点く)",
+   "tier": 4,
+   "dur": 0,
+   "blocking": false,
+   "trigger": "R3: 継続の選択で『続ける』を押した瞬間。灯がL個まとめて点き、勝負の構えに入る",
+   "feel": "未定(継続の演出の担当が決める。C2_enter)",
+   "precedent": [],
+   "tutorial": "なし",
+   "data": {
+    "chain": "ここまでの連チャン数",
+    "lamps": "点いた灯の数L",
+    "pending": "積み増し(まだ払っていない玉)",
+    "base": "最初のJPの配当"
+   },
+   "devices": {
+    "lcd": "未定(C2_enter)",
+    "petal": "未定(継続の演出の担当が決める)",
+    "edge": "未定",
+    "logo": "未定",
+    "pocket": "未定",
+    "seg": "なし",
+    "tray": "なし",
+    "btn": "未定"
+   },
+   "tracks": [],
+   "snd": [
+    {
+     "t": 0,
+     "cue": "lamp6"
+    }
+   ],
+   "status": {
+    "lcd": "postponed",
+    "light": "postponed"
+   }
+  },
+  {
+   "id": "chain_stop",
+   "phase": "E JP・精算",
+   "name": "継続の決着(やめる・計数)",
+   "tier": 3,
+   "dur": 0,
+   "blocking": false,
+   "trigger": "R3: 継続の選択で『やめる』を押した時(reason=stop)、または継続中に計数へ入った時(reason=finish、finish_count より先)。積み増しをここで払い出す(0のこともある)",
+   "feel": "未定(継続の演出の担当が決める)",
+   "precedent": [],
+   "tutorial": "なし",
+   "data": {
+    "banked": "いま払い出す積み増し(0もある)",
+    "chain": "連チャン数",
+    "base": "最初のJPの配当",
+    "total": "base+banked",
+    "reason": "stop / finish",
+    "duration": "払い出しの秒数"
+   },
+   "devices": {
+    "lcd": "未定",
+    "petal": "未定(継続の演出の担当が決める)",
+    "edge": "未定",
+    "logo": "未定",
+    "pocket": "未定",
+    "seg": "なし",
+    "tray": "なし",
+    "btn": "未定"
+   },
+   "tracks": [],
+   "snd": [
+    {
+     "t": 0,
+     "cue": "cancel"
+    }
+   ],
+   "status": {
+    "lcd": "postponed",
+    "light": "postponed"
+   }
+  },
+  {
    "id": "tray_overflow",
    "phase": "E JP・精算",
    "name": "皿あふれ(合計表示)",

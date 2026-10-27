@@ -1,5 +1,7 @@
 # パチコマ (Pachikoma)
 
+2026年10月28日配布版：R3ルール・m3筐体・通常画面の映像液晶 ryugu1028・初回JP d=4 タイトル v8。
+
 筑駒文化祭向けの、ブラウザで遊べるメダルゲーム（パチンコ風）の試作です。縦長 1440×2560 / 60fps を想定しています。
 
 ## 遊び方（Windows）
@@ -30,7 +32,7 @@ node work/game_demo/play/serve.mjs 8800 --open
 
 - `work/game_demo/` … 規則・操作・物理（Rapier 480Hz）・描画の接続
 - `work/effects/` … 演出（LCD・ライト・音）
-- `work/game_tuning/proto/` … 最終規則（`rules_final.json`）と設計メモ
+- `work/game_tuning/r3/` … 既定のR3規則・設定・盤面
 - 3Dモデルのソース(Blender)や大きなレンダリング画像は含めていません。
 
 ## ライセンスについて

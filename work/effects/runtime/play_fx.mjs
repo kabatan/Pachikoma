@@ -1,3 +1,4 @@
+import { playEventParams } from '../../game_demo/play/effect_params.mjs';
 /* 本番プレイ画面(game_demo/play)へ演出窓口(Effects)をつなぐ。演出側が持つ1ファイル。
  *
  *   const fx = await connectPlayEffects({ hr, bus: effects, getSnapshot, q })   // play.mjs の起動後に1回
@@ -51,7 +52,9 @@ function trayAdapter(rt, now, fired = () => 0) {
   rt.setAwardHold(true, 4);
   return {
     holdFor(id) { rt.setAwardHold(true, HOLD[id] || 4); },
+    bank() { rt.releaseAwards({ rate: 12, earned: true, origin: 'chain_stop' }); },
     award(count, { eventId, rate }) {
+      if (rt.jpHold && eventId === 'jp') return {poured:0,landed:()=>0,done:()=>true};
       const r = Math.max(2, Math.min(40, rate || 12)), t0 = now(), w0 = rt.displayWallet ? rt.displayWallet() : null, f0 = fired();
       const poured = rt.awardToTray(count, { rate: r, origin: eventId }) || 0;
       (window.__awards || (window.__awards = [])).push({ eventId, count, poured, w0, t0, rate: r });
@@ -66,59 +69,46 @@ function trayAdapter(rt, now, fired = () => 0) {
   };
 }
 
-export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources = [], rules = null, root = '/', lcdGain = 1, tutorial = true, tray = null }) {
+// lcd：液晶の面。null＝今の液晶（lcd.js の場面を描く）。{ canvas, frame(dt, F) } を渡すと lcd.js は読まず、その canvas（動画を貼る面、game_demo/play/lcd_surface）を液晶の板に貼る
+export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources = [], rules = null, root = '/', lcdGain = 1, tutorial = true, tray = null, lcd = null, ownedFrontEarlyClip = false, ownedBackEarlyClip = false, ownedFrameSnapshot = false }) {
   const R = (p) => root + p;
-  await loadScript(new URL('../lcd/lcd.js', here).href);
-  await loadScript(new URL('../lcd/load_scenes.js', here).href);
-  await import(new URL('../lcd/base_normal.mjs', here).href);
-  await new Promise((r) => (window.LCD_BASE ? r() : addEventListener('lcd-base-ready', r, { once: true })));
+  if (!lcd) {
+    await loadScript(new URL('../lcd/lcd.js', here).href);
+    await loadScript(new URL('../lcd/load_scenes.js', here).href);
+    await import(new URL('../lcd/base_normal.mjs', here).href);
+    await new Promise((r) => (window.LCD_BASE ? r() : addEventListener('lcd-base-ready', r, { once: true })));
+  }
   await loadScript(new URL('./lightbus.js', here).href);
   { const alt = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('fxjs') : null; await loadScript(alt ? new URL(alt, location.href).href : new URL('./effects.js', here).href); }   // ?fxjs=... は前後比較の確認用(旧版の effects.js を差し替えて録画する)
   const [events, geom] = await Promise.all(['work/effects/spec/events.json', 'work/effects/spec/geometry.json'].map(async (p) => (await fetch(R(p))).json()));
   const fx = new window.Effects({ events, geom });
-  fx.tutorial = tutorial;
-  const ok = await fx.initLcd({ root });
-  if (!ok) throw new Error('LCD init failed');
-  if (rules) fx.setState({ rules: { awards: rules.Awards, loanBalls: rules.LoanBalls, extraSeconds: rules.ExtraSeconds, thresholds: (rules.PrizeThresholds || []).slice(1), jackpotAwards: rules.JackpotAwards } });   // 数値は規則から(固定値にしない)
+  fx.tutorial = tutorial && !rules?.R3Enabled;   // R3では旧「勝負」チュートリアルを起動しない
+  if (!lcd) { const ok = await fx.initLcd({ root }); if (!ok) throw new Error('LCD init failed'); }
+  if (rules) fx.setState({ rules: { r3Enabled: rules.R3Enabled, awards: rules.Awards, loanBalls: rules.LoanBalls, extraSeconds: rules.ExtraSeconds, thresholds: (rules.PrizeThresholds || []).slice(1), jackpotAwards: rules.JackpotAwards } });   // 数値は規則から(固定値にしない)
   let firedTotal = 0, prevBalls = null;   // 撃って減った持ち玉の累計(皿に着いた数の判定に使う)
   const trayA = trayAdapter(tray, () => clock, () => firedTotal); fx.setTray(trayA);   // 調整側の皿関数: { award(count,{eventId,duration,rate,origin}) -> {landed(),done()}?, collect({eventId,duration}) }。無ければ液晶と光だけ
   const adapter = new Stage2cLightAdapter({ geom, sources: Object.fromEntries(lightingSources.map((x) => [x.id, x])) });
-  let seen = { shot: false, challenge: false }, clock = 0;
+  let seen = { shot: false, challenge: false }, clock = 0, bankPending = false;
   const sync = () => {
     const s = getSnapshot().state;
     fx.setState({ n: s.lit, litPockets: s.pockets, canLaunch: s.canLaunch, declared: s.declared, sec: s.secondsLeft,
       first: { firstShot: seen.shot, firstDeclare: seen.challenge } });   // true = もう済んだ(false の間は発射ボタンを強く呼吸させ、tut_launch を出す)
   };
-  const paramsOf = (e) => {
-    const d = e.data || {}, f = e.state.first || {};
-    const first = f.shot || f.light || f.duplicate || f.challenge || f.success || f.failure || false;
-    const p = { first };
-    if (d.payout !== undefined) p.payout = d.payout; else if (d.award) p.payout = d.award;
-    if (d.k !== undefined) p.k = d.k; if (d.n_from !== undefined) p.n_from = d.n_from;
-    if (d.rank !== undefined) p.rank = typeof d.rank === 'number' ? d.rank : (RANKS[d.rank] ?? 0);
-    const lane = d.pocket ?? d.lane; if (lane !== undefined) { p.pocket = lane; p.hit = lane; }
-    if (d.near_miss !== undefined) p.near_miss = !!d.near_miss; if (d.target !== undefined) p.target = d.target;   // 惜しい: 物理で実際に近かった時だけ
-    if (d.to_next !== undefined) { p.to_next = d.to_next; p.next_rank = d.next_rank; }   // 次の景品まで(実数)
-    if ((e.id === 'ticket' || e.id === 'add100') && Number.isFinite(d.balls)) p.balls = d.balls;   // 払い出す玉数(add100 は ExtraLoanBalls)。液晶と皿はこの値
-    if (e.id === 'add100' && Number.isFinite(d.seconds)) p.seconds = d.seconds;
-    if (d.total !== undefined) p.total = d.total; else if (d.balls !== undefined && (e.id === 'finish_count' || e.id === 'result' || e.id === 'tray_overflow')) p.total = d.balls;
-    if (e.id === 'jp') { if (d.tier !== undefined) p.tier = d.tier; if (d.duration > 0) p.duration = d.duration; }   // JP全尺はゲームが決める(14/16/20/24/28秒)
-    if (d.reason !== undefined) p.reason = d.reason; if (d.reasonCode) p.reason = d.reasonCode;
-    if (e.id === 'lamp123') p.n = e.state.lit;
-    if (e.id === 'roulette' && p.n_from === undefined) p.n_from = d.before?.length ?? e.state.lit;
-    p.weak = e.id === 'warn10' ? (e.state.balls < 6) : undefined;
-    return p;
-  };
+  const paramsOf = (e) => playEventParams(e, RANKS);
   bus.on('*', (e) => {
+    if (lcd?.onEvent) lcd.onEvent(e.id, paramsOf(e));   // 動画の液晶：ゲームの出来事で場面をつなぐ（JP の場面の切り替え、game_demo/play/lcd_surface/jp_seq.mjs）
+    if (['jp_heat','jp_mouth'].includes(e.id)) return;
     if (e.id === 'launch') seen.shot = true;
     if (e.id === 'challenge_declare') seen.challenge = true;
     if (e.id === 'challenge_cancel') { fx.stop('challenge_declare'); return; }
     sync();
-    if (trayA && HOLD[e.id]) trayA.holdFor(e.id);
+    if (trayA && HOLD[e.id] && e.data?.paid !== false) trayA.holdFor(e.id);
+    // バスの通知はPresenterがpendingへ加算する直前にも届くので、次の描画フレームで解放。
+    if (e.id === 'chain_stop') bankPending = true;
     try { fx.notify(e.id, paramsOf(e)); } catch (err) { console.warn('effects notify', e.id, err.message); }
   });
   // 勝負の玉をピンポイントで照らす(盤の釘・枠だけが光る点光源。勝負中の飛行中だけ)。玉の位置を画面座標へ射影して渡す
-  let BL = null; try { BL = installBallLights(hr, { max: 44 }); } catch (err) { console.warn('ballLights', err.message); }
+  let BL = null; try { BL = installBallLights(hr, { max: 44, ownedFrontEarlyClip, ownedBackEarlyClip }); } catch (err) { console.warn('ballLights', err.message); }
   const qs = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   if (BL && BL.setMask) BL.setMask([150, 760, 1330, 1445], Number(qs.get('lcdmask') ?? .12), 30);   // 液晶の面は盤面の照射を弱める(通常画面の純青を紫・ピンクに染めない。点検 新e09)
   if (BL && BL.setClip && !qs.has('noclip')) BL.setClip([140, 650, 1345, 2020], Number(qs.get('clipsoft') ?? 22));   // 盤の洗いは囲い(ガラス窓の内側)だけ。外の枠・花びら周りは照らさない(10/17 ディレクター)
@@ -182,8 +172,8 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   // 筐体の7セグ(持ち玉)。タイトル〜ticketの前は消灯。払い出し中は皿に着いた数に合わせて増える。凍結像の「15」は誰も駆動しないと残る
   let digitsOn = false, digitsShown = null;
   bus.on('*', (e) => { if (e.id === 'ticket') digitsOn = true; else if (e.id === 'attract' || e.id === 'title' || e.id === 'howto') digitsOn = false; });
-  const driveDigits = () => {
-    const s = getSnapshot().state, L = window.LCD && window.LCD.state, th = fx._trayHandle;
+  const driveDigits = (frameState = null) => {
+    const s = frameState ?? getSnapshot().state, L = window.LCD && window.LCD.state, th = fx._trayHandle;
     // 筐体の7セグ(と液晶の持ち玉の板)は「いま手元で使える玉」= 調整側の表示持ち玉(displayWallet: 皿に着いた分だけ増え、撃つと減る)に合わせる。
     // 以前は「財布 - (払い出し数 - 着いた数)」で見ていたため、払い出し中に撃つと払い出しが終わった判定にならず、数字が数玉小さいまま残った(R2-E 調査)。
     // 払い出しが始まる前(付与済みで皿に注がれていない玉がある間)は財布の増えた値を出さない(pending を引く)。
@@ -202,8 +192,11 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
     fx, get frameData() { return last; }, get plate() { return plate; },
     frame(dt) {
       sync();
-      { const b = getSnapshot().state.balls; if (prevBalls !== null && b < prevBalls && digitsOn) firedTotal += prevBalls - b; prevBalls = b; }
-      clock += dt; driveDigits(); window.LCD.setState({ ballsShown: digitsShown }); last = fx.frame(dt);
+      if (bankPending) { trayA?.bank(); bankPending = false; }
+      const frameState = getSnapshot().state;
+      { const b = frameState.balls; if (prevBalls !== null && b < prevBalls && digitsOn) firedTotal += prevBalls - b; prevBalls = b; }
+      clock += dt; driveDigits(ownedFrameSnapshot === true && typeof dt === 'number' ? frameState : null); if (!lcd) window.LCD.setState({ ballsShown: digitsShown }); last = fx.frame(dt);
+      if (lcd) { lcd.frame(dt, last); lcd.applyLights?.(last); last.lcd = lcd.canvas; }
       if (last.lcd) { if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain }); plate.tex.needsUpdate = true; }
       return last;
     },

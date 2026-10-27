@@ -1,0 +1,13 @@
+nudge true {"cup1(12.8mm)":{"n":288,"stuck":70,"slow":2},"cup2(28mm)":{"n":288,"stuck":0,"slow":0},"cup3(28mm)":{"n":288,"stuck":0,"slow":0},"cup4(12.8mm)":{"n":288,"stuck":0,"slow":0},"cup5(28mm)":{"n":288,"stuck":0,"slow":0},"cup6(28mm)":{"n":288,"stuck":0,"slow":0},"cup7(28mm)":{"n":288,"stuck":0,"slow":0}}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0,"v":0.3,"h":0.004,"vxs":0,"both":false,"tmax":0.054,"cups":[1],"stuck":1,"pos":[[-7.7,3.8]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0,"v":0.3,"h":0.004,"vxs":0.15,"both":false,"tmax":0.056,"cups":[1],"stuck":1,"pos":[[-9.9,4]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0,"v":0.3,"h":0.012,"vxs":0,"both":false,"tmax":0,"cups":[],"stuck":2,"pos":[[-10,17.3],[1.1,19.4]],"nudges":4}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0,"v":0.8,"h":0.004,"vxs":0,"both":false,"tmax":0.033,"cups":[1],"stuck":1,"pos":[[-7.9,1.9]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0,"v":0.8,"h":0.004,"vxs":0.15,"both":false,"tmax":0.033,"cups":[1],"stuck":1,"pos":[[-8.1,3.3]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0,"v":0.8,"h":0.012,"vxs":0.15,"both":false,"tmax":0.194,"cups":[2],"stuck":1,"pos":[[-10.4,16.6]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0,"v":1.4,"h":0.004,"vxs":0,"both":false,"tmax":0.021,"cups":[1],"stuck":1,"pos":[[-8.2,-13.7]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0,"v":1.4,"h":0.004,"vxs":0.15,"both":false,"tmax":0.021,"cups":[1],"stuck":1,"pos":[[-7.9,-13.1]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0.02,"v":0.3,"h":0.004,"vxs":0,"both":false,"tmax":0.075,"cups":[1],"stuck":1,"pos":[[-9.7,4]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0.02,"v":0.3,"h":0.004,"vxs":0.15,"both":false,"tmax":0.077,"cups":[1],"stuck":1,"pos":[[-8.6,3.7]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0.02,"v":0.3,"h":0.012,"vxs":0,"both":false,"tmax":0.227,"cups":[2],"stuck":1,"pos":[[-8.2,17.3]],"nudges":2}
+{"cup":1,"w":12.8,"dx":0.016,"dt":0.02,"v":0.3,"h":0.012,"vxs":0.15,"both":false,"tmax":0,"cups":[],"stuck":2,"pos":[[-10.6,16.8],[0.2,16]],"nudges":4}

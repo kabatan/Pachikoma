@@ -1,0 +1,46 @@
+{
+  "variant": "r3_t72_hardcups20",
+  "jitter": {
+    "x": 0.5,
+    "v": 3.0,
+    "y": 0.0
+  },
+  "trialsTotal": 9720,
+  "overallLaneProbability": [
+    0.10020576131687242,
+    0.17757201646090534,
+    0.17685185185185184,
+    0.07602880658436215,
+    0.15185185185185185,
+    0.09012345679012346,
+    0.2273662551440329
+  ],
+  "maxProbability": {
+    "1": {
+      "probability": 0.45,
+      "locations": [
+        {
+          "aim": -0.425,
+          "dir": -1,
+          "count": 27
+        }
+      ]
+    },
+    "4": {
+      "probability": 0.4166666666666667,
+      "locations": [
+        {
+          "aim": 0.0,
+          "dir": -1,
+          "count": 25
+        }
+      ]
+    }
+  },
+  "dominantCells": 1,
+  "totalCells": 162,
+  "dominantCellFraction": 0.006172839506172839,
+  "meanFlightSeconds": 0.7216514489026064,
+  "faults": 0,
+  "faultsByResult": {}
+}

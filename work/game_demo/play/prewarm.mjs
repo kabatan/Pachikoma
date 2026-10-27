@@ -29,10 +29,19 @@ async function warmRenderer({ hr, pack, fxApi }) {
 
 async function warmLcd(LCD) {
   const saved = { ...LCD.state };
-  const ids = Object.keys(LCD.defs).filter((id) => !id.startsWith('_') && !/^(roulette|ascend|lamp[0-9]+)$/.test(id));   // mono系は iframe 側で
+  const savedTime = LCD.t, savedBaseTime = LCD.base?.time;
+  const savedSwim = LCD.swim ? { n: LCD.swim.n, list: LCD.swim.list.map((u) => ({ ...u })) } : null;
+  const ids = Object.keys(LCD.defs).filter((id) => !id.startsWith('_') && id !== 'roulette_sat' && !/^(roulette|ascend)$/.test(id));   // lamp123/4/5/6 は start内の11 tickも温める。roulette_sat は2枚目専用なので単独再生しない
   const imgs = Object.values(LCD.img);
   await Promise.all(imgs.map((im) => (im.decode ? im.decode().catch(() => {}) : null)));   // 画像デコードを先に済ませる
-  for (const im of imgs) { try { LCD.titleBounds(im); } catch {} if (LCD.C?.bounds && im.width * im.height > 4096) { try { LCD.C.bounds(im); } catch {} } }   // 文字の実寸走査(getImageData)をキャッシュ(LCD本体とC系シーン共通部の両方)
+  const titleImgs = Object.entries(LCD.img).filter(([name]) => /^(?:rl_)?t_.+_face\.png$/.test(name));
+  const boundsAt = now();
+  let titleBoundCount = 0, commonBoundCount = 0;
+  for (const [, im] of titleImgs) { try { LCD.titleBounds(im); titleBoundCount++; } catch {} }
+  if (LCD.C?.bounds) for (const [name, im] of titleImgs) if (/^t_.+_face\.png$/.test(name)) {
+    try { LCD.C.bounds(im); commonBoundCount++; } catch {}
+  }
+  const bounds = { titleImages: titleImgs.length, titleBoundCount, commonBoundCount, ms: Math.round(now() - boundsAt) };
   // 描画先(GPUラスタのCanvas2D)への画像アップロードを、全素材について先に済ませる(初回drawImageで同期的に起きるため)
   // 1巡で終わらない(ブラウザ側のデコード・アップロードが非同期に進む)ので、1巡の所要時間が落ち着くまで繰り返す(上限あり)
   const c = LCD.ctx, all = [...imgs, ...Object.values(LCD.flipImg || {})], upload = { rounds: [] };
@@ -45,22 +54,67 @@ async function warmLcd(LCD) {
     await new Promise((res) => setTimeout(res, 250));
   }
   LCD.render(null, 0, 0);
-  let n = 0;
+  let n = 0, lampWarmSteps = 0;
   for (const id of ids) {
     const def = LCD.defs[id], dur = Math.min(def.dur || 3, 8);
-    for (const p of PARAM_SETS) {
+    const params = id === 'lamp123' ? [1, 2, 3].map((n) => ({ ...PARAM_SETS[0], n }))
+      : /^lamp[456]$/.test(id) ? [PARAM_SETS[0]] : PARAM_SETS;
+    for (const p of params) {
       try {
         LCD.setState({ n: p.n, nDisp: p.n, rank: p.rank, hold: 18, sec: 60 });
         LCD.play(id, { ...p, scale: 1, seed: 7 });
-        const steps = Math.max(6, Math.ceil(dur * 2)), dt = dur / steps;   // 約0.5秒ごと
-        for (let s = 0; s <= steps; s++) { LCD.update(s ? dt : 0.001); LCD.render(null, 0, 0); n++; }
+        LCD.update(0.001);   // start時の状態を初期化し、通常の土台だけを1 tick進める
+        const sc = LCD.active[LCD.active.length - 1];
+        // The first live lamp frames still create and animate the falling balls.
+        // Advance one representative 3-lamp and 6-lamp route through that window.
+        if ((id === 'lamp123' && p.n === 3) || id === 'lamp6') {
+          for (let i = 0; i < 11; i++) {
+            LCD.update(0.05); lampWarmSteps++;
+            if (i === 2 || i === 6 || i === 10) { LCD.render(null, 0, 0); n++; }
+          }
+        }
+        for (const t of [0.001, dur * 0.5, Math.max(0.001, dur - 0.01)]) {
+          if (sc) sc.t = t;   // 先読みではシーンの描画時刻だけを動かし、物理や土台の時間を何秒分も刻まない
+          LCD.render(null, 0, 0); n++;
+        }
       } catch (e) { console.warn('[prewarm] lcd scene', id, e.message); }
       LCD.active = []; LCD.seen.clear();
     }
     if (n % 20 === 0) await tick();
   }
+  // 2枚目の盤は、通常の roulette.start() が segment を作った後に def を切り替える。
+  // 先読みでも同じ入口を2度通り、後半のサテライト描画素材と文字を代表時刻で温める。
+  let rouletteSatRenders = 0;
+  if (LCD.defs.roulette && LCD.defs.roulette_sat) {
+    const M = LCD.mono;
+    LCD.reset(); if (M?.roul) M.roul.length = 0; if (M) M.heroSc = null;
+    try {
+      LCD.setState({ n: 5, nDisp: 5, rank: 4, hold: 18, sec: 60 });
+      LCD.play('roulette', { n_from: 5, k: 'all', scale: 1, seed: 7 });
+      LCD.play('roulette', { n_from: 4, k: 2, scale: 1, seed: 8 });
+      const sat = LCD.active.find((sc) => sc.def === LCD.defs.roulette_sat);
+      if (!sat || !Array.isArray(sat.segs)) throw new Error('roulette.start did not initialize satellite segments');
+      // Warm the hero iframe along its real 20Hz update path through the
+      // stop/result transition. The outer LCD composition only needs milestone
+      // frames; the 60Hz live scene path is checked separately.
+      const lcdSamples = new Set([0, 1, 7, 15, 26, 37, 41, 65, 119, 138, 141]);
+      for (let i = 0; i < 142; i++) {
+        LCD.update(0.05);
+        if (lcdSamples.has(i)) { LCD.render(null, 0, 0); rouletteSatRenders++; }
+      }
+      // The 2D satellite remains active after the hero reaches the wheel result.
+      for (const t of [8.4, 13, 19.5]) {
+        for (const sc of LCD.active) sc.t = Math.max(0, t - 0.05);
+        LCD.update(0.05); LCD.render(null, 0, 0); rouletteSatRenders++;
+      }
+    } catch (e) { console.warn('[prewarm] lcd roulette_sat', e.message); }
+    LCD.reset(); if (M?.roul) M.roul.length = 0; if (M) M.heroSc = null; M?.api?.reset();
+  }
   LCD.reset(); LCD.state = { ...saved }; LCD.setState({ n: saved.n, nDisp: saved.nDisp ?? saved.n ?? 0 });
-  return { scenes: ids.length, renders: n, upload };
+  LCD.t = savedTime;
+  if (Number.isFinite(savedBaseTime) && LCD.base) { LCD.base.time = savedBaseTime; LCD.base.update(0); }
+  if (savedSwim && LCD.swim) { LCD.swim.n = savedSwim.n; LCD.swim.list = savedSwim.list; }
+  return { scenes: ids.length, renders: n + rouletteSatRenders, rouletteSatRenders, lampWarmSteps, bounds, upload };
 }
 
 async function warmMono(LCD) {
@@ -68,13 +122,16 @@ async function warmMono(LCD) {
   if (!api) return { skipped: 'no mono' };
   const win = M.frame?.contentWindow;
   try { const gc = win?.PIXI?.GC_MODES, tg = win?.__upa?.app?.renderer?.textureGC; if (gc && tg) tg.mode = gc.MANUAL; } catch (e) { console.warn('[prewarm] textureGC', e.message); }
-  const runs = [['lamp', 1], ['lamp', 3], ['lamp', 4], ['lamp', 5], ['lamp', 6], ['roulette', { n_from: 3, k: 1 }], ['roulette', { n_from: 4, k: 2 }], ['roulette', { n_from: 5, k: 'all' }]];
+  const runs = [['lamp', 1], ['lamp', 2], ['lamp', 3], ['lamp', 4], ['lamp', 5], ['lamp', 6], ['roulette', { n_from: 3, k: 1 }], ['roulette', { n_from: 4, k: 2 }], ['roulette', { n_from: 5, k: 'all' }]];
   let steps = 0;
   for (const [kind, arg] of runs) {
     api.reset();
     const ok = kind === 'lamp' ? api.lamp(arg) : api.roulette(arg);
     if (!ok) continue;
-    for (let i = 0; i < 2400 && api.busy(); i++) { api.step(0.05); steps++; if (steps % 40 === 0) await tick(); }
+    // LCD lampScene.start already warms the exact 11 falling-ball setup ticks for
+    // lamps 1-6. Direct mono flows share those resources, so their first two frames
+    // are enough here; roulette variants share the warmed roulette renderer.
+    for (let i = 0; i < 2 && api.busy(); i++) { api.step(0.05); steps++; }
   }
   api.reset();
   return { steps };

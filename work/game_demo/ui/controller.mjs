@@ -43,7 +43,7 @@ export class MedalController {
       if (g.canFire && !this.confirmFinish && !this.preBuffer) { const b = this.fireBuffer; this.fireBuffer = null; if (this._fire(b.aim, b.dir)) for (const fn of this.listeners) fn('fire', this); }
       else if (this.fireBuffer.left <= 0 || !g.canAim) { this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'expired' }); this.fireBuffer = null; }
     }
-    if (g.phase === MedalPhase.Continue || g.phase === MedalPhase.Result) this.confirmFinish = false;
+    if (g.phase === MedalPhase.Continue || g.phase === MedalPhase.ChainChoice || g.phase === MedalPhase.Result) this.confirmFinish = false;
     this.resultAge = g.phase === MedalPhase.Result ? (this.resultAge ?? 0) + dt : 0;   // 結果が出てからの秒(客の連打で飛ばさない)
     if (g.canAim && !this.confirmFinish) this.aimClock += dt * g.challengeAimSpeed; // 狙いのスイープは入力受付中だけ進む
     this.aim = triangle(this.aimClock / this.sweepPeriod);
@@ -80,6 +80,8 @@ export class MedalController {
         } else if (!ok) this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: g.phase });
         break;
       case 'add': ok = g.addCredit(); break;
+      case 'chainContinue': ok = g.chooseChain(true); break;
+      case 'chainStop': ok = g.chooseChain(false); break;
       case 'finish':
         if (g.phase === MedalPhase.Continue) ok = g.finish();
         else if (g.overlap ? (g.canAim && g.shots.length === 0) : g.canFire) { this.confirmFinish = true; ok = true; }

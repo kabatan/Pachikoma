@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><title>計数・結果の数字の重なり確認</title>
+<body style="margin:0;background:#000"><script type="module">
+// 液晶の面(lcd_surface.mjs)を実時間で動かし、finish_count → result の合図で数字なしの映像が選ばれ、数字が重なるかを確かめる(node tools/end_check.mjs から開く)
+import { createLcdSurface } from '../lcd_surface.mjs';
+const lcd = await createLcdSurface({ manifestUrl: new URL('../clips/manifest.json', import.meta.url).href, getState: () => ({}) });
+document.body.append(lcd.canvas);
+let cues = [], last = performance.now(), uid = 0;
+const tick = (now) => { lcd.frame((now - last) / 1000, { cues }); cues = []; last = now; requestAnimationFrame(tick); };
+requestAnimationFrame(tick);
+window.__cue = (id, p) => { lcd.onEvent(id, p); cues.push({ lane: 'lcd', uid: 'e' + uid++, event: id }); };
+window.__png = () => lcd.canvas.toDataURL('image/jpeg', 0.9);
+window.__stats = () => lcd.stats;
+window.__ready = true;
+</script>

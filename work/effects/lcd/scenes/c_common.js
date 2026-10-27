@@ -7,16 +7,8 @@
   C.digitAssets = (rainbow = false) => C.titleAssets(...Array.from({ length: 10 }, (_, i) => `${rainbow ? 'dr' : 'dg'}${i}`), rainbow ? 'dr_plus' : 'dg_plus');
   C.assets = ['bg_gold.jpg', 'bg_night_sakura.jpg', 'bg_sakura.jpg', 'branch_tl.png', 'branch_tr.png', 'corner_gold_tl.png', 'corner_gold_tr.png', 'crest_sakura.png', 'crest_glow.png', 'petal_5.png', 'petal_6.png', 'petal_stream_1.png', 'ribbon_1.png', 'flip:impact_2', 'flip:digitburst_2', 'flip:petals_1'];
   C.total = v => Math.min(999999, Math.max(0, Math.floor(Number(v) || 0)));
-  const boundsCache = new WeakMap();
-  // 素材の大きな透明余白を除いて組む。1/SSや短い日本語も同じ視覚サイズ。
-  C.bounds = im => {
-    if (boundsCache.has(im)) return boundsCache.get(im);
-    const cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height;
-    const g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0);
-    const d = g.getImageData(0, 0, im.width, im.height).data; let x0 = im.width, y0 = im.height, x1 = 0, y1 = 0;
-    for (let y = 0; y < im.height; y++) for (let x = 0; x < im.width; x++) if (d[(y * im.width + x) * 4 + 3] > 48) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-    const b = { w: x1 - x0 + 1, h: y1 - y0 + 1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 }; boundsCache.set(im, b); return b;
-  };
+  // lcd.js scans both alpha cutoffs (32 and 48) once and caches the pair per image.
+  C.bounds = im => LCD.measureAlphaBounds(im).common;
   C.title = (c, key, fallback, x, y, w, h, o = {}) => {
     const im = LCD.img[`t_${key}_face.png`];
     const b = im && C.bounds(im), s = (im ? Math.min(w / b.w, h / b.h) : .6) * (o.zoom ?? 1);
@@ -257,6 +249,7 @@
   };
   // 常設: いま勝負で当たると何玉か(灯の数ごと。数は規則から)と、いまの灯の数。旧UIの賞玉パネルの代わり(左側に小さく)。0灯と時間切れ後は出さない
   C.prizeChip = (c) => {
+    if (LCD.rules().r3Enabled) return;   // R3に任意の勝負・小配当はない
     const n = clamp(Math.floor(LCD.state.nDisp ?? LCD.state.n ?? 0), 0, 7), AW = LCD.rules().awards || [0, 1, 2, 3, 12, 30, 80];
     if (n < 1 || LCD.state.hudChip === false) return;
     if (LCD.state.chipWait) return;   // 最初の「しょうぶ」の案内が済むまで出さない(effects.js が tutorial.js の済みの記録で決める)

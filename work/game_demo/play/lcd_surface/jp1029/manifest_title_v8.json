@@ -1,0 +1,512 @@
+{
+  "version": 1029,
+  "fps": 30,
+  "width": 1152,
+  "height": 1268,
+  "prototype": false,
+  "digits": [
+    4
+  ],
+  "lights": "lights_title_v8.json",
+  "roulette": {
+    "30": "roulette_30",
+    "40": "roulette_40",
+    "100": "roulette_100",
+    "200": "roulette_200",
+    "500": "roulette_500"
+  },
+  "scenes": {
+    "jp_intro": {
+      "file": "jp_intro_709.mp4",
+      "frames": 114,
+      "cut": [
+        24,
+        36,
+        48,
+        60,
+        72,
+        98,
+        106
+      ],
+      "next": "jp_chance_d4",
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_jp_intro"
+        }
+      ]
+    },
+    "jp_chance_d4": {
+      "file": "jp_chance_d4_join_title_full_v1.mp4",
+      "frames": 105,
+      "digit": 4,
+      "cut": [
+        12,
+        24,
+        36,
+        48,
+        60,
+        72,
+        84,
+        96
+      ],
+      "next": "jp_aim_d4",
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_jp_chance_d4"
+        }
+      ]
+    },
+    "jp_aim_d4": {
+      "file": "jp_aim_d4_v3_709.mp4",
+      "frames": 90,
+      "digit": 4,
+      "loop": true,
+      "cut": [
+        14,
+        29,
+        44,
+        59,
+        74,
+        89
+      ],
+      "cues": [
+        {
+          "f": 0,
+          "kind": "hole",
+          "mode": "target_pulse",
+          "hz": 1.7
+        },
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_jp_aim_d4"
+        }
+      ]
+    },
+    "fly_in_d4": {
+      "file": "fly_in_d4_v3_709.mp4",
+      "frames": 24,
+      "digit": 4,
+      "loop": false,
+      "loop_from": 0,
+      "cut": [
+        5,
+        11,
+        17,
+        23
+      ],
+      "next": "fly_t0_d4",
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_fly_in_d4"
+        }
+      ]
+    },
+    "fly_in_chance_d4": {
+      "file": "fly_in_chance_d4_title_full_v1.mp4",
+      "frames": 28,
+      "digit": 4,
+      "loop": false,
+      "loop_from": 0,
+      "cut": [
+        5,
+        11,
+        17,
+        23
+      ],
+      "next": "fly_t0_d4",
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_fly_in_chance_d4"
+        }
+      ]
+    },
+    "fly_t0_d4": {
+      "file": "fly_t0_d4_v3_709.mp4",
+      "frames": 24,
+      "digit": 4,
+      "loop": true,
+      "loop_from": 0,
+      "cut": [
+        5,
+        11,
+        17,
+        23
+      ],
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_fly_t0_d4"
+        }
+      ]
+    },
+    "fly_t1_d4": {
+      "file": "fly_t1_d4_v3_709.mp4",
+      "frames": 32,
+      "digit": 4,
+      "loop": true,
+      "loop_from": 8,
+      "cut": [
+        5,
+        11,
+        17,
+        23,
+        29
+      ],
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_fly_t1_d4"
+        }
+      ]
+    },
+    "fly_t2_d4": {
+      "file": "fly_t2_d4_v3_709.mp4",
+      "frames": 40,
+      "digit": 4,
+      "loop": true,
+      "loop_from": 16,
+      "cut": [
+        5,
+        11,
+        17,
+        23,
+        29,
+        35
+      ],
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_fly_t2_d4"
+        }
+      ]
+    },
+    "fly_t3_d4": {
+      "file": "fly_t3_d4_gold_709.mp4",
+      "frames": 26,
+      "digit": 4,
+      "loop": true,
+      "loop_from": 14,
+      "cut": [
+        5,
+        11,
+        17,
+        23
+      ],
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_fly_t3_d4"
+        }
+      ]
+    },
+    "tame_hit_d4": {
+      "file": "tame_hit_d4_v3_709.mp4",
+      "frames": 8,
+      "digit": 4,
+      "loop": false,
+      "loop_from": 0,
+      "cut": [
+        5
+      ],
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_tame_hit_d4"
+        }
+      ]
+    },
+    "tame_miss_d4": {
+      "file": "tame_miss_d4_v3_709.mp4",
+      "frames": 10,
+      "digit": 4,
+      "loop": false,
+      "loop_from": 0,
+      "cut": [
+        5
+      ],
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_tame_miss_d4"
+        }
+      ]
+    },
+    "jp_land_d4": {
+      "file": "jp_land_d4_v3_709.mp4",
+      "frames": 17,
+      "digit": 4,
+      "loop": false,
+      "loop_from": 0,
+      "cut": [
+        5,
+        11
+      ],
+      "next": "jp_rush",
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_jp_land_d4"
+        }
+      ]
+    },
+    "jp_rush": {
+      "file": "jp_rush_709.mp4",
+      "frames": 60,
+      "next": "jp_bridge",
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_jp_rush"
+        }
+      ]
+    },
+    "jp_bridge": {
+      "file": "jp_bridge_v8_seam.mp4",
+      "frames": 78,
+      "next": "@roulette",
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_jp_bridge"
+        }
+      ]
+    },
+    "roulette_30": {
+      "file": "roulette_30_v8_join.mp4",
+      "frames": 146,
+      "payout": 30,
+      "next": "@reward",
+      "cues": [
+        {
+          "f": 121,
+          "kind": "reveal"
+        },
+        {
+          "f": 121,
+          "kind": "tray",
+          "count": "payout",
+          "rate": 20.0
+        },
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_roulette_30"
+        }
+      ],
+      "prototype": false,
+      "source_start_frame": 3,
+      "stop_frame": 121
+    },
+    "reward_30": {
+      "file": "reward_30_v2_709.mp4",
+      "frames": 203,
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_reward_30"
+        }
+      ]
+    },
+    "roulette_40": {
+      "file": "roulette_40_v8_join.mp4",
+      "frames": 146,
+      "payout": 40,
+      "next": "@reward",
+      "cues": [
+        {
+          "f": 121,
+          "kind": "reveal"
+        },
+        {
+          "f": 121,
+          "kind": "tray",
+          "count": "payout",
+          "rate": 20.425531914893618
+        },
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_roulette_40"
+        }
+      ],
+      "prototype": false,
+      "source_start_frame": 3,
+      "stop_frame": 121
+    },
+    "reward_40": {
+      "file": "reward_40_v2_709.mp4",
+      "frames": 203,
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_reward_40"
+        }
+      ]
+    },
+    "roulette_100": {
+      "file": "roulette_100_v8_join.mp4",
+      "frames": 158,
+      "payout": 100,
+      "next": "@reward",
+      "cues": [
+        {
+          "f": 133,
+          "kind": "reveal"
+        },
+        {
+          "f": 133,
+          "kind": "tray",
+          "count": "payout",
+          "rate": 22.97872340425532
+        },
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_roulette_100"
+        }
+      ],
+      "prototype": false,
+      "source_start_frame": 3,
+      "stop_frame": 133
+    },
+    "reward_100": {
+      "file": "reward_100_v2_709.mp4",
+      "frames": 203,
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_reward_100"
+        }
+      ]
+    },
+    "roulette_200": {
+      "file": "roulette_200_v8_join.mp4",
+      "frames": 170,
+      "payout": 200,
+      "next": "@reward",
+      "cues": [
+        {
+          "f": 145,
+          "kind": "reveal"
+        },
+        {
+          "f": 145,
+          "kind": "tray",
+          "count": "payout",
+          "rate": 27.23404255319149
+        },
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_roulette_200"
+        }
+      ],
+      "prototype": false,
+      "source_start_frame": 3,
+      "stop_frame": 145
+    },
+    "reward_200": {
+      "file": "reward_200_v2_709.mp4",
+      "frames": 203,
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_reward_200"
+        }
+      ]
+    },
+    "roulette_500": {
+      "file": "roulette_500_v8_join.mp4",
+      "frames": 174,
+      "payout": 500,
+      "next": "@reward",
+      "cues": [
+        {
+          "f": 149,
+          "kind": "reveal"
+        },
+        {
+          "f": 149,
+          "kind": "tray",
+          "count": "payout",
+          "rate": 40.0
+        },
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_roulette_500"
+        }
+      ],
+      "prototype": false,
+      "source_start_frame": 3,
+      "stop_frame": 149
+    },
+    "reward_500": {
+      "file": "reward_500_v2_709.mp4",
+      "frames": 239,
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_reward_500"
+        }
+      ]
+    },
+    "fail_chain": {
+      "file": "fail_chain_709.mp4",
+      "frames": 126,
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_fail_chain"
+        }
+      ]
+    },
+    "fail_first": {
+      "file": "fail_first_709.mp4",
+      "frames": 66,
+      "cues": [
+        {
+          "f": 0,
+          "kind": "snd",
+          "id": "jp_scene_fail_first"
+        }
+      ]
+    }
+  },
+  "fail_slots": "fail_slots.json",
+  "review_digit": 4,
+  "unrendered_digits": [
+    1,
+    2,
+    3,
+    5,
+    6,
+    7
+  ],
+  "revision": "title_full_v1_roulette_v8",
+  "roulette_source": "03_roulette/v8; leading 3 frames removed per DESIGN section 4"
+}

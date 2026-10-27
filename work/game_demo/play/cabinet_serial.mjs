@@ -4,7 +4,7 @@ import { primaryButtonAction } from '../ui/input.mjs';
 
 export function cabinetButtonAction(ctrl, name) {
   if (name === 'FIRE') return primaryButtonAction(ctrl);
-  if (name === 'CHALLENGE') return ctrl.phase === 'Continue' ? 'add' : 'challenge';
+  if (name === 'CHALLENGE') return ctrl.phase === 'Continue' ? 'add' : ctrl.phase === 'ChainChoice' ? 'chainStop' : 'challenge';
   return null;
 }
 
@@ -18,9 +18,10 @@ export function parseCabinetLine(line) {
 export function buttonLeds(ctrl, now) {
   const g = ctrl.game;
   const playable = g.canFire && !ctrl.confirmFinish && !ctrl.freezeRules;
-  const primary = playable || ctrl.phase === 'Attract' || (ctrl.phase === 'Result' && ctrl.resultAge >= ctrl.replayAfter);
-  const secondary = ctrl.phase === 'Continue' ? g.canAdd : playable && g.lampCount > 0 && g.lampCount < 6;
-  return [Number(primary), Number(secondary && (ctrl.phase === 'Continue' || !g.armed || Math.floor(now / 250) % 2 === 0))];
+  const chainContinue = ctrl.phase === 'ChainChoice' && g.wallet > 0 && g.secondsLeft > 0 && !g.endPending;
+  const primary = playable || chainContinue || ctrl.phase === 'Attract' || (ctrl.phase === 'Result' && ctrl.resultAge >= ctrl.replayAfter);
+  const secondary = ctrl.phase === 'Continue' ? g.canAdd : ctrl.phase === 'ChainChoice' ? true : playable && g.lampCount > 0 && g.lampCount < 6;
+  return [Number(primary), Number(secondary && (ctrl.phase === 'Continue' || ctrl.phase === 'ChainChoice' || !g.armed || Math.floor(now / 250) % 2 === 0))];
 }
 
 export class CabinetSerial {

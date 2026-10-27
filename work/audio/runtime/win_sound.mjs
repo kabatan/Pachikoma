@@ -27,7 +27,7 @@ export function createWinSound(context,buffers,timing,plan) {
     for(let at=p.head_s;at<tailAt;at+=p.loop_s-p.overlap_s)put('win_jp_loop',at,p.loop_gain/peak,Math.round((tailAt-at)*sr));
     put('win_number',plan.payoutAt,p.number_gain/peak);
     put('win_jp_tail',tailAt,p.tail_gain/peak);
-    let max=0;for(let k=0;k<2;k++)for(const v of out.getChannelData(k))max=Math.max(max,Math.abs(v));
+    let max=0;for(let k=0;k<2;k++){const a=out.getChannelData(k);for(let i=0;i<a.length;i++)max=Math.max(max,Math.abs(a[i]));}
     const gain=.91/Math.max(1e-9,max);for(let k=0;k<2;k++){const a=out.getChannelData(k);for(let i=0;i<a.length;i++)a[i]*=gain;}
   } else {
     const b=buffers.get(plan.id);

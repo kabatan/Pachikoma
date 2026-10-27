@@ -2,12 +2,12 @@
 import { connectLayerPack } from '../play/render_bridge.mjs';
 import { Gen } from '../web/src/dummy.mjs';
 
-export async function connectRender(hr, query, legacyUrl) {
+export async function connectRender(hr, query, legacyUrl, { loadLayers = true, ownedM3Prefix = false } = {}) {
   const r2Url = new URL('./data/pack/manifest.json', import.meta.url).href;
   const requestedR2 = query.get('render') !== 'legacy';
   const packUrl = query.has('pack') ? query.get('pack') : requestedR2 ? r2Url : legacyUrl;
   const nativePack = !!packUrl && new URL(packUrl, location.href).href === r2Url;
-  const options = { dummyEntries: Gen.makeLayerManifest(12, { seed: 1 }) };
+  const options = { dummyEntries: Gen.makeLayerManifest(12, { seed: 1 }), loadLayers, ownedM3Prefix };
   let pack, manifest, mode = requestedR2 ? 'r2' : 'legacy';
   try {
     if (nativePack) {

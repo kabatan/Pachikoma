@@ -40,7 +40,8 @@ export async function loadPlayRules(path, readText) {
       const weightsOk = w => Array.isArray(w) && w.length === 4 && w.every(v => v >= 0) && w.reduce((a,b) => a+b, 0) === 100;
       if (!weightsOk(r.ResetWeights)) reasons.push('ResetWeightsは非負4要素・合計100');
       if (r.ResetWeightsByLamps != null && (!Array.isArray(r.ResetWeightsByLamps) || r.ResetWeightsByLamps.length > 7 || r.ResetWeightsByLamps.some(w => w != null && !weightsOk(w)))) reasons.push('ResetWeightsByLampsは最大7行、各行はnullまたは非負4要素・合計100');
-      if (!Array.isArray(r.JackpotAwards) || !Array.isArray(r.JackpotWeights) || r.JackpotAwards.length !== r.JackpotWeights.length || r.JackpotWeights.some(v => v < 0) || (r.JackpotAwards.length && (r.JackpotWeights.reduce((a,b) => a+b,0) !== 100 || r.JackpotAwards.some(v => v < r.Awards[5])))) reasons.push('JackpotAwards/Weightsは同じ要素数、重みは非負・合計100、配当は5灯配当以上');
+      const jackpotTotal = Array.isArray(r.JackpotWeights) ? r.JackpotWeights.reduce((a,b) => a+b,0) : 0;
+      if (!Array.isArray(r.JackpotAwards) || !Array.isArray(r.JackpotWeights) || r.JackpotAwards.length !== r.JackpotWeights.length || r.JackpotWeights.some(v => !Number.isFinite(v) || v < 0) || (r.JackpotAwards.length && (![100, 1_000_000].includes(jackpotTotal) || r.JackpotAwards.some(v => v < r.Awards[5])))) reasons.push('JackpotAwards/Weightsは同じ要素数、重みは非負・合計100または1,000,000、配当は5灯配当以上');
       if (!Array.isArray(r.PrizeThresholds) || !Array.isArray(r.PrizeNames) || !r.PrizeNames.length || r.PrizeThresholds.length !== r.PrizeNames.length || r.PrizeThresholds[0] !== 0 || r.PrizeThresholds.some((v,i,a) => i && v <= a[i-1])) reasons.push('PrizeThresholds/Namesは同じ要素数、閾値は先頭0・重複なしの昇順');
     } } catch { /* 不正な型も元のvalidate/parse例外を画面へ返す。 */ }
     throw new Error(`規則JSON ${path}: ${error.message}${reasons.length ? '\n' + reasons.join('\n') : ''}`, { cause: error });

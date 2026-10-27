@@ -1,0 +1,23 @@
+{
+ "variant": "cur",
+ "balls": 3000,
+ "gap": 0.2,
+ "t": 607.8,
+ "cup": 3000,
+ "lost": 0,
+ "stuckEvents": 0,
+ "maxStill": 0.44999999999999996,
+ "cups": [
+  0,
+  273,
+  514,
+  605,
+  116,
+  568,
+  309,
+  615
+ ],
+ "stuckList": [],
+ "kicks": 0,
+ "stuckPer1000": 0
+}

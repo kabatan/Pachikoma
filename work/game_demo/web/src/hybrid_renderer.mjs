@@ -1,3 +1,4 @@
+import { tryNativeMergedMain, disposeNativeMergedMain } from './native_merged_main.mjs';
 // HybridRenderer: 方式C の描画骨組み（hybrid_spec §1,§5〜§7,§10〜§12）
 //   奥の光層(加算) → 玉(InstancedMesh, 線形HDR, プローブ反射) → τ を掛けて手前の光層(加算) → PBR Neutral LUT(最後に1回) → canvas
 // 公開 API: init / setLightingFrame / setBalls / setLayers / useDummyProbeBases / setEnvironment / render / dispose
@@ -136,8 +137,8 @@ function uploadGeometry(geo, n) {
 }
 
 export class HybridRenderer {
-  constructor({ canvas = null, msaa = 4, lutUrl = './assets/lut/pbrneutral_lg2_57_lin', maxBalls = 512, preserveDrawingBuffer = false, dither = 0 } = {}) {
-    this.opts = { canvas, msaa, lutUrl, maxBalls, preserveDrawingBuffer, dither };
+  constructor({ canvas = null, msaa = 4, lutUrl = './assets/lut/pbrneutral_lg2_57_lin', maxBalls = 512, preserveDrawingBuffer = false, dither = 0, deferEnvironment = false, deferProbeBases = false } = {}) {
+    this.opts = { canvas, msaa, lutUrl, maxBalls, preserveDrawingBuffer, dither, deferEnvironment, deferProbeBases };
     this.frame = { tick: 0, ea: new Array(8).fill(0), eb: new Array(8).fill(0), q: {} };
     this.stats = { activeLayers: 0, activeBalls: 0 };
     this.lutEnabled = true; this.viewMode = 0;
@@ -164,10 +165,11 @@ export class HybridRenderer {
 
     this.lut = await loadLut(o.lutUrl);
     this._buildScenes();
-    this.setEnvironment(this.gen.makeEnvironment());
-    this.probes = new ProbeSet(r);
+    if (!o.deferEnvironment) this.setEnvironment(this.gen.makeEnvironment());
+    this.probes = new ProbeSet(r, { deferInitialBases: o.deferProbeBases === true });
     this.ballMat.uniforms.uAtlas.value = this.probes.atlas.texture;
-    this.useDummyProbeBases([]);
+    if (o.deferProbeBases === true) r.setViewport(0, 0, this.probes.W, this.probes.H); // Preserve init's final dummy viewport without drawing.
+    else this.useDummyProbeBases([]);
     return this;
   }
 
@@ -311,6 +313,12 @@ export class HybridRenderer {
 
   /** プローブ基底（既定はダミー）。sourceIds の各 source_id に基底を 1 つ割り当て、環境 16 基底と合わせて線形合成する。 */
   useDummyProbeBases(sourceIds) { this.probes.makeDummyBases(sourceIds); }
+
+  // The default caller still creates dummy environment in init; deferred callers need it only as fallback.
+  _ensureEnvironment() {
+    if (!this.env) this.setEnvironment(this.gen.makeEnvironment());
+    return this.env;
+  }
 
   /** env = { back:{A,B,M0,M1}, front:{A,B,M0,M1}, tau, occ }（各 RT か Texture。素材は行0=画像の上） */
   setEnvironment(env) {
@@ -523,6 +531,7 @@ export class HybridRenderer {
 
   /** 1 フレーム描く。canvas（符号化済み sRGB）へ。 */
   render() {
+    if (!this.env) this._ensureEnvironment(); // Never draw with unbound environment samplers.
     const r = this.renderer;
     this._updateEnvUniforms(); this._updateLayers();
     if(this._sumDirty) {
@@ -540,8 +549,10 @@ export class HybridRenderer {
     // 1) 奥 + 玉（MSAA、線形HDR）
     r.setRenderTarget(this.rtMain); r.setViewport(0, 0, W, H);
     r.setClearColor(0x000000, 0); r.clear(true, true, false);
-    r.render(this.sBack, this.fsCam);
-    if (this.balls.count > 0 || this.trayVisual) { this.probes.compose(this.frame); r.setRenderTarget(this.rtMain); r.setViewport(0, 0, W, H); r.render(this.sBalls, this.camera); }
+    if (!tryNativeMergedMain(this)) {
+      r.render(this.sBack, this.fsCam);
+      if (this.balls.count > 0 || this.trayVisual) { this.probes.compose(this.frame); r.setRenderTarget(this.rtMain); r.setViewport(0, 0, W, H); r.render(this.sBalls, this.camera); }
+    }
     // 2) 手前: τ⊙D + F（線形HDR）
     r.setRenderTarget(this.rtC); r.setViewport(0, 0, W, H);
     r.render(this.sFront, this.fsCam);
@@ -572,6 +583,7 @@ export class HybridRenderer {
   }
 
   dispose() {
+    disposeNativeMergedMain(this);
     for (const side of ['back', 'front']) for (const b of this.layerBuckets[side]) {
       b.geo.dispose(); b.mat.dispose(); b.rt.dispose(); b.sumGeo.dispose(); b.sumMat.dispose(); b.sumRT.dispose();
     }

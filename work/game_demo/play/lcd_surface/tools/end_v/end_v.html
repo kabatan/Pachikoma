@@ -1,0 +1,30 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><title>計数・結果(縦の窓)</title>
+<style>body{margin:0;background:#000}canvas{display:block;width:576px;height:634px}</style>
+<canvas id="c" width="1152" height="1268"></canvas>
+<script src="/work/effects/lcd/lcd.js"></script><script src="/work/effects/lcd/load_scenes.js"></script>
+<script>
+// 縦の窓(1152×1268)に end_v.js の場面を描く。LCD の進行(時刻・揺れ・光)はそのまま使い、描く面だけ自前
+(async () => {
+  const ROOT = '/';
+  await LCD.loadScenes(ROOT);
+  await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'end_v.js?v=' + Date.now(); s.onload = res; s.onerror = rej; document.head.append(s); });
+  await LCD.init({ root: ROOT, base: false });
+  const VW = 1152, VH = 1268, ctx = document.getElementById('c').getContext('2d');
+  const render = () => {
+    const c = ctx; c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#000'; c.fillRect(0, 0, VW, VH);
+    const k = LCD.cam, sh = k.shakeT > 0 ? k.shake * (k.shakeT / Math.max(k.shakeMax, 1e-3)) : 0, z = 1 + k.punch;
+    c.translate(VW / 2 + (Math.random() - .5) * 2 * sh, VH / 2 + (Math.random() - .5) * 2 * sh); c.scale(z, z); c.translate(-VW / 2, -VH / 2);
+    const slots = [];
+    for (const sc of LCD.active) { c.save(); try { sc.def.draw(c, sc.t, sc, LCD); } finally { c.restore(); } for (const s of sc.S.slots || []) slots.push({ ...s, z, ox: VW / 2 - VW / 2 * z, oy: VH / 2 - VH / 2 * z }); }
+    c.restore();
+    if (LCD.flashA > .005) { c.save(); c.globalAlpha = Math.min(1, LCD.flashA); c.fillStyle = LCD.flashC; c.fillRect(0, 0, VW, VH); c.restore(); }
+    return slots;
+  };
+  window.H = {
+    async play(id, params) { LCD.reset(); const def = LCD.defs[id]; if (def.assets) await LCD.load(def.assets); LCD.play(id, params || {}); },
+    step(dt) { LCD.update(dt); return render(); },
+    png() { return document.getElementById('c').toDataURL('image/png'); },
+  };
+  window.__ready = true;
+})();
+</script></html>

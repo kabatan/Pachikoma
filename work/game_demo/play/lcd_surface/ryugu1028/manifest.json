@@ -1,0 +1,188 @@
+{
+  "version": 1026,
+  "source": "sea_world/src/sea_bg2.py blue, GPU Cycles 96 spp, native 1152x1268; original P14 sprites/effects; sea_bg2 native upper fish, no duplicate legacy upper",
+  "width": 1152,
+  "height": 1268,
+  "fps": 30,
+  "codec": "h264",
+  "crf": 12,
+  "pixelFormat": "yuv420p",
+  "color": "bt709 limited",
+  "files": {
+    "idle0": "idle0.mp4",
+    "idle1": "idle1.mp4",
+    "idle2": "idle2.mp4",
+    "idle3": "idle3.mp4",
+    "idle4": "idle4.mp4",
+    "idle5": "idle5.mp4",
+    "idle6": "idle6.mp4",
+    "lamp1": "lamp1.mp4",
+    "lamp2": "lamp2.mp4",
+    "lamp3": "lamp3.mp4",
+    "lamp3b": "lamp3b.mp4",
+    "lamp4": "lamp4.mp4",
+    "lamp4b": "lamp4b.mp4",
+    "lamp5": "lamp5.mp4",
+    "lamp6": "lamp6.mp4",
+    "protect1": "protect1.mp4",
+    "protect2": "protect2.mp4",
+    "protect3": "protect3.mp4",
+    "protect4": "protect4.mp4",
+    "protect5": "protect5.mp4",
+    "reset4": "reset4.mp4",
+    "reset5": "reset5.mp4"
+  },
+  "scenes": {
+    "idle0": {
+      "type": "idle",
+      "n": 0,
+      "frames": 240,
+      "loop": true
+    },
+    "idle1": {
+      "type": "idle",
+      "n": 1,
+      "frames": 240,
+      "loop": true
+    },
+    "idle2": {
+      "type": "idle",
+      "n": 2,
+      "frames": 240,
+      "loop": true
+    },
+    "idle3": {
+      "type": "idle",
+      "n": 3,
+      "frames": 240,
+      "loop": true
+    },
+    "idle4": {
+      "type": "idle",
+      "n": 4,
+      "frames": 240,
+      "loop": true
+    },
+    "idle5": {
+      "type": "idle",
+      "n": 5,
+      "frames": 240,
+      "loop": true
+    },
+    "idle6": {
+      "type": "idle",
+      "n": 6,
+      "frames": 240,
+      "loop": true
+    },
+    "lamp1": {
+      "type": "lamp",
+      "kind": "lamp123",
+      "n": 1,
+      "frames": 49,
+      "loop": false
+    },
+    "lamp2": {
+      "type": "lamp",
+      "kind": "lamp2",
+      "n": 2,
+      "frames": 60,
+      "loop": false
+    },
+    "lamp3": {
+      "type": "lamp",
+      "kind": "bub3",
+      "n": 3,
+      "frames": 72,
+      "loop": false
+    },
+    "lamp3b": {
+      "type": "lamp",
+      "kind": "lamp3b",
+      "n": 3,
+      "frames": 54,
+      "loop": false
+    },
+    "lamp4": {
+      "type": "lamp",
+      "kind": "lamp4",
+      "n": 4,
+      "frames": 74,
+      "loop": false
+    },
+    "lamp4b": {
+      "type": "lamp",
+      "kind": "lamp4b",
+      "n": 4,
+      "frames": 73,
+      "loop": false
+    },
+    "lamp5": {
+      "type": "lamp",
+      "kind": "lamp5",
+      "n": 5,
+      "frames": 108,
+      "loop": false
+    },
+    "lamp6": {
+      "type": "lamp",
+      "kind": "lamp6",
+      "n": 6,
+      "frames": 30,
+      "loop": false
+    },
+    "protect1": {
+      "type": "protect",
+      "n": 1,
+      "frames": 33,
+      "loop": false
+    },
+    "protect2": {
+      "type": "protect",
+      "n": 2,
+      "frames": 33,
+      "loop": false
+    },
+    "protect3": {
+      "type": "protect",
+      "n": 3,
+      "frames": 33,
+      "loop": false
+    },
+    "protect4": {
+      "type": "protect",
+      "n": 4,
+      "frames": 33,
+      "loop": false
+    },
+    "protect5": {
+      "type": "protect",
+      "n": 5,
+      "frames": 33,
+      "loop": false
+    },
+    "reset4": {
+      "type": "reset",
+      "n": 4,
+      "frames": 93,
+      "loop": false
+    },
+    "reset5": {
+      "type": "reset",
+      "n": 5,
+      "frames": 93,
+      "loop": false
+    }
+  },
+  "lights": "../production1026/lights.json",
+  "temporary": [
+    "attract",
+    "howto",
+    "ticket",
+    "jp",
+    "chain",
+    "timeup",
+    "count",
+    "result"
+  ]
+}

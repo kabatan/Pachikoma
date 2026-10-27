@@ -16,12 +16,14 @@
   const hash = (i, k = 0) => { let x = (Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(k + 1, 0x85ebca6b)) >>> 0; x = Math.imul(x ^ (x >>> 16), 0x7feb352d); x = Math.imul(x ^ (x >>> 15), 0x846ca68b); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
   const hsv = (h) => { const f = (n) => { const k = (n + h * 6) % 6; return 1 - Math.max(0, Math.min(k, 4 - k, 1)); }; return [f(5), f(3), f(1)]; };
   const srgb2lin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const hexColorCache = new Map();
   function color(c) {
     if (Array.isArray(c)) return c;
     if (c === 'rainbow') return null;
     if (typeof c === 'string' && c[0] === '#') {
+      const cached = hexColorCache.get(c); if (cached) return cached;
       const v = [1, 3, 5].map((i) => srgb2lin(parseInt(c.slice(i, i + 2), 16) / 255));
-      const m = Math.max(...v, 1e-6); return v.map((x) => x / m);
+      const m = Math.max(...v, 1e-6), result = v.map((x) => x / m); hexColorCache.set(c, result); return result;
     }
     return [1, .08, .38];
   }
@@ -188,6 +190,8 @@
       const lane = tr.lane, pat = tr.pat; if (!pat) return;
       const isP = lane === 'petal', isE = lane === 'edge';
       if (!(isP || isE || lane === 'pocket' || lane === 'logo' || lane === 'ambient' || lane === 'seg' || lane === 'btn')) return;
+      // These patterns emit their cue in step(), but never write a light value.
+      if (pat === 'hold' || pat === 'stateN' || pat === 'drainLit' || pat === 'shimmer' || pat === 'count' || pat === 'payout' || pat === 'collect' || pat === 'ambientLcd') return;
       const N = isP ? this.nP : isE ? this.nE : lane === 'pocket' ? 7 : lane === 'btn' ? 2 : 1;
       const sel = isP ? this.petalSel(p.targets, { ...inst.params, ...p }) : isE ? this.edgeSel(p.targets) : lane === 'pocket' ? this.pocketSel(p.targets) : lane === 'btn' ? Float32Array.from([p.side === 'right' ? 0 : 1, p.side === 'left' ? 0 : 1]) : new Float32Array(1).fill(1);
       const pos = isP ? this.pAng : isE ? this.eS : Array.from({ length: N }, (_, i) => i / N);   // 0..1 周回位置
@@ -327,8 +331,8 @@
           const bp = 60 / (p.bpm || 96), ph = (lt0 % bp) / bp, w = .55 + .75 * Math.exp(-Math.pow((ph - .1) / .09, 2)) + .4 * Math.exp(-Math.pow((ph - .32) / .07, 2));
           for (let i = 0; i < N; i++) { const L = F.petal[i * 3] * .2126 + F.petal[i * 3 + 1] * .7152 + F.petal[i * 3 + 2] * .0722; if (isP && L > .01) over(i, colAt(i), { a: smooth(lt0 / .3), v: Math.min(1.6, (L * 1.4 + .35)) * w }); } break; }
         case 'alt': {   // 2グループが交互に点滅(全体の明るさはほぼ一定。実機の電飾の「チカチカ」。hzは交互の速さ)
-          const hz = p.hz || 6, ph = Math.floor(lt0 * hz * 2);
-          for (let i = 0; i < N; i++) if (sel[i]) { const g = ((isP ? this.petalOrder(i) + (this.G.petals[i].zone || 0) : i) + ph) % 2; const c2 = p.color2 ? color(p.color2) : COL.white; add(i, g ? (cc ? hsv(((pos[i] - lt0 * .5) % 1 + 1) % 1) : colAt(i)) : c2, (isP ? 1.2 : 2.4) * fadeEnv(.08, .2)); } break; }
+          const hz = p.hz || 6, ph = Math.floor(lt0 * hz * 2), c2 = p.color2 ? color(p.color2) : COL.white;
+          for (let i = 0; i < N; i++) if (sel[i]) { const g = ((isP ? this.petalOrder(i) + (this.G.petals[i].zone || 0) : i) + ph) % 2; add(i, g ? (cc ? hsv(((pos[i] - lt0 * .5) % 1 + 1) % 1) : colAt(i)) : c2, (isP ? 1.2 : 2.4) * fadeEnv(.08, .2)); } break; }
         case 'stateN': break;
         case 'gauge': {
           const total = inst.params.progress === undefined ? u : inst.params.progress; const c = colAt(0);

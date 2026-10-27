@@ -7,7 +7,8 @@ import { EffectsBus, EFFECT_IDS, connectEffects } from './effects_bus.mjs';
 import { attachInput } from '../ui/input.mjs';
 
 const spec = JSON.parse(readFileSync(new URL('../../effects/spec/events.json', import.meta.url)));
-assert.deepEqual(new Set(EFFECT_IDS), new Set([...spec.events.map(e => e.id), 'challenge_cancel']));
+const CHAIN_IDS = ['chain_choice', 'chain_continue', 'chain_stop', 'jp_heat', 'jp_mouth'];   // R3の継続。この古い規則の試験では出ない。確認は lcd_surface/jp_seq_test.mjs
+assert.deepEqual(new Set(EFFECT_IDS), new Set([...spec.events.map(e => e.id), 'challenge_cancel', ...CHAIN_IDS.filter(id => !spec.events.some(e => e.id === id))]));
 const bus = new EffectsBus(); let called = 0, errors = 0;
 const oldError = console.error;
 try {
@@ -140,5 +141,5 @@ for (const e of events) {
   if (e.id === 'result') { assert.equal(e.data.rank, e.data.prizeRank); assert.equal(e.data.total, e.data.balls); }
 }
 const counts = Object.fromEntries(EFFECT_IDS.map(id => [id, events.filter(e => e.id === id).length]));
-assert.ok(Object.values(counts).every(n => n > 0));
+assert.ok(Object.entries(counts).every(([id, n]) => n > 0 || CHAIN_IDS.includes(id)));
 console.log('PASS bus isolation, 26 event fixtures, rapid overlap, roulette, first flags, deadlines/rearm, count order:', JSON.stringify(counts));

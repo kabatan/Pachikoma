@@ -240,7 +240,8 @@ export class Stage1Tray {
   _updateFlap(fid, want, hole, dt) {
     const m = this.mechBodies.get(fid); if (!m) return;
     const speed = (Math.PI / 2) / 0.25 * dt; let v = m.value;
-    const occupied = this._ballOnHole(hole);
+    // 開く指示中と全閉時は、穴の上の球で結果が変わらない。閉じる途中だけ安全インターロックを読む。
+    const occupied = !want && v !== 0 ? this._ballOnHole(hole) : false;
     if (want || (occupied && v < -.05)) v = Math.max(-Math.PI / 2, v - speed); else if (!occupied) v = Math.min(0, v + speed);
     if (v !== m.value) this.setMech(fid, v);
     if (hole === 'ovf') this.flapOpen = v < -Math.PI / 4; else this.cntFlapOpen = v < -Math.PI / 4;

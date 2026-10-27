@@ -182,6 +182,8 @@
     setTray(h) { this.trayHandler = h || null; this._trayHandle = null; }
     _trayCue(c) {
       const h = this.trayHandler, p = c.p || {}, par = c.params || {}, dur = Math.max(.1, (c.t1 - c.t0) || 1);
+      // R3：連チャンの未確定配当は映像上の数字だけ。確定時のchain_stopで払い出す。
+      if (c.pat === 'payout' && par.paid === false) return;
       const R = this.lcdOk ? root.LCD.rules() : {};
       let n = typeof p.n === 'number' ? p.n : Number(par.payout ?? par.total ?? 0) || 0;
       if (c.event === 'ticket' || c.event === 'add100') n = Number.isFinite(par.balls) ? par.balls : (R.loanBalls || n);     // 払い出し数はイベントの値(規則側が載せる。add100 は ExtraLoanBalls)。無ければ規則の貸玉

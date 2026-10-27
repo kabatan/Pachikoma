@@ -6,7 +6,15 @@
 ./work/game_demo/play/start.sh
 ```
 
-表示されるURL（既定 `http://127.0.0.1:8800/game_demo/play/index.html`）を開き、音の開始ボタンを押す。引数なしで本番構成（`work/game_tuning/proto/config.json` の盤・規則 ＋ stage2aの筐体環境）で開く。上書きは `?config=<パス>`、`?pack=<manifest>`（空文字で既定を無効＝従来のstage3・ダミー環境）。ルール説明は `?howto=0` で無効。
+表示されるURL（既定 `http://127.0.0.1:8800/game_demo/play/index.html`）を引数なしで開く。最初のキー／ボタン入力で音が有効になる。既定は **R3設定＋m3筐体＋通常演出試作14の本番動画**（1152×1268・30fps）。JP動画（jp_film）は接続せず、待機・JP・連チャン・計数・結果等の未完成部分には仮の題字と実数を表示する。
+
+- 規則は `work/game_tuning/r3/config_r3.json` → `rules_r3.json`。任意の「勝負」と小配当は廃止。6灯で自動JP挑戦、成功後は継続か確定を選ぶ。初回配当は残り、継続の積み増しだけを失う可能性がある。
+- 初回72秒・80玉、追加1回につき22秒・10玉、最大4回。JP・継続選択中も時計が進む。貸玉待ちと開始前説明は持ち時間外。
+- 1〜3灯の重複は保護。freshで4灯以上になった時から2回の重複を保護し、その後の重複で1灯消灯。低灯数の昇天は出さない。
+- 景品はJPの確定配当合計で C30／B200／A320。Sは500配当を確保した場合だけ（合計500ではSにならない）。
+- `?cabinet=r2` は旧筐体、`?lcd=legacy` は旧Canvas液晶。`?config=<パス>` と `?pack=<manifest>` で調査用に上書きできる。`?howto=0` は開始前説明を省く。
+- 10/26確認：旧筐体＋既定の動画液晶は起動確認済み。旧Canvas液晶（`?lcd=legacy`）は現Chromiumで起動時クラッシュを再現したため調査用の残存経路。通常の起動には指定しない。
+- `m3/pack1026/` と `lcd_surface/production1026/` が本番の生成物。再生成手順・検証結果は `INTEGRATION_1026.md`。旧ファイルは削除せず、編集前は `*_pre1026` に保存。
 
 詳細:
 
@@ -16,9 +24,9 @@
 nice -n 10 node work/game_demo/play/serve.mjs 8792
 ```
 
-`http://127.0.0.1:8792/game_demo/play/index.html?config=work/game_tuning/proto/config.json`を開く。音を有効にするボタンを押す。
+`http://127.0.0.1:8792/game_demo/play/index.html` を開く。
 
-Space / ESP32左ボタン: 開始・発射、ESP32右ボタン: 遊技中は挑戦・時間切れ画面では100円追加、C: 挑戦、A: 100円追加、B: 計数（もう一度Bで確定）、計数後R: 次のプレイ、F: 全画面、D: 設定表示の出し入れ（既定は非表示）。開始画面と画面内の「発射」「CHALLENGE」等もクリック／タップで操作できる。
+Space／ESP32左ボタン：開始・発射、連チャン選択では継続。C／ESP32右ボタン：連チャン選択では確定（通常時の任意の勝負は受け付けない）。ESP32右ボタンは時間切れ画面では100円追加。A：追加、B：計数（もう一度Bで確定、連チャン選択では即確定）、R：次のお客、F：全画面、D：設定表示。旧DOM操作表示は `?oldui` で調査用に表示できる。
 
 ## 本番モニタの表示切り替え
 
@@ -39,7 +47,7 @@ Windows でタスクバーを確実に隠す補助として、通常どおりサ
 
 ## 調整結果を載せる
 
-`work/game_tuning/proto/config.json`を書き換えてページを再読込する。例は同じ場所の`config.example.json`（mix_n75_10、釘81本）。設定を指定しないURLも従来どおり動く。
+既定の調整は `work/game_tuning/r3/config_r3.json` と `r3/rules_r3.json` を確認する。別盤は `?config=` で明示してページを再読込する。例は同じ場所の`config.example.json`（mix_n75_10、釘81本）。設定を指定しないURLも従来どおり動く。
 
 ```json
 {
@@ -51,13 +59,13 @@ Windows でタスクバーを確実に隠す補助として、通常どおりサ
 }
 ```
 
-省略時はstage3・揺らぎ0・`work/game_demo/rules/medal_game.json`。`{}`でもよい。`seed: null`または省略は従来のseed=1、整数は再現用固定seed（`?seed=`併記時はそちらが優先）。`name`はDで出る表示名。盤は`model3.json`と`layout3.json`の両方を含むディレクトリを指定する。
+設定JSON内で省略した項目はstage3・揺らぎ0・`work/game_demo/rules/medal_game.json`を土台にする（`{}`でもよい）。URLの引数なし起動はR3設定を読むため、これとは別。`seed: null`または省略は従来のseed=1、整数は再現用固定seed（`?seed=`併記時はそちらが優先）。`name`はDで出る表示名。盤は`model3.json`と`layout3.json`の両方を含むディレクトリを指定する。
 
 `?config=`はURL、`work/`始まりのプロジェクト相対パス、またはページ相対パス（例`../../game_tuning/proto/config.json`）を受け取る。設定内の`stageDir`と`rules`は`work/`・`docs/`始まりならプロジェクトルート基準、それ以外（例`./board`）は設定JSONのURL基準。外部URLは配信元のCORS許可が必要。付属サーバーは`work/`に加え規則正本の`docs/`も配信する。
 
 揺らぎは独立正規分布の標準偏差。xはmm、vx/vyは速度に対する%。Box–Muller、seed XOR `0xa5a5f00d`の独立LCG32を用い、打切り・端点clampはしない。0の成分は乱数を消費しない。規則validate失敗はパスと理由を画面・コンソールへ表示し、プレイを開始しない。
 
-各開始時の`physics_config`記録に設定URL・名前・実効seed・規則値・盤model/layout・釘数・揺らぎ値を保存し、各発射には`launchDelta`（x=m、v/y=速度比）を記録する。光層は従来のダミーのまま。
+各開始時の`physics_config`記録に設定URL・名前・実効seed・規則値・盤model/layout・釘数・揺らぎ値を保存し、各発射には`launchDelta`（x=m、v/y=速度比）を記録する。m3の通常演出の光は、動画と同じフレームの光データで駆動する。
 
 Nodeで同じ設定を通す場合（プロジェクトルートから、configはファイルパス／file URL）:
 
@@ -83,11 +91,11 @@ node work/game_demo/play/lighting_test.mjs
 node work/game_demo/ui/session_log_test.mjs
 python3 tools/gpu_run.py cabinet sol44-manual 2 -- node work/game_demo/play/qa.mjs /tmp/sol44-manual 30
 python3 tools/gpu_run.py cabinet sol44-10min 2 -- env SCENARIO=realtime node work/game_demo/play/qa.mjs /tmp/sol44-10min 600
-python3 tools/gpu_run.py cabinet sol44-jp600 2 -- env SCENARIO=jp node work/game_demo/play/qa.mjs /tmp/sol44-jp600 90
+python3 tools/gpu_run.py cabinet sol44-jp 2 -- env SCENARIO=jp node work/game_demo/play/qa.mjs /tmp/sol44-jp 90
 python3 tools/gpu_run.py cabinet sol44-pack 2 -- env SCENARIO=pack PACK_URL=./fixtures/dummy_pack/manifest.json node work/game_demo/play/qa.mjs /tmp/sol44-pack 2
 ```
 
-QAは自身のHTTPサーバーを空きポートで起動し、終了時に停止する。1440×2560のヘッドレス全画面。manualは時間を明示的に進めた計測でfpsではない。realtimeはrAFを10分運転し、UI・音・HTTP記録を有効にする。JPは六灯のみを初期状態として設定し、着地はRapier、600の抽選は規則seed=43で進める。通常の来場者プレイで600が発生した確率の測定ではない。
+QAは自身のHTTPサーバーを空きポートで起動し、終了時に停止する。1440×2560のヘッドレス全画面。manualは時間を明示的に進めた計測でfpsではない。realtimeはrAFを10分運転し、UI・音・HTTP記録を有効にする。JP試験は六灯のみを初期状態として設定し、着地はRapierで進める。配当は現R3の30/40/100/200/500。通常の来場者の発生率を測る試験ではない。
 `CPU_RENDER=1`はSwiftShaderで機能のみ確認する（GPU性能の測定には使わない）。`CHROMIUM_PATH`で既存のChromium実行ファイルを指定できる。
 
 ## 光層との接続（web/は変更しない）

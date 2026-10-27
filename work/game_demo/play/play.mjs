@@ -1,6 +1,7 @@
 // 通しプレイ: 規則+480Hz Rapier+光層+DOM UI。
 // ?seed=N &manual &nolog &quiet &debug &pack=<manifest URLまたはディレクトリ>
 import RAPIER from '../physics/node_modules/@dimforge/rapier3d-compat/dist/rapier.mjs';
+import { installRigidSyncGuard } from '../physics/rigid_sync_guard.mjs';
 import { PhysicsAdapter, RAPID_SUPPLY } from '../physics/adapter.mjs';
 import { attachTrayVisual } from '../physics/tray_visual.mjs';
 import { createMedalApp } from '../ui/demo_host.mjs';
@@ -13,28 +14,60 @@ import { loadPlayConfig, loadPlayRules } from './config.mjs';
 import { prewarm } from './prewarm.mjs';
 import { createLauncherBody } from './launcher_body.mjs';
 import { CabinetSerial } from './cabinet_serial.mjs';
+import { winSeconds, JACKPOT_SECONDS } from '../rules/medal_rules.mjs';
 
 async function main() {
 const q = new URLSearchParams(location.search);
 async function readText(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.text(); }
-const DEFAULT_PLAY_CONFIG = 'work/game_tuning/proto/config.json', DEFAULT_PACK = '/assembly/sol61_v36_pack/stage2c/manifest.json';   // 引数なしで開いた時の本番構成(?config=&pack= で上書き、空文字で無効)
+const DEFAULT_PLAY_CONFIG = 'work/game_tuning/r3/config_r3.json', DEFAULT_PACK = '/assembly/sol61_v36_pack/stage2c/manifest.json';   // 引数なしで開いた時の本番構成(?config=&pack= で上書き、空文字で無効)
+const M3_PROBE126_PACK = '/assembly/sol61_v36_pack/stage2c_probe126_rgb/manifest.json'; // Private default-M3 tail/bitset environment plus private RGB16F physical probes.
 const config = await loadPlayConfig(q.has('config') ? q.get('config') : DEFAULT_PLAY_CONFIG, readText);
 const seed = q.has('seed') ? Number(q.get('seed')) : config.seed ?? 1;
 const playRules = await loadPlayRules(config.rules, readText);
 await RAPIER.init();
 const CAB = new URL('../../cabinet/', import.meta.url);
-const pa = await PhysicsAdapter.create(RAPIER, {
+const paOptions = {
   readText: (p) => readText(new URL(p, CAB)), importModule: (p) => import(new URL(p, CAB).href), seed, stageDir: config.stageDir, jitter: config.jitter,
   ...(playRules.MaxInFlight > 1 ? RAPID_SUPPLY : {}),   // 同時発射なら玉の補給も連射に合わせる
   boardTimeScale: Number(q.get('pscale') ?? 0.35),   // 盤上の玉の進み(1=実時間)。落下を目で追える速さ(平均0.72秒→約2秒)。?pscale=1 で実時間
-});
+};
+// ?physworker=1: 物理を専用 Worker で回す試験モード(同じ API の代理。physics/worker/README.md)。指定なしは従来どおり主スレッドの PhysicsAdapter
+const pa = q.get('physworker') === '1' ? await (await import('../physics/worker/physics_proxy.mjs')).PhysicsWorkerProxy.create(paOptions) : await PhysicsAdapter.create(RAPIER, paOptions);
+// 固定buildの独立file SHA証拠を前提とする。runtime認証ではない。?rigidsync=0で従来の同期。
+const syncGuards = [];
+if (!pa.isWorkerProxy && q.get('rigidsync') !== '0') {
+  const sourceFingerprint = { packageVersion: '0.21.0', bundleSha256: '6ef5000c7200716131f6d008fa6cc947f18a38bb717ad3a36dfc9c3e1ba29b3a' };
+  const rollbackSync = () => {
+    while (syncGuards.length) {
+      try { syncGuards.pop().dispose(); } catch (cleanupError) { console.error('[rigid-sync rollback]', cleanupError); }
+    }
+  };
+  try {
+    for (const world of [pa.bw, pa.tw]) {
+      const guard = installRigidSyncGuard(world, RAPIER, { ownedNormalApi: true, sourceFingerprint, mode: 'skip' });
+      if (!guard.installed) { rollbackSync(); break; }
+      syncGuards.push(guard);
+    }
+  } catch (error) { rollbackSync(); throw error; }
+}
 pa.playConfig = { ...config, seed, pinCount: pa.board.layout.pins.length };
-const hr = new HybridRenderer({ canvas: document.getElementById('c'), maxBalls: 700, lutUrl: new URL('../web/assets/lut/pbrneutral_lg2_57_lin', import.meta.url).href });
+const M3 = q.get('cabinet') !== 'r2';   // m3が既定。?cabinet=r2で旧筐体を残す
+const hr = new HybridRenderer({ canvas: document.getElementById('c'), maxBalls: 700, lutUrl: new URL('../web/assets/lut/pbrneutral_lg2_57_lin', import.meta.url).href, deferEnvironment: M3 && !q.has('pack'), deferProbeBases: M3 && !q.has('pack') });
 await hr.init();
 attachTrayVisual(hr, pa);
 hr.setBallBounce(Number(q.get('ballbounce') ?? 0.5));   // 玉の下半球の照り返し（既定0.5で銀色に見える。?ballbounce=0 で従来）
 const setAssemblyBalls = connectAssemblyBalls(hr, pa.transforms);
-const pack = await (await import('../render_r2/select_render.mjs')).connectRender(hr, q, DEFAULT_PACK);   // 既定R2、?render=legacy。生成packが無ければstage2cへ戻す
+const renderQuery = new URLSearchParams(q); if (M3) renderQuery.set('render', 'legacy');   // m3 は stage2c の皿の環境とプローブだけを使う(R2の筐体の絵は使わない)
+let initialEnvironment = M3 ? hr.env : null; // このplayがinitで生成した専有dummy RTだけを捕捉
+const pack = await (await import('../render_r2/select_render.mjs')).connectRender(hr, renderQuery, M3 && !q.has('pack') ? M3_PROBE126_PACK : DEFAULT_PACK, { loadLayers: !M3, ownedM3Prefix: M3 && !q.has('pack') });   // m3は後で全光層を外すため、光源metadata・環境・probeのみ読む。R2は従来どおり
+if (initialEnvironment) {
+  const slots = e => [...Object.values(e.back), ...Object.values(e.front), e.tau, e.occ];
+  const live = new Set(slots(hr.env).flatMap(x => [x, x?.texture]).filter(Boolean));
+  for (const rt of new Set(slots(initialEnvironment))) {
+    if (rt?.isWebGLRenderTarget && !live.has(rt) && !live.has(rt.texture)) rt.dispose();
+  }
+  initialEnvironment = null; // r2/未置換slotは保持し、捕捉した旧envへの参照だけを解放
+}
 const app = await createMedalApp(document.getElementById('stage'), {
   hooks: { launchBall(shot, aim, dir) { pa.setAim(aim, dir); pa.launch(shot.id); }, cancelFlights() { pa.reset(); }, canReset() { return app.presenter.count.done; } },
   rulesUrl: config.rules, seed, quiet: q.has('quiet'), music: false, log: !q.has('nolog'), human: !q.has('nolog') && !q.has('qa') && !q.has('manual'), manual: true,
@@ -44,7 +77,8 @@ app.history?.setContext({ configName: config.name, stageDir: config.stageDir, ru
 const cabinet = new CabinetSerial({ serial: navigator.serial, ctrl, button: document.getElementById('serial-connect'), status: document.getElementById('serial-status'), onInput: app.onInput });
 await cabinet.init();
 const howtoDur = await fetch(new URL('../../effects/spec/events.json', import.meta.url)).then(r => r.json()).then(j => j.events.find(e => e.id === 'howto')?.dur).catch(() => null);   // 説明の長さは演出の仕様(events.json)に従う
-ctrl.howtoSeconds = Number(q.get('howto') ?? howtoDur ?? 5.2);   // 開始前のルール説明(時計に含めない・もう一度押すと飛ばせる)。?howto=0 で無効
+ctrl.howtoSeconds = Number(q.get('howto') ?? (playRules.R3Enabled ? 8 : howtoDur ?? 5.2));
+if (playRules.R3Enabled) ctrl.howtoPanels = 3;   // 開始前のルール説明(時計に含めない・もう一度押すと飛ばせる)。?howto=0 で無効
 window.__effects = effects;
 if (q.get('effects_log') === '1') effects.on('*', e => console.log('[effects]', e));
 // 公開音響はr2既定。?audio=legacyで従来音響。声は明示指定時のみ。読込失敗時は従来音響を維持する。
@@ -52,6 +86,10 @@ let r2Audio = null;
 if (q.get('audio') !== 'legacy') {
   try {
     const { connectAudio } = await import('../../audio/runtime/connect_audio.mjs');
+    // 固定build/file SHAの独立証拠を前提とする。pin定数はruntime認証ではない。
+    // 本番M3/R3の所有main Worldだけ既定ON。?audioquery=0で元の一段query。
+    const nativeQueryProof = M3 && playRules.R3Enabled && !pa.isWorkerProxy && q.get('audioquery') !== '0'
+      ? (await import('../../audio/runtime/native_contact_query.mjs')).createOwnedNativeQueryProof(RAPIER, { ownedNativeReadOnly: true, sourcePin: { packageVersion: '0.21.0', bundleSha256: '6ef5000c7200716131f6d008fa6cc947f18a38bb717ad3a36dfc9c3e1ba29b3a' } }) : null;
     const bgmManifest = new URL('../../audio/bgm/manifest.json', import.meta.url);
     const bgmOverride = q.get('bgm');
     let releaseBgmOn = false;
@@ -62,7 +100,8 @@ if (q.get('audio') !== 'legacy') {
         releaseBgmOn = (await response.json()).release_default_on === true;
       } catch (error) { console.warn('[r2-bgm-default]', error); }
     }
-    r2Audio = await connectAudio({ pa, bus: effects,
+    r2Audio = await connectAudio({ pa, bus: effects, nativeQueryProof,
+      jpPrewarmEvents: app.rules.JackpotAwards.map((award,tier)=>({duration:app.rules.JackpotEffectSeconds!=null?app.rules.JackpotEffectSeconds[tier]:winSeconds(award)+JACKPOT_SECONDS,tier})),
       voiceProvider: q.get('voice') ?? 'off',
       bgmEnabled: bgmOverride === '1' || (bgmOverride !== '0' && releaseBgmOn),
       bgmManifest, getPhase: () => ctrl.game.phase,
@@ -84,20 +123,34 @@ const runtime = createRuntime({ ctrl, presenter, pa, log: app.log, effects });
 let fxApi = null;
 if (!q.has('nofx')) {
   const { connectPlayEffects } = await import('../../effects/runtime/play_fx.mjs');
-  fxApi = await connectPlayEffects({ hr, bus: effects, getSnapshot: () => effects.snapshot(), lightingSources: pack.lighting.sources, rules: app.rules, lcdGain: Number(q.get('lcdgain') ?? 1), tray: q.has('notray') ? null : { ...runtime, displayWallet: () => presenter.displayWallet() } });
+  // 動画液晶が既定。?lcd=legacyで旧Canvas液晶。m3ではpanelいっぱいに貼る
+  const lcd = q.get('lcd') !== 'legacy' ? await (await import('./lcd_surface/lcd_surface.mjs')).createLcdSurface({ manifestUrl: new URL(q.get('lcdclips') ?? './lcd_surface/ryugu1028/manifest.json', import.meta.url).href, jpManifestUrl: q.get('jpclips') === 'off' ? null : new URL(q.get('jpclips') ?? './lcd_surface/jp1029/manifest_title_v8.json', import.meta.url).href, onJpCue: c => { if(c.kind==='hold'){const rank=app.rules.PrizeNames.indexOf(runtime.getPrize());runtime.setJpHold(true);return rank;} if(c.kind==='reveal'){runtime.setJpHold(false);} if(c.kind==='tray')runtime.awardToTray(c.count==='payout'?c.payout:c.count,{rate:c.rate,origin:'jp_reveal'}); if(c.kind==='snd')window.dispatchEvent(new CustomEvent('jp-scene-cue',{detail:c})); if(c.kind==='end'&&runtime.jpHold){runtime.setJpHold(false);runtime.releaseAwards({rate:24});} }, getState: () => ({ ...effects.contextSnapshot().state, phase: ctrl.game.phase, howtoT: ctrl.howto?.t, prize: ctrl.game.prize, score: ctrl.game.jackpotEarnings, chain: ctrl.game.chainStatus, rules: app.rules }) }) : null;   // 最初のJPはd=4確認版。継続は既存の表示を保持する。
+  // 新しいJP尺の音も起動時に作り、着地のフレームで長い音声バッファを生成しない。
+  if(lcd?.jp && r2Audio){
+    const {winPlan,createWinSound}=await import('../../audio/runtime/win_sound.mjs');const engine=r2Audio.engine;
+    const durations=new Set(Object.values(app.rules.FirstJackpotEffectSeconds??{}).flat());
+    for(const duration of durations){const plan=winPlan({id:'jp',data:{duration}},engine.winTiming),key='jp:'+plan.duration;if(!engine.winCache.has(key))engine.winCache.set(key,createWinSound(engine.ctx,engine.buffers,engine.winTiming,plan));}
+  }
+  if (lcd && M3 && !q.has('m3lcdfit')) q.set('m3lcdfit', 'panel');
+  if (lcd) window.__lcdSurface = lcd;
+  fxApi = await connectPlayEffects({ hr, bus: effects, getSnapshot: () => effects.contextSnapshot(), lightingSources: pack.lighting.sources, rules: app.rules, lcdGain: Number(q.get('lcdgain') ?? 1), tray: q.has('notray') ? null : { ...runtime, get jpHold(){return runtime.jpHold;}, displayWallet: () => presenter.displayWallet() }, lcd, ownedFrontEarlyClip: M3, ownedBackEarlyClip: M3, ownedFrameSnapshot: M3 && !q.has('pack') && !q.has('fxjs') });
   app.overlay.fx.style.display = 'none';   // 旧ダミーの帯・カットイン・ルーレット・JPは液晶演出に置き換え
   if (!q.has('oldui')) app.overlay.setBare(true);   // 旧UI(上の帯・持ち玉・口の番号・キー表示・待機/時間切れ/結果の画面)は出さない。液晶と7セグが正式。?oldui で旧表示(デバッグ用)
 }
+let m3 = null, m3Clock = 0;
+if (M3) { m3 = await (await import('./m3/m3_cabinet.mjs')).installM3Cabinet({ hr, fxApi, presenter, pa, q, getLamps: () => ctrl.game.lamps, getPrize: () => runtime.getPrize(), prizeNames: app.rules?.PrizeNames, ownedInitialEnvironment: M3 && !q.has('pack') ? hr.env : null }); pack.info.cabinet = { name: 'm3', ...m3.info }; window.__m3 = m3; }
 // 初回だけ重い処理(画像デコード・GPUアップロード・シェーダ)を遊技の前に済ませる。?prewarm=0 で無効
 if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi });
 window.__r2Audio = r2Audio;
 const stats = runtime.stats;
-const launcherBody = q.has('nolauncher') ? null : createLauncherBody({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) });   // 射出器の本体(レール・筒)。見た目だけ
+const launcherArgs = M3 ? [(await import('./m3/launcher_body_m3.mjs')).createLauncherBody, { now: () => m3Clock, getLight: () => m3.state.k4 }] : [createLauncherBody, {}];
+const launcherBody = q.has('nolauncher') ? null : launcherArgs[0]({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) }, launcherArgs[1]);   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
   cabinet.tick(performance.now());
   const s = pa.snapshot(); setAssemblyBalls(s); if (fxApi) fxApi.ballLights(s);   // 勝負中の玉をピンポイントで照らす(演出側)
   const lf = pack.lighting.frame(presenter.lightingInputs(), pa.tick); if (fxApi) { try { fxApi.applyLights(lf); } catch (e) { if (!window.__lightError) { window.__lightError = e.message; console.error('[lights]', e); } } }   // 演出の光(花びら・縁)が最終の書き手。範囲外などの異常は、その場の光だけ飛ばして遊技を止めない
   hr.setLightingFrame(lf);
+  m3?.update(m3Clock);
   hr.render(); launcherBody?.update(s.shuttle); app.overlay.render(presenter.view());
   if (fxApi && !app.overlay.bare) app.overlay.screen.style.display = ctrl.howto ? 'none' : '';   // ルール説明(howto)中は待機画面のDOMを消して、液晶の説明を見せる
   return s;
@@ -105,6 +158,7 @@ function draw() {
 function frame(dt, render = true) {
   const t0 = performance.now(), timing = runtime.advance(dt);
   if (fxApi) fxApi.frame(dt);
+  m3Clock += dt;
   if (ctrl.phase === 'Fault') r2Audio?.engine.stopAll();
   let s = null; if (render) s = draw();
   window.__play.lastTiming = { ...timing, totalMs: performance.now() - t0 };

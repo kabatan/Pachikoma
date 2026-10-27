@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>end_v preview</title>
+<body style="margin:0;background:#000">
+<canvas id="c" width="1152" height="1268"></canvas>
+<script type="module">
+// 数字なしの計数・結果の映像に end_digits.mjs で実際の値を重ねた静止画（レビュー用）。H.shot(clip, t, vals) → png
+import { createEndDigits } from '../../end_digits.mjs';
+const base = new URL('../../../../../effects/chain/tmp/export/digits/', import.meta.url);
+const sheet = await (await fetch(new URL('sheet.json', base))).json(), digits = {};
+const load = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+for (const [face, gl] of Object.entries(sheet)) { if (!gl || typeof gl !== 'object') continue; digits[face] = {}; for (const g of Object.keys(gl)) digits[face][g] = await Promise.all([0,1,2,3].map((k) => load(new URL(`${face}/${encodeURIComponent(g)}_${k}.png`, base).href))); }
+const dg = await createEndDigits({ slotsUrl: new URL('../../clips/end_v_slots.json', import.meta.url).href, digits });
+const c = document.getElementById('c'), ctx = c.getContext('2d');
+// 映像のコマは呼ぶ側(shots_end_v.mjs)が ffmpeg で切り出して渡す(頭なしの Chromium の video は飛び先のコマが出るのが遅く、前のコマが残った)
+window.H = {
+  pick(event, vals) { dg.onEvent('attract', {}); dg.onEvent(event, vals); return dg.pick(event); },
+  async shot(name, t, frameUrl) {
+    const im = new Image(); await new Promise((r) => { im.onload = r; im.src = frameUrl; });
+    ctx.drawImage(im, 0, 0, 1152, 1268); dg.draw(ctx, name, t, 0, 0, 1);
+    return c.toDataURL('image/png');
+  },
+};
+window.__ready = true;
+</script>

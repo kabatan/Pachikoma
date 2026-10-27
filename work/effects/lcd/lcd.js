@@ -89,12 +89,23 @@
   LCD.init = async function (opt = {}) {
     LCD.rootUrl = opt.root || '/';
     LCD.index = await (await fetch(LCD.rootUrl + 'work/effects/lcd/asset_index.json')).json();
+    const titleBoundsPromise = fetch(LCD.rootUrl + 'work/effects/lcd/title_bounds.json')
+      .then((r) => r.ok ? r.json() : null).catch(() => null);
     await LCD.loadFonts(LCD.rootUrl);
     const core = ['glow_soft.png', 'spark.png', 'sprite_calm.png', 'sprite_smile.png', 'sprite_happy.png', 'rays_soft.png', 'flare_ring.png', 'flare_streak.png', 'glint_1.png', 'glint_2.png', 'glint_3.png', 'bokeh_disc.png', 'petal_1.png', 'petal_2.png', 'petal_3.png', 'petal_4.png', 'ember.png'];
     await LCD.load(core);
     if (opt.base !== false && root.LCD_BASE) { try { LCD.base = await root.LCD_BASE(LCD.rootUrl + LCD.index.normal_manifest); } catch (e) { console.warn('base failed', e); } }
     const need = new Set(); for (const id of (opt.scenes || Object.keys(LCD.defs))) (LCD.defs[id]?.assets || []).forEach((a) => need.add(a));
     await LCD.load([...need]);
+    // Immutable title PNG bounds are generated offline. Prime only matching
+    // dimensions; missing or stale entries fall back to the exact alpha scan.
+    const titleBounds = await titleBoundsPromise;
+    if (titleBounds) for (const [name, b] of Object.entries(titleBounds)) {
+      const im = LCD.img[name];
+      if (im && im.width === b.width && im.height === b.height && b.title && b.common) {
+        alphaBounds.set(im, { title: b.title, common: b.common });
+      }
+    }
     await loadTouchPlan();
     for (const h of LCD.initHooks || []) { try { await h(opt); } catch (e) { console.warn('init hook failed', e); } }
     LCD.ready = true; return LCD;
@@ -308,16 +319,32 @@
   };
 
   // 既存APIを変えずに追加。透明な余白を除いた文字の実寸をキャッシュ。
-  const titleBounds = new WeakMap();
-  LCD.titleBounds = (im) => {
-    if (titleBounds.has(im)) return titleBounds.get(im);
+  const alphaBounds = new WeakMap();
+  LCD.measureAlphaBounds = (im) => {
+    if (alphaBounds.has(im)) return alphaBounds.get(im);
     const cv = document.createElement('canvas'); cv.width = im.width; cv.height = im.height;
-    const g = cv.getContext('2d'); g.drawImage(im, 0, 0); const d = g.getImageData(0, 0, cv.width, cv.height).data;
-    let l = im.width, r = -1, top = im.height, bottom = -1;
-    for (let yy = 0; yy < im.height; yy++) for (let xx = 0; xx < im.width; xx++) if (d[(yy * im.width + xx) * 4 + 3] > 32) { l = Math.min(l, xx); r = Math.max(r, xx); top = Math.min(top, yy); bottom = Math.max(bottom, yy); }
-    const b = r < l ? { l: 0, r: im.width - 1, top: 0, bottom: im.height - 1 } : { l, r, top, bottom };
-    titleBounds.set(im, b); return b;
+    const g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0);
+    const d = g.getImageData(0, 0, cv.width, cv.height).data;
+    let l32 = im.width, r32 = -1, top32 = im.height, bottom32 = -1;
+    let l48 = im.width, r48 = 0, top48 = im.height, bottom48 = 0;
+    for (let yy = 0; yy < im.height; yy++) {
+      let rowL32 = im.width, rowR32 = -1, rowL48 = im.width, rowR48 = -1;
+      const row = yy * im.width * 4;
+      for (let xx = 0; xx < im.width; xx++) {
+        const a = d[row + xx * 4 + 3];
+        if (a > 32) { if (xx < rowL32) rowL32 = xx; rowR32 = xx;
+          if (a > 48) { if (xx < rowL48) rowL48 = xx; rowR48 = xx; } }
+      }
+      if (rowR32 >= 0) { if (top32 === im.height) top32 = yy; bottom32 = yy;
+        if (rowL32 < l32) l32 = rowL32; if (rowR32 > r32) r32 = rowR32; }
+      if (rowR48 >= 0) { if (top48 === im.height) top48 = yy; bottom48 = yy;
+        if (rowL48 < l48) l48 = rowL48; if (rowR48 > r48) r48 = rowR48; }
+    }
+    const title = r32 < l32 ? { l: 0, r: im.width - 1, top: 0, bottom: im.height - 1 } : { l: l32, r: r32, top: top32, bottom: bottom32 };
+    const common = { w: r48 - l48 + 1, h: bottom48 - top48 + 1, cx: (l48 + r48) / 2, cy: (top48 + bottom48) / 2 };
+    const bounds = { title, common }; alphaBounds.set(im, bounds); return bounds;
   };
+  LCD.titleBounds = (im) => LCD.measureAlphaBounds(im).title;
   // 文字素材と仮文字を同じ矩形に収める(既存title/titleOrの寸法規約は変えない)。
   LCD.titleFit = (c, key, fallback, x, y, o = {}) => {
     const im = LCD.img['t_' + key + '_face.png'] || LCD.img['rl_t_' + key + '_face.png'];

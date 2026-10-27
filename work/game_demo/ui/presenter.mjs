@@ -91,7 +91,7 @@ export class MedalPresenter {
         else this._banner('reset', '消灯', '重複しました', 0.9);
         this.cue('medal_lamp_break', 1, -4); break;
       case MedalEvent.Win: case MedalEvent.Miss:
-        if (r.kind === MedalEvent.Win) this.pending += r.award;
+        if (r.kind === MedalEvent.Win && !(r.chain && !r.chainBanked)) this.pending += r.award;
         this.reveal = { r, at: this.clock + (this.quiet ? 0.05 : 0.22) }; break; // 決着の直前に短い無音
       case MedalEvent.Fault: this._banner('fault', '判定できませんでした', 'この1球は返しました', 2.5); this.cue('medal_miss'); break;
     }
@@ -134,7 +134,7 @@ export class MedalPresenter {
   }
   _jackpot(r) {
     const a = this.ctrl.game.rules.JackpotAwards;
-    this.fx.jackpot = { awards: a, t: 0, dur: JACKPOT_SECONDS, kEnd: a.length * 3 + r.jackpot, k: -1, chosen: r.jackpot, award: r.award, settled: false };
+    this.fx.jackpot = { awards: a, t: 0, dur: JACKPOT_SECONDS, kEnd: a.length * 3 + r.jackpot, k: -1, chosen: r.jackpot, award: r.award, pays: !r.chain, settled: false };
   }
   _advanceFx(dt) {
     const f = this.fx;
@@ -149,7 +149,7 @@ export class MedalPresenter {
       if (k !== x.k) { x.k = k; this.cue('medal_roulette_tick', 0.9 + (x.t / x.dur) * 0.5); }
       if (x.t >= x.dur && !x.settled) {
         x.settled = true; this.cue('medal_silence_hit'); this.cue('medal_win_max');
-        this._startPour(x.award > 100 ? 0.025 : 0.034, true);
+        if (x.pays) this._startPour(x.award > 100 ? 0.025 : 0.034, true);
       }
       if (x.t >= x.dur + 1.6) f.jackpot = null;
     }
@@ -206,12 +206,14 @@ export class MedalPresenter {
   view() {
     const c = this.ctrl, g = c.game, rules = g.rules, f = this.fx;
     const lamps = this.displayLamps(), mode = this.mode(), wallet = this.displayWallet();
-    const th = rules.PrizeThresholds; let ti = 0; th.forEach((t, i) => { if (t <= g.wallet) ti = i; });
-    const next = ti + 1 < th.length ? { name: rules.PrizeNames[ti + 1], need: th[ti + 1] - g.wallet } : null;
+    // 景品は規則の判定(g.prize)に従う。R3 は JP の合計で決まり、S は 500 を当てた時だけなので A の次は出さない
+    const th = rules.PrizeThresholds, score = rules.R3Enabled ? g.jackpotEarnings : g.wallet, ti = Math.max(0, rules.PrizeNames.indexOf(g.prize));
+    const next = ti + 1 <= (rules.R3Enabled ? th.length - 2 : th.length - 1) ? { name: rules.PrizeNames[ti + 1], need: th[ti + 1] - score } : null;
     const stake = this.reveal ? rules.Awards[this.reveal.r.before.length] : (g.shot?.challenge ? g.shot.award : g.award);
     return {
-      phase: g.phase, mode, secondsLeft: g.secondsLeft, secondsTotal: rules.InitialSeconds + (g.addedCredit ? rules.ExtraSeconds : 0),
-      addedCredit: g.addedCredit, wallet, lamps, lampCount: lamps.length, armed: g.armed, challengeLive: mode === 'challenge' || mode === 'final',
+      phase: g.phase, mode, secondsLeft: g.secondsLeft, secondsTotal: rules.InitialSeconds + (rules.R3Enabled ? g.extraCreditsUsed : Number(g.addedCredit)) * rules.ExtraSeconds,
+      addedCredit: g.addedCredit, extraCreditsUsed: g.extraCreditsUsed, wallet, lamps, lampCount: lamps.length, armed: g.armed,
+      chain: g.chainStatus, challengeLive: mode === 'challenge' || mode === 'final',
       stake, stakeLabel: rules.hasJackpot && mode === 'final' ? 'JP' : '+' + stake, awards: rules.Awards, jackpotAwards: rules.JackpotAwards, hasJackpot: rules.hasJackpot,
       chipIndex: lamps.length - 1,
       prize: { name: g.prize, next }, prizeTable: rules.PrizeNames.map((n, i) => ({ name: n, from: th[i] })),

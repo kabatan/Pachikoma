@@ -202,7 +202,8 @@ export class PhysicsAdapter {
 
   /** HUD の持ち玉に使う、物理側で「まだ皿に着いていない」玉(払出待ち+トンネル内)。 */
   pendingPhysical() { return this.payQueue + this._tunnelBalls(); }
-  ledger() { let dish = 0; for (const b of this.tray.activeBalls.values()) if (!b.stored && b.state !== 'payout') dish++; return { dish, tunnel: this._tunnelBalls(), queue: this.payQueue, overflow: this.stored.overflow, stock: this.stock, travel: this.travel.length, shuttle: this.shuttleHas ? 1 : 0, counted: this.stored.count }; }
+  // activeBalls は未収納の球だけを持ち、activePayout はそのうちトンネル内の球数。
+  ledger() { const tunnel = this._tunnelBalls(), dish = this.tray.activeBalls.size - tunnel; return { dish, tunnel, queue: this.payQueue, overflow: this.stored.overflow, stock: this.stock, travel: this.travel.length, shuttle: this.shuttleHas ? 1 : 0, counted: this.stored.count }; }
 
   snapshot() {
     const buf = this._snapshotBuffer ??= { pos: new Float32Array(this.maxBalls * 3), kind: new Uint8Array(this.maxBalls), ids: [] };

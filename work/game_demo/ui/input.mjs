@@ -4,13 +4,14 @@ export function primaryButtonAction(ctrl) {
   if (ctrl.phase === 'Attract') return 'start';
   if (ctrl.phase === 'Result') return 'replay';
   if (ctrl.phase === 'Fault') return 'settleFault';
+  if (ctrl.phase === 'ChainChoice') return 'chainContinue';
   return 'fire';
 }
 
 export const KEY_ACTIONS = (ctrl) => ({
   Space: () => primaryButtonAction(ctrl),
-  KeyC: () => 'challenge', KeyA: () => 'add',
-  KeyB: () => (ctrl.confirmFinish ? 'confirmFinish' : 'finish'),
+  KeyC: () => (ctrl.phase === 'ChainChoice' ? 'chainStop' : 'challenge'), KeyA: () => 'add',
+  KeyB: () => (ctrl.phase === 'ChainChoice' ? 'chainStop' : ctrl.confirmFinish ? 'confirmFinish' : 'finish'),
   KeyR: () => 'reset',
   Escape: () => (ctrl.confirmFinish ? 'cancelFinish' : 'quit'),
 });

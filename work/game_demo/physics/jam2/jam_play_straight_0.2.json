@@ -1,0 +1,23 @@
+{
+ "variant": "straight",
+ "balls": 3000,
+ "gap": 0.2,
+ "t": 607.7,
+ "cup": 3000,
+ "lost": 0,
+ "stuckEvents": 0,
+ "maxStill": 0,
+ "cups": [
+  0,
+  271,
+  504,
+  606,
+  115,
+  551,
+  322,
+  631
+ ],
+ "stuckList": [],
+ "kicks": 0,
+ "stuckPer1000": 0
+}

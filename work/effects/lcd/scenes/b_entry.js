@@ -179,6 +179,15 @@
       if(sc.fixPanel!=null)sc.hT=sc.fixPanel*sc.H/NP+(sc.t%(sc.H/NP));
     },
     draw(c,t,sc) {
+      if (LCD.rules().r3Enabled) {
+        // R3用の簡単な説明（仮）。旧「勝負」ボタンの説明を出さない。
+        B.background(c,t);
+        const k=Math.min(2,Math.floor((sc.hT??t)/Math.max(.01,sc.H)*3));
+        const lines=[['左のボタンで 玉をうつ','穴に入ると ランプがつく'],['ランプを６つ集めよう','６つで JPチャンス！'],['光っていない穴へ！','入れば 大当り！']][k];
+        LCD.text(c,'あそびかた',640,180,{size:78,stroke:8,fill1:'#ffffff',fill2:'#ffdc91'});
+        lines.forEach((line,i)=>LCD.text(c,line,640,340+i*120,{size:58,stroke:6,fill1:'#ffffff',fill2:'#b8eeff'}));
+        return;
+      }
       const H=sc.H,per=H/NP,T=sc.hT??t;
       B.layer(c,B.exit(t,H,.3),g=>{
         const open=smooth(t/.25),st=Math.min(NP-1,Math.floor(T/per)),lt=T-st*per;

@@ -5,7 +5,7 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
   presenter.externalTray = true;
   const effectsBridge = connectEffects({ ctrl, presenter, bus: effects });
   const stats = { cups: Array(8).fill(0), lost: 0, trayLost: 0, nudge: 0, peg: 0, overflow: 0, valve: 0, reserve: 0, countDone: null, maxLedgerDrift: 0 };
-  let acc = 0, countStarted = false;
+  let acc = 0, countStarted = false, jpHold = false, shownPrize = ctrl.game.prize;
   ctrl.onAction((action) => {
     if (action === 'start') {
       pa.beginGame(ctrl.rules.LoanBalls); countStarted = false; acc = 0; stats.countDone = null;
@@ -25,7 +25,7 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
       effectsBridge.advance(DT);
       ctrl.update(DT); presenter.update(DT); pa.setAim(ctrl.aim, ctrl.aimDir);
       effectsBridge.sync();
-      if (presenter.holdAwards && pa.skipPayout > 0) { const r = presenter.trayStatus().releasable; if (r > 0) presenter.awardToTray(Math.min(pa.skipPayout, r)); }   // 昇降管の予備球は最初から物理側にある
+      if (!jpHold && presenter.holdAwards && pa.skipPayout > 0) { const r = presenter.trayStatus().releasable; if (r > 0) presenter.awardToTray(Math.min(pa.skipPayout, r)); }   // 昇降管の予備球は最初から物理側にある
       const n = presenter.takePending(); if (n) pa.payout(n, presenter.pour.earned, presenter.pour.rate);
       if (ctrl.game.phase !== 'Result') countStarted = false;
       // Resultの財布0もシャトルを含めて物理側を空にする。
@@ -49,16 +49,20 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
         effectsBridge.physics(e);
         if (['cup', 'lost', 'stuck_nudge', 'overflow', 'reserve_return', 'tray_lost', 'count_done', 'launch', 'returned'].includes(e.type)) log?.write('physics', e, ctrl.game);
       }
+      if (!jpHold) shownPrize = ctrl.game.prize;
       const L = pa.ledger();
       // 未受領の配当と飛行中の1球も追跡。Result中は数えた玉を含める。
       const physical = L.dish + L.tunnel + L.queue + L.overflow + L.stock + L.travel + L.shuttle + L.counted;
-      const unobserved = ctrl.game.receipt && ctrl.game.receipt.id !== presenter._seen ? ctrl.game.receipt.award : 0;
+      const receipt = ctrl.game.receipt;
+      // 継続成功の積み増しは確定前には財布にも物理にも入らない（Presenterと同じ条件）。
+      const unobserved = receipt && receipt.id !== presenter._seen && !(receipt.chain && !receipt.chainBanked) ? receipt.award : 0;
       const drift = physical + presenter.pending + unobserved - pa.pendingLaunch.length - ctrl.game.wallet;
       stats.maxLedgerDrift = Math.max(stats.maxLedgerDrift, Math.abs(drift));
     }
     presenter.setDisplayWallet(Math.max(0, ctrl.game.wallet - pa.pendingPhysical() - presenter.pending));
     return { physicsMs, steps };
   }
-  const awardToTray = (count, opts) => presenter.awardToTray(count, opts);
-  return { stats, advance, effects: effectsBridge.bus, effectsBridge, awardToTray, releaseAwards: (o) => presenter.releaseAwards(o), setAwardHold: (on, maxHold) => presenter.setAwardHold(on, maxHold), trayStatus: () => presenter.trayStatus() };
+  const awardToTray = (count, opts = {}) => jpHold && opts.origin !== 'jp_reveal' ? 0 : presenter.awardToTray(count, opts);
+  const setJpHold = on => { jpHold=!!on; if(on) presenter.setAwardHold(true,14); else shownPrize=ctrl.game.prize; };
+  return { stats, advance, setJpHold, getPrize: () => shownPrize, get jpHold() {return jpHold;}, effects: effectsBridge.bus, effectsBridge, awardToTray, releaseAwards: (o) => jpHold ? 0 : presenter.releaseAwards(o), setAwardHold: (on, maxHold) => presenter.setAwardHold(on, maxHold), trayStatus: () => presenter.trayStatus() };
 }

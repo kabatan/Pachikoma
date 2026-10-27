@@ -43,8 +43,8 @@ const FS_VERT = 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }';
 const triGeo = () => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3)); return g; };
 
 export class ProbeSet {
-  constructor(renderer, { maxBases = 512 } = {}) {
-    this.r = renderer; this.maxBases = maxBases;
+  constructor(renderer, { maxBases = 512, deferInitialBases = false } = {}) {
+    this.r = renderer; this.maxBases = maxBases; this.deferInitialBases = deferInitialBases === true;
     this.W = 6 * PROBE_T; this.H = N_PROBES * PROBE_T;
     this.atlas = new THREE.WebGLRenderTarget(this.W, this.H, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
     this.atlas.texture.wrapS = this.atlas.texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -121,7 +121,10 @@ export class ProbeSet {
 
   /** frame = {ea[8], eb[8], q}。背景層と同じ q を使う。 */
   compose(frame) {
-    if (!this.bases) return 0;
+    if (!this.bases) {
+      if (!this.deferInitialBases) return 0;
+      this.makeDummyBases([]); // An early render/compose keeps the original16 fallback.
+    }
     const w = this.wData; let k = 0;
     const ea = frame.ea || [], eb = frame.eb || [];
     for (let r = 0; r < 8; r++) {

@@ -1,0 +1,1 @@
+{"variant":"kick","balls":3000,"gap":0.2,"t":606,"cup":3000,"lost":0,"stuckEvents":0,"maxStill":0.3333333333333333,"cups":[0,270,501,607,117,527,325,653],"stuckList":[],"kicks":5,"stuckPer1000":0}

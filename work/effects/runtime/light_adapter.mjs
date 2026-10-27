@@ -26,7 +26,7 @@ export class LightAdapter {
   }
   /** manifest.lighting.sources を渡して対応表を作り直す。戻り値: 対応が付いた数 */
   setSources(sources) {
-    this.map.clear(); this.unmapped = [];
+    this.map.clear(); this.unmapped = []; (this._missingIds ||= new Set()).clear();
     for (const [id, spec] of Object.entries(sources || {})) {
       let m = null;
       if (spec && Number.isInteger(spec.petal)) m = { petal: spec.petal };
@@ -38,7 +38,7 @@ export class LightAdapter {
     return this.map.size;
   }
   /** id を直接渡す形(sources の無い層でも、名前が合えば使える) */
-  mapId(id) { if (this.map.has(id)) return this.map.get(id); const m = this.byName.get(norm(id)); if (m) this.map.set(id, m); return m || null; }
+  mapId(id) { if (this.map.has(id)) return this.map.get(id); if (this._missingIds.has(id)) return null; const m = this.byName.get(norm(id)); if (m) this.map.set(id, m); else this._missingIds.add(id); return m || null; }
   /** 縁LEDの1区画の色(線形RGB): 虹B → 乗算 → 上書き → 加算。stage(3Dデモ)と同じ順序 */
   edgeColor(F, i, t) {
     const e = F.edge, pf = this.geom.edge[i].pf, base = e.base || { amount: 1, speed: 1 };

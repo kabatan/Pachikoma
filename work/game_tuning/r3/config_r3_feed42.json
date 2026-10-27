@@ -1,0 +1,11 @@
+{
+  "name": "R3-T 案A Cup7・42mm feeder",
+  "stageDir": "work/game_tuning/r3/boards/cup7_feed42",
+  "jitter": {
+    "x_mm": 0.5,
+    "vx_pct": 3,
+    "vy_pct": 0
+  },
+  "rules": "work/game_tuning/r3/rules_r3.json",
+  "seed": null
+}

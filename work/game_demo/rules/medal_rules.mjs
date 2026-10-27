@@ -6,8 +6,8 @@
 // 外れ(外れ溝・アウト口)の規則は無い: 口の間の仕切りは山形で、玉は必ず7口のどれかに入る（確定 2026-10-16）。
 // 皿の満杯は規則に持たない（物理で溜め、溢れ口へ実際に届いた玉が溢れる）。
 
-export const MedalPhase = Object.freeze({ Attract: 'Attract', Ready: 'Ready', Flight: 'Flight', Effect: 'Effect', Continue: 'Continue', Result: 'Result', Fault: 'Fault' });
-export const MedalEvent = Object.freeze({ Loan: 'Loan', Fresh: 'Fresh', Protected: 'Protected', Reset: 'Reset', Win: 'Win', Miss: 'Miss', Fault: 'Fault' });
+export const MedalPhase = Object.freeze({ Attract: 'Attract', Ready: 'Ready', Flight: 'Flight', Effect: 'Effect', ChainChoice: 'ChainChoice', Continue: 'Continue', Result: 'Result', Fault: 'Fault' });
+export const MedalEvent = Object.freeze({ Loan: 'Loan', Fresh: 'Fresh', Protected: 'Protected', Reset: 'Reset', Win: 'Win', Miss: 'Miss', ChainStop: 'ChainStop', Fault: 'Fault' });
 
 const sum = (a) => a.reduce((x, y) => x + y, 0);
 const sortedEq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
@@ -20,6 +20,9 @@ export class MedalRules {
     this.ResetWhileShooting = o.ResetWhileShooting ?? false;
     this.ResetVisualSecondsByLamps = o.ResetVisualSecondsByLamps ?? null;
     this.R2Enabled = o.R2Enabled ?? false;
+    this.R3Enabled = o.R3Enabled ?? false;
+    this.MaxExtraCredits = o.MaxExtraCredits ?? 4;
+    this.JackpotChainLamps = o.JackpotChainLamps ?? [5, 6];
     this.ChallengePrepareSeconds = o.ChallengePrepareSeconds ?? 0;
     this.ChallengeAimSpeed = o.ChallengeAimSpeed ?? 1;
     this.PrepareForcedChallenge = o.PrepareForcedChallenge ?? false;
@@ -47,6 +50,7 @@ export class MedalRules {
     this.Awards = o.Awards ?? [0, 1, 2, 3, 10, 25, 60];
     this.ResetWeights = o.ResetWeights ?? [80, 15, 4, 1];
     this.ResetWeightsByLamps = o.ResetWeightsByLamps ?? null;
+    this.HighLampDuplicateProtectionCount = o.HighLampDuplicateProtectionCount ?? 0;
     this.JackpotAwards = o.JackpotAwards ?? [];
     this.JackpotWeights = o.JackpotWeights ?? [];
     this.PrizeThresholds = o.PrizeThresholds ?? [0, 20, 60, 120];
@@ -64,6 +68,10 @@ export class MedalRules {
         Array.from(r.ResetVisualSecondsByLamps).some(value => !Number.isFinite(value) || value < 0))) ||
       !Number.isInteger(r.MaxInFlight) || r.MaxInFlight < 1 || r.MaxInFlight > 6 || !Number.isFinite(r.FireInterval) || r.FireInterval < 0 ||
       typeof r.R2Enabled !== 'boolean' || typeof r.PrepareForcedChallenge !== 'boolean' ||
+      typeof r.R3Enabled !== 'boolean' || !Number.isInteger(r.MaxExtraCredits) || r.MaxExtraCredits < 1 || r.MaxExtraCredits > 10 ||
+      !Array.isArray(r.JackpotChainLamps) || r.JackpotChainLamps.length < 1 || r.JackpotChainLamps.some(x => !Number.isInteger(x) || x < 1 || x > 6) ||
+      !isAscending(r.JackpotChainLamps) || r.JackpotChainLamps.at(-1) !== 6 ||
+      !Number.isInteger(r.HighLampDuplicateProtectionCount) || r.HighLampDuplicateProtectionCount < 0 || r.HighLampDuplicateProtectionCount > 5 ||
       !Number.isFinite(r.ChallengePrepareSeconds) || r.ChallengePrepareSeconds < 0 || r.ChallengePrepareSeconds > 5 ||
       !Number.isFinite(r.ChallengeAimSpeed) || r.ChallengeAimSpeed <= 0 || r.ChallengeAimSpeed > 1 ||
       !Number.isFinite(r.EndGraceSeconds) || r.EndGraceSeconds < 0 || r.EndGraceSeconds > 5 ||
@@ -85,10 +93,12 @@ export class MedalRules {
       r.ResetWeights.some((x) => x < 0) || sum(r.ResetWeights) !== 100 ||
       (r.ResetWeightsByLamps != null && (r.ResetWeightsByLamps.length > 7 ||
         r.ResetWeightsByLamps.some((w) => w != null && (w.length !== 4 || w.some((x) => x < 0) || sum(w) !== 100)))) ||
-      r.JackpotAwards.length !== r.JackpotWeights.length || r.JackpotWeights.some((x) => x < 0) ||
-      (r.hasJackpot && (sum(r.JackpotWeights) !== 100 || r.JackpotAwards.some((x) => x < r.Awards[5]))) ||
+      r.JackpotAwards.length !== r.JackpotWeights.length || r.JackpotWeights.some((x) => !Number.isFinite(x) || x < 0) ||
+      (r.hasJackpot && (![100, 1_000_000].includes(sum(r.JackpotWeights)) || r.JackpotAwards.some((x) => x < r.Awards[5]))) ||
       r.PrizeThresholds.length !== r.PrizeNames.length || r.PrizeNames.length === 0 || r.PrizeThresholds[0] !== 0 ||
-      !sortedEq(r.PrizeThresholds, [...new Set(r.PrizeThresholds)].sort((a, b) => a - b));
+      !sortedEq(r.PrizeThresholds, [...new Set(r.PrizeThresholds)].sort((a, b) => a - b)) ||
+      (r.R3Enabled && (r.PrizeThresholds.length !== 5 || r.PrizeThresholds[1] !== 30 || r.PrizeThresholds[4] !== 500 ||
+        !sortedEq(r.PrizeNames, ['参加賞', 'C賞', 'B賞', 'A賞', 'S賞'])));
     if (bad) throw new Error('Invalid medal rules (including low-lamp economy and session duration)');
   }
 }
@@ -112,6 +122,14 @@ export class MedalGame {
     this.wallet = 0; this.purchased = 0; this.won = 0; this.spent = 0; this.cycleSpent = 0;
     this.maxLamps = 0; this.bestAward = 0; this.attempts = 0; this.successes = 0;
     this.addedCredit = false; this.firstProtection = true; this.armed = false;
+    this.extraCreditsUsed = 0;
+    this.jackpotEarnings = 0;
+    this.jackpotDreamHit = false;
+    this.highLampDuplicateProtectionLeft = 0;
+    this.jackpotChances = 0; this.jackpotSuccesses = 0;
+    this.chainAttempts = 0; this.chainSuccesses = 0; this.chainFailures = 0;
+    this.chainBanked = 0; this.chainLost = 0;
+    this.jackpotChain = null; this._resumeAfterLoan = null;
     this.secondsLeft = 0; this.offerLeft = 0; this.effectLeft = 0;
     this.clockStopBudgetUsed = 0; this.clockStoppedSeconds = 0;
     this.receipt = null; this.shot = null; this.endReason = '';
@@ -135,17 +153,26 @@ export class MedalGame {
     if (!this.rules.R2Enabled || !this.challengeIntent) return null;
     return { ...this.challengeIntent, aimSpeed: this.challengeAimSpeed };
   }
+  get chainStatus() {
+    const chain = this.jackpotChain;
+    if (!this.rules.R3Enabled || !chain) return null;
+    return { choicePending: chain.choicePending, inChallenge: chain.inChallenge, baseAward: chain.baseAward,
+      pendingAward: chain.pendingAward, successes: chain.stage,
+      nextLamps: this.rules.JackpotChainLamps[Math.min(chain.stage, this.rules.JackpotChainLamps.length - 1)] };
+  }
   get endStatus() {
     if (!this.rules.R2Enabled) return null;
     const pending = this.overlap ? this.shots.length : Number(!!this.shot);
-    const payout = this.phase === MedalPhase.Effect && [MedalEvent.Win, MedalEvent.Loan].includes(this.receipt?.kind);
+    const payout = this.phase === MedalPhase.Effect && [MedalEvent.Win, MedalEvent.Loan].includes(this.receipt?.kind) &&
+      !(this.receipt?.chain && !this.receipt?.chainBanked);
     const state = this.phase === MedalPhase.Result ? 'result' : this.phase === MedalPhase.Continue ? 'continue'
+      : this.phase === MedalPhase.ChainChoice ? 'chainChoice'
       : (this.wallet === 0 || this.secondsLeft === 0) && pending ? 'judging'
       : payout ? 'payout' : this.endPending ? 'ending'
       : (this.wallet === 0 || this.secondsLeft === 0) && this.phase === MedalPhase.Effect ? 'settling'
       : this.wallet > 0 && this.wallet <= 3 ? 'lastBalls' : 'playing';
     return { state, balls: this.wallet, pending, possibleSupply: pending > 0 || payout,
-      graceLeft: this.endGraceLeft, canContinue: !this.addedCredit };
+      graceLeft: this.endGraceLeft, canContinue: this.rules.R3Enabled ? this.extraCreditsUsed < this.rules.MaxExtraCredits : !this.addedCredit };
   }
   /** 狙いのスイープを進めてよいか(同時発射では、間隔待ちや盤上の玉数に関わらず、入力を受ける局面なら進める)。 */
   get canAim() {
@@ -176,13 +203,21 @@ export class MedalGame {
   }
   /** 勝負を宣言できるか(同時発射: 盤上が空で、入力を受ける局面)。 */
   get canArm() {
+    if (this.rules.R3Enabled) return false;
     if (!this.overlap) return this.canFire && this.lampCount > 0 && this.lampCount < 6;
     return this._acceptingPhase() && this.wallet > 0 && this.secondsLeft > 0 && this.shots.length === 0 && this.lampCount > 0 && this.lampCount < 6;
   }
-  get canAdd() { return !this.addedCredit && (this.phase === MedalPhase.Ready || this.phase === MedalPhase.Continue); }
+  get canAdd() {
+    const phaseOk = this.phase === MedalPhase.Ready || this.phase === MedalPhase.Continue;
+    return phaseOk && (this.rules.R3Enabled ? this.extraCreditsUsed < this.rules.MaxExtraCredits : !this.addedCredit);
+  }
   get prize() {
     const t = this.rules.PrizeThresholds; let i = 0;
-    for (let k = 0; k < t.length; k++) if (t[k] <= this.wallet) i = k;
+    if (this.rules.R3Enabled && this.jackpotDreamHit) return this.rules.PrizeNames.at(-1);
+    const score = this.rules.R3Enabled ? this.jackpotEarnings : this.wallet;
+    // R3 has five ranks, but cumulative winnings can reach only A. S requires a secured 500.
+    const lastRank = this.rules.R3Enabled ? t.length - 2 : t.length - 1;
+    for (let k = 0; k <= lastRank; k++) if (t[k] <= score) i = k;
     return this.rules.PrizeNames[i];
   }
 
@@ -195,6 +230,8 @@ export class MedalGame {
   _loan() {
     const before = this.wallet;
     const balls = this.addedCredit ? (this.rules.ExtraLoanBalls ?? this.rules.LoanBalls) : this.rules.LoanBalls;
+    this._resumeAfterLoan = this.rules.R3Enabled && this.jackpotChain
+      ? (this.jackpotChain.choicePending ? MedalPhase.ChainChoice : MedalPhase.Ready) : null;
     this.endPending = false; this.endGraceLeft = 0;
     this.wallet += balls; this.purchased += balls;
     this.receipt = this._receipt(MedalEvent.Loan, 0, balls, 0, this.lamps, this.lamps, before, loanSeconds(balls));
@@ -205,10 +242,13 @@ export class MedalGame {
   }
   addCredit() {
     if (!this.canAdd) return false;
-    this.addedCredit = true; this.secondsLeft += this.rules.ExtraSeconds;
+    this.addedCredit = true;
+    if (this.rules.R3Enabled) this.extraCreditsUsed++;
+    this.secondsLeft += this.rules.ExtraSeconds;
     this._loan(); return true;
   }
   toggleChallenge() {
+    if (this.rules.R3Enabled) return false;
     if (this.rules.R2Enabled) {
       if (this.armed || !this._acceptingPhase() || this.endPending || this.wallet <= 0 || this.secondsLeft <= 0 ||
         this.lampCount === 0 || this.lampCount >= 6 || this.shots.some(shot => shot.challenge)) return false;
@@ -221,12 +261,58 @@ export class MedalGame {
     if (!this.canFire || this.lampCount === 0 || this.lampCount === 6) return false;
     this.armed = !this.armed; return true;
   }
+  chooseChain(continueChain) {
+    if (!this.rules.R3Enabled || this.phase !== MedalPhase.ChainChoice || !this.jackpotChain?.choicePending) return false;
+    const chain = this.jackpotChain;
+    if (!continueChain) {
+      this.jackpotChain = null;
+      if (chain.pendingAward > 0) {
+        const before = this.lamps, walletBefore = this.wallet;
+        this.wallet += chain.pendingAward; this.won += chain.pendingAward; this.chainBanked += chain.pendingAward;
+        this.jackpotEarnings += chain.pendingAward;
+        if (chain.pendingDreamHit) this.jackpotDreamHit = true;
+        this.receipt = this._receipt(MedalEvent.Win, 0, chain.pendingAward, 0, before, before, walletBefore, winSeconds(chain.pendingAward));
+        this.receipt.chainBanked = true; this.receipt.chainStage = chain.stage; this.receipt.chainBase = chain.baseAward;
+        this._beginEffect();
+      } else {
+        this.receipt = this._receipt(MedalEvent.ChainStop, 0, 0, 0, this.lamps, this.lamps, this.wallet, 0);
+        this.receipt.chainBase = chain.baseAward; this.phase = MedalPhase.Ready;
+      }
+      return true;
+    }
+    if (this.secondsLeft <= 0 || this.endPending || this.wallet <= 0) return false;
+    const lampCount = this.rules.JackpotChainLamps[Math.min(chain.stage, this.rules.JackpotChainLamps.length - 1)];
+    this._lamps = new Set(Array.from({ length: lampCount }, (_, index) => index + 1));
+    chain.choicePending = false; chain.inChallenge = true;
+    this.armed = true; this.phase = MedalPhase.Ready;
+    const prepare = this.rules.R2Enabled && this.rules.PrepareForcedChallenge ? this.rules.ChallengePrepareSeconds : 0;
+    this.challengeIntent = { stage: prepare > 0 ? 'preparing' : 'ready', forced: true, chain: true, left: prepare };
+    return true;
+  }
+  _bankChainAward() {
+    const chain = this.jackpotChain;
+    this.jackpotChain = null;
+    if (!chain?.pendingAward) return 0;
+    const before = this.lamps, walletBefore = this.wallet;
+    this.wallet += chain.pendingAward; this.won += chain.pendingAward; this.chainBanked += chain.pendingAward;
+    this.jackpotEarnings += chain.pendingAward;
+    if (chain.pendingDreamHit) this.jackpotDreamHit = true;
+    this.receipt = this._receipt(MedalEvent.Win, 0, chain.pendingAward, 0, before, before, walletBefore, winSeconds(chain.pendingAward));
+    this.receipt.chainBanked = true; this.receipt.chainStage = chain.stage; this.receipt.chainBase = chain.baseAward;
+    return chain.pendingAward;
+  }
   launch() {
     if (!this.canFire) return null;
     this.wallet--; this.spent++; this.cycleSpent++;
-    const shot = { id: ++this._sequence, challenge: this.armed || this.lampCount === 6, award: this.award, lamps: this.lamps };
+    const chainShot = this.rules.R3Enabled && !!this.jackpotChain?.inChallenge;
+    const shot = { id: ++this._sequence, challenge: this.armed || this.lampCount === 6, chain: chainShot, award: this.award, lamps: this.lamps };
     this.shot = shot;
-    if (shot.challenge) { this.attempts++; this.firstProtection = false; this.challengeIntent = null; }
+    if (shot.challenge) {
+      this.attempts++;
+      if (chainShot) this.chainAttempts++;
+      else if (this.rules.R3Enabled && shot.lamps.length === 6) this.jackpotChances++;
+      this.firstProtection = false; this.challengeIntent = null;
+    }
     if (this.overlap) { this.shots.push(shot); this._sinceFire = 0; if (shot.challenge) this.phase = MedalPhase.Flight; }
     else this.phase = MedalPhase.Flight;
     return shot;
@@ -256,29 +342,58 @@ export class MedalGame {
       return true;
     }
     let kind, award = 0, removed = 0, cost = 0, resetChoice = -1, jackpot = -1, duration;
+    let chainLost = 0, chainStage = -1, chainBase = 0;
     if (shot.challenge) {
       cost = this.cycleSpent; this.cycleSpent = 0;
       const win = !shot.lamps.includes(lane);
-      award = win ? shot.award : 0;
-      if (win && shot.lamps.length === 6 && this.rules.hasJackpot) {
-        jackpot = this._pick(this.rules.JackpotWeights); award = this.rules.JackpotAwards[jackpot];
+      if (shot.chain && this.rules.R3Enabled) {
+        const chain = this.jackpotChain;
+        chainBase = chain?.baseAward ?? 0;
+        if (win && chain) {
+          jackpot = this._pick(this.rules.JackpotWeights); award = this.rules.JackpotAwards[jackpot];
+          chain.pendingAward += award; chain.pendingDreamHit ||= award === 500; chain.stage++; chain.inChallenge = false; chain.choicePending = true;
+          chainStage = chain.stage; this.chainSuccesses++;
+        } else {
+          chainLost = chain?.pendingAward ?? 0; this.chainLost += chainLost; this.chainFailures++;
+          this.jackpotChain = null;
+        }
+      } else {
+        award = win ? shot.award : 0;
+        if (win && shot.lamps.length === 6 && this.rules.hasJackpot) {
+          jackpot = this._pick(this.rules.JackpotWeights); award = this.rules.JackpotAwards[jackpot];
+        }
+        this.wallet += award; this.won += award;
+        if (this.rules.R3Enabled && win && jackpot >= 0) {
+          this.jackpotEarnings += award;
+          if (award === 500) this.jackpotDreamHit = true;
+          this.jackpotSuccesses++;
+          this.jackpotChain = { baseAward: award, pendingAward: 0, pendingDreamHit: false, stage: 0, choicePending: true, inChallenge: false };
+        }
       }
-      this.wallet += award; this.won += award;
       if (win) { this.successes++; this.bestAward = Math.max(this.bestAward, award); }
       kind = win ? MedalEvent.Win : MedalEvent.Miss;
       duration = win ? winSeconds(award) + (jackpot >= 0 ? JACKPOT_SECONDS : 0) : 1.35;
       if (jackpot >= 0 && this.rules.JackpotEffectSeconds != null) duration = this.rules.JackpotEffectSeconds[jackpot];
+      const firstJpSeconds = !shot.chain && jackpot >= 0 ? this.rules.FirstJackpotEffectSeconds?.[[1,2,3,4,5,6,7].find(d=>!shot.lamps.includes(d))]?.[jackpot] : null;
+      if (firstJpSeconds != null) duration = firstJpSeconds;
       this._lamps.clear(); this.armed = false; this.challengeIntent = null;
+      if (this.rules.R3Enabled) { this.firstProtection = true; this.highLampDuplicateProtectionLeft = 0; }
     } else if (!this._lamps.has(lane)) {
       this._lamps.add(lane);
       kind = MedalEvent.Fresh; duration = 0.45;
       this.maxLamps = Math.max(this.maxLamps, this.lampCount);
-      if (this.lampCount >= 4) this.firstProtection = false;
+      if (this.lampCount >= 4) {
+        this.firstProtection = false;
+        this.highLampDuplicateProtectionLeft = this.rules.HighLampDuplicateProtectionCount;
+      }
       if (this.lampCount === 6) {
         this.armed = true;
         if (this.rules.R2Enabled && !this.challengeIntent) this.challengeIntent = { stage: 'draining', forced: true, left: 0 };
       }
-    } else if (this.firstProtection) { kind = MedalEvent.Protected; duration = 0.45; }
+    } else if (this.firstProtection || (this.rules.R3Enabled && this.lampCount >= 4 && this.highLampDuplicateProtectionLeft > 0)) {
+      kind = MedalEvent.Protected; duration = 0.45;
+      if (this.rules.R3Enabled && !this.firstProtection && this.lampCount >= 4) this.highLampDuplicateProtectionLeft--;
+    }
     else {
       kind = MedalEvent.Reset;
       const index = this._pick(this.rules.resetWeightsFor(before.length));
@@ -288,6 +403,8 @@ export class MedalGame {
       while (before.length - this.lampCount < removed) {
         const rest = this.lamps; this._lamps.delete(rest[Math.floor(this._rng() * rest.length)]);
       }
+      // R3: after a reset, protect duplicate hits until one fresh lane restores the prior progress.
+      if (this.rules.R3Enabled) { this.firstProtection = true; this.highLampDuplicateProtectionLeft = 0; }
       duration = this.rules.ResetEffectSecondsByLamps?.[before.length] ??
         (before.length === 1 ? this.rules.ResetEffectSecondsSingle : this.rules.ResetEffectSeconds);
     }
@@ -295,6 +412,10 @@ export class MedalGame {
       ? this.rules.ResetVisualSecondsByLamps?.[before.length] ?? duration : null;
     if (resetVisualDuration !== null) duration = 0;
     this.receipt = this._receipt(kind, lane, award, removed, before, this.lamps, walletBefore, duration, cost, resetChoice, jackpot);
+    if (shot.chain) {
+      this.receipt.chain = true; this.receipt.chainStage = chainStage; this.receipt.chainBase = chainBase;
+      this.receipt.chainPending = this.jackpotChain?.pendingAward ?? 0; this.receipt.chainLost = chainLost;
+    }
     if (resetVisualDuration !== null) this._startResetDisplay(this.receipt, resetVisualDuration);
     this.shots = this.shots.filter((x) => x !== shot); this.shot = this.shots[this.shots.length - 1] ?? null;
     this._beginEffect();
@@ -308,7 +429,7 @@ export class MedalGame {
     intent.stage = intent.left > 0 ? 'preparing' : 'ready';
   }
   _pick(weights) {
-    let roll = Math.floor(this._rng() * 100), index = 0;
+    let roll = this._rng() * sum(weights), index = 0;
     while (roll >= weights[index]) roll -= weights[index++];
     return index;
   }
@@ -330,7 +451,7 @@ export class MedalGame {
       if (this.offerLeft <= 0) this.finish();
       return;
     }
-    if (this.phase !== MedalPhase.Ready && this.phase !== MedalPhase.Flight && this.phase !== MedalPhase.Effect) return;
+    if (this.phase !== MedalPhase.Ready && this.phase !== MedalPhase.Flight && this.phase !== MedalPhase.Effect && this.phase !== MedalPhase.ChainChoice) return;
     this._sinceFire += seconds;
     if (this.rules.R2Enabled && this.challengeIntent?.stage === 'preparing') {
       this.challengeIntent.left = Math.max(0, this.challengeIntent.left - seconds);
@@ -339,12 +460,15 @@ export class MedalGame {
     if (this.phase === MedalPhase.Effect && this.rules.ClockStartsAfterLoan && this.receipt?.kind === MedalEvent.Loan) {
       const used = Math.min(seconds, this.effectLeft);   // 払い出し中は残り時間を減らさない
       this.effectLeft -= used; seconds -= used;
-      if (this.effectLeft <= 0) this.phase = MedalPhase.Ready;
+      if (this.effectLeft <= 0) {
+        this.phase = this._resumeAfterLoan ?? MedalPhase.Ready;
+        this._resumeAfterLoan = null;
+      }
       if (seconds <= 0) return;
     }
     const stopped = this.phase === MedalPhase.Effect &&
       ((this.rules.ClockStopOnReset && !this.rules.R2Enabled && !this.rules.ResetWhileShooting && this.receipt?.kind === MedalEvent.Reset) ||
-       (this.rules.ClockStopOnJackpot && this.receipt?.jackpot >= 0));
+       (this.rules.ClockStopOnJackpot && !this.rules.R3Enabled && this.receipt?.jackpot >= 0));
     let paused = stopped ? seconds : 0;
     const budgeted = stopped && (!(this.receipt?.jackpot >= 0) || this.rules.ClockStopBudgetIncludesJackpot);
     if (budgeted && this.rules.ClockStopBudget !== null) {
@@ -358,7 +482,7 @@ export class MedalGame {
     if (this.phase === MedalPhase.Effect) {
       this.effectLeft = Math.max(0, this.effectLeft - seconds);
       if (this.effectLeft > 0) return;
-      this.phase = MedalPhase.Ready;
+      this.phase = this.rules.R3Enabled && this.jackpotChain?.choicePending ? MedalPhase.ChainChoice : MedalPhase.Ready;
     }
     if (this.overlap) {
       // 待たされていた着地を1つずつ反映する(反映するとまた演出に入る)。盤上に玉がある間は終了判定をしない。
@@ -376,13 +500,14 @@ export class MedalGame {
       if (this.endGraceLeft > 1e-9) return;
     }
     this.endReason = this.wallet === 0 ? '持ち玉を使いきりました' : '時間になりました';
-    if (this.addedCredit) this.finish();
+    if (this.rules.R3Enabled ? this.extraCreditsUsed >= this.rules.MaxExtraCredits : this.addedCredit) this.finish();
     else { this.phase = MedalPhase.Continue; this.offerLeft = this.rules.ContinueSeconds; }
   }
   finish() {
     if (this.shots.length) return false;
-    if (![MedalPhase.Ready, MedalPhase.Continue, MedalPhase.Fault].includes(this.phase) && !this.canFire) return false;
+    if (![MedalPhase.Ready, MedalPhase.ChainChoice, MedalPhase.Continue, MedalPhase.Fault].includes(this.phase) && !this.canFire) return false;
     if (!this.endReason) this.endReason = 'ここで計数';
+    this._bankChainAward();
     this.phase = MedalPhase.Result; this.armed = false;
     this.challengeIntent = null;
     return true;

@@ -2,6 +2,7 @@
 // 座標は m。外向きの座標は窓座標(X右・Y上・Z手前、窓面 z=0、玉の中心 z≈-0.055)。tubes の pts は (x,y,d) で d=-Z。
 // Rapier 0.21 の凸包は mm 級の形を m 単位で作ると玉との接触が壊れる(素通り・横滑り)ため、物理空間は S=10 倍で扱う。
 //   world の重力・lengthUnit も S 倍にすること(Board3.makeWorld を使う)。
+const JP_LINES = [-.08,-.12,-.16];
 export const S = 10;
 export const R_BALL = 0.006, RHO = 7800, G = 9.81;
 
@@ -13,6 +14,7 @@ export class Board3 {
     this.launchFrame = launchFrame;
     this.R = RAPIER; this.world = world; this.rng = rng; this.hz = hz; this.model = model; this.layout = layout; this.dims = dims;
     this.allowStuckNudge = true;
+    this.allowJamKick = true; this.jamKicks = 0; this.jamKickUp = 0.45; this.jamKickIn = 0; this.jamStill = 0.2;   // 穴の中の 2 球の詰まり（下の _jamKick）
     this.collisionObservers = new Set();
     this.balls = new Map(); this.events = []; this.tick = 0; this.nudges = 0; this.pegOf = new Map();
     this.queue = new RAPIER.EventQueue(true); this.sensorY = model.phys.sensors[0].y;
@@ -66,7 +68,15 @@ export class Board3 {
     });
     for (const [id, b] of this.balls) {
       const p = this.pos(b.body, b._p);
-      if (b.approach === undefined && p.y <= this.mouthY) b.approach = { cup: this._cupOf(p.x), x: p.x };   // 入口線を通過した時の位置(惜しい判定: R-22)
+      for (let level=0;level<3;level++) if (p.y <= JP_LINES[level] && !(b.jpLines & (1 << level))) {
+        const y=JP_LINES[level];
+        b.jpLines = (b.jpLines ?? 0) | (1 << level);
+        this.events.push({ type: 'jp_line', shotId: id, level, y, x: p.x, vx: b.body.linvel(b._v).x / S });
+      }
+      if (b.approach === undefined && p.y <= this.mouthY) {
+        b.approach = { cup: this._cupOf(p.x), x: p.x };
+        this.events.push({type:'jp_mouth',shotId:id,cup:b.approach.cup,x:p.x});
+      }   // 入口線を通過した時の位置(惜しい判定: R-22)
       if (p.y < this.sensorY) { const v = b.body.linvel(b._v); const cup = this._cupOf(p.x), ap = b.approach ?? { cup, x: p.x }; this.events.push({ type: 'cup', shotId: id, cup, x: p.x, vy: v.y / S, approachCup: ap.cup, approachX: ap.x, crossed: ap.cup !== cup }); this._remove(id); continue; }
       if (p.y < -0.3 || (this.tick - b.born) / this.hz > 60) { this.events.push({ type: 'lost', shotId: id, at: [p.x, p.y, p.z] }); this._remove(id); continue; }
       // 山の頂点の釣り合い: 口の高さより上で 1.5 秒ほぼ静止していたら微小な横インパルス（実機では不安定平衡）
@@ -75,6 +85,26 @@ export class Board3 {
         if (sp < 0.01) b.still += 8 / this.hz; else b.still = 0;
         if (this.allowStuckNudge && b.still > 1.5) { b.still = 0; this.nudges++; const m = 0.007057, dv = 0.02 * (this.rng() < 0.5 ? -1 : 1); b.body.applyImpulse({ x: m * dv * S, y: 0, z: 0 }, true); this.events.push({ type: 'stuck_nudge', shotId: id }); }
       }
+    }
+    if (this.allowJamKick && this.tick % 8 === 0) this._jamKick();
+  }
+  /** 穴の中の 2 球の詰まり（R3-G 10/21）：口の幅 28mm（球 2 個ぶん）から 45° の漏斗で喉 14mm へ絞る穴に、2 球が並んで入ると、
+   *  側の壁と漏斗の角で互いを壁へ押し付けて止まる（2 球のアーチ。摩擦が無くても釣り合う。stuck_nudge の 0.02m/s では外れない）。
+   *  口の線より下で 0.2 秒ほぼ止まっている球が同じ穴に 2 つあれば、上の方を真上へ 0.45m/s 突く（穴の部品の小さなソレノイド。力積 3.2mN·s）。
+   *  2 球を口の上から並べて落とす試し（jam2/jam_probe.mjs、太い穴 5 つ×288 通り）で詰まり 0、通るまで最長 0.68 秒（突きなしは約 8% が詰まる）。
+   *  詰まっていない時は何もしない（乱数も使わない）。 */
+  _jamKick() {
+    const dt = 8 / this.hz, still = [];
+    for (const [id, b] of this.balls) {
+      const p = this.pos(b.body, b._p); if (p.y >= this.mouthY - 0.001) { b.jam = 0; continue; }
+      const v = b.body.linvel(b._v); b.jam = Math.hypot(v.x, v.y, v.z) / S < 0.02 ? (b.jam ?? 0) + dt : 0;
+      if (b.jam > this.jamStill) still.push({ id, b, x: p.x, y: p.y, cup: this._cupOf(p.x) });
+    }
+    for (const s of still) {
+      const o = still.find((q) => q !== s && q.cup === s.cup); if (!o || s.y < o.y || (s.y === o.y && s.id < o.id)) continue;
+      const c = this.cups.find((q) => q.n === s.cup), m = 0.007057, sx = s.x > c.x ? -1 : 1;
+      s.b.body.applyImpulse({ x: m * this.jamKickIn * sx * S, y: m * this.jamKickUp * S, z: 0 }, true); s.b.jam = 0; o.b.jam = 0; this.jamKicks++;
+      this.events.push({ type: 'jam_kick', shotId: s.id, cup: s.cup, other: o.id });
     }
   }
   _remove(id) { const b = this.balls.get(id); this.ballOf?.delete(b.col.handle); this.world.removeRigidBody(b.body); this.balls.delete(id); }
