@@ -25,6 +25,14 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
       effectsBridge.advance(DT);
       ctrl.update(DT); presenter.update(DT); pa.setAim(ctrl.aim, ctrl.aimDir);
       effectsBridge.sync();
+      // The JP film may hold the visible payout while its wallet is spendable.
+      // Move one credited ball into the same loan reserve when the lift is dry;
+      // takePending/payout below deduct it once, including while jpHold is set.
+      if (ctrl.rules.ContinuousFire && !pa.shuttleHas && pa.stock === 0 && pa.payQueue === 0 && pa.stored?.overflow === 0 &&
+          pa.refillAt !== null && pa.t >= pa.refillAt) {
+        const available=presenter.trayStatus().releasable;
+        if(available>0){const k=pa.reserveForLoan(1);if(k>0)presenter.awardToTray(k,{origin:'launcher-reserve'});}
+      }
       if (!jpHold && presenter.holdAwards && pa.skipPayout > 0) { const r = presenter.trayStatus().releasable; if (r > 0) presenter.awardToTray(Math.min(pa.skipPayout, r)); }   // 昇降管の予備球は最初から物理側にある
       const n = presenter.takePending(); if (n) pa.payout(n, presenter.pour.earned, presenter.pour.rate);
       if (ctrl.game.phase !== 'Result') countStarted = false;
@@ -47,6 +55,9 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
           if (e.counted !== ctrl.game.wallet) log?.write('count_mismatch', { physical: e.counted, wallet: ctrl.game.wallet, tick: pa.tick }, ctrl.game);
         }
         effectsBridge.physics(e);
+        // Publish each receipt before another same-tick landing can replace it.
+        // physics() first supplies the actual approach/crossing for near-miss cues.
+        if (e.type === 'cup' || e.type === 'lost') {presenter.update(0);effectsBridge.sync();}
         if (['cup', 'lost', 'stuck_nudge', 'overflow', 'reserve_return', 'tray_lost', 'count_done', 'launch', 'returned'].includes(e.type)) log?.write('physics', e, ctrl.game);
       }
       if (!jpHold) shownPrize = ctrl.game.prize;

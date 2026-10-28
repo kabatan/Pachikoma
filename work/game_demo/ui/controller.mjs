@@ -18,6 +18,7 @@ export class MedalController {
     this.preBuffer = null; this.preWindow = 0.3; this.preWindowDrain = 5;
     this.fireBuffer = null; this.fireWindow = 0.3;   // 同時発射: 間隔待ち(残り0.3秒以内)に押された発射は、狙いを押した瞬間に固定して解禁と同時に撃つ
     this.droppedInputs = [];   // R-04: 勝負ボタンの先押しを0.3秒だけ1回保持。捨てた押しは記録
+    this.inputLog = [];
     this.howtoSeconds = 0; this.howtoMinDwell = 0.5; this.howtoPanels = 5; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
   }
   onAction(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
@@ -29,7 +30,7 @@ export class MedalController {
     const g = this.game;
     if (this.howto) { this.howto.t += dt; if (this.howto.t >= this.howtoSeconds) this._startNow(); }
     if (!this.freezeRules) g.advance(dt);
-    if (g.rules.R2Enabled && g.challengeIntent && this.fireBuffer) {
+    if (!g.rules.ContinuousFire && g.rules.R2Enabled && g.challengeIntent && this.fireBuffer) {
       this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'challenge-clears-buffer' });
       this.fireBuffer = null;
     }
@@ -41,7 +42,7 @@ export class MedalController {
     if (this.fireBuffer) {
       this.fireBuffer.left -= dt;
       if (g.canFire && !this.confirmFinish && !this.preBuffer) { const b = this.fireBuffer; this.fireBuffer = null; if (this._fire(b.aim, b.dir)) for (const fn of this.listeners) fn('fire', this); }
-      else if (this.fireBuffer.left <= 0 || !g.canAim) { this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'expired' }); this.fireBuffer = null; }
+      else if ((!g.rules.ContinuousFire && this.fireBuffer.left <= 0) || !g.canAim) { this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'expired' }); this.fireBuffer = null; }
     }
     if (g.phase === MedalPhase.Continue || g.phase === MedalPhase.ChainChoice || g.phase === MedalPhase.Result) this.confirmFinish = false;
     this.resultAge = g.phase === MedalPhase.Result ? (this.resultAge ?? 0) + dt : 0;   // 結果が出てからの秒(客の連打で飛ばさない)
@@ -51,8 +52,22 @@ export class MedalController {
   }
 
   /** @returns {boolean} 受理されたか。1フレーム1操作(連打・キーリピートの二重処理を避ける)。 */
-  dispatch(action) {   // action は howto 開始時に 'howto' へ置換される
-    if (this._lastActionFrame === this.frame) return false;
+  dispatch(action) {
+    const g=this.game, before=this.fireBuffer, shotId=g.shot?.id, sameFrame=this._lastActionFrame===this.frame;
+    const phase=g.phase, intent=g.challengeIntent?.stage;
+    const ok=this._dispatch(action);
+    const queued=action==='fire' && this.fireBuffer && this.fireBuffer!==before;
+    const reason=ok?'accepted':queued?'buffered':action==='fire'&&before&&this.fireBuffer===before?'coalesced':sameFrame?'same-frame':this.confirmFinish?'finish-confirmation':
+      g.shots.length>=g.rules.MaxInFlight?'in-flight-limit':g._sinceFire+1e-9<g.rules.FireInterval?'fire-interval':intent??phase;
+    this.inputLog.push({action,frame:this.frame,phase,reason,queued:!!queued,fired:action==='fire'&&g.shot?.id!==shotId});
+    if(this.inputLog.length>512)this.inputLog.shift();
+    return ok || !!(g.rules.ContinuousFire && queued);
+  }
+  _dispatch(action) {   // action は howto 開始時に 'howto' へ置換される
+    if (this._lastActionFrame === this.frame) {
+      if(action==='fire'&&this.game.rules.ContinuousFire&&this.game.canAim&&!this.confirmFinish&&!this.fireBuffer)this.fireBuffer={aim:this.aim,dir:this.aimDir,left:Infinity};
+      return false;
+    }
     if (this.confirmFinish && !['cancelFinish', 'confirmFinish', 'quit'].includes(action)) return false;
     const g = this.game; let ok = false;
     switch (action) {
@@ -110,7 +125,11 @@ export class MedalController {
   }
   _fire(aim = this.aim, dir = this.aimDir) {
     const g = this.game;
-    if (g.rules.R2Enabled && g.challengeIntent && g.challengeIntent.stage !== 'ready') {
+    if (g.rules.ContinuousFire && !g.canFire) {
+      if (g.canAim) {if(!this.fireBuffer)this.fireBuffer={aim,dir,left:Infinity};return false;}
+      this.droppedInputs.push({action:'fire',frame:this.frame,reason:g.phase});return false;
+    }
+    if (!g.rules.ContinuousFire && g.rules.R2Enabled && g.challengeIntent && g.challengeIntent.stage !== 'ready') {
       this.fireBuffer = null;
       this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: g.challengeIntent.stage });
       return false;

@@ -13,11 +13,12 @@ export function createLauncherBody({ stage, canvas, camera, xRange }, opts = {})
   const W = canvas.width, H = canvas.height;   // 1440×2560（canvas 内部座標）
   const base = opts.assetBase ?? new URL('../../../upa_frame3d/m3/integration/launcher_sprites/', import.meta.url).href;
   const el = document.createElement('div');
+  el.dataset.launcher = 'm3';
   el.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden';
   stage.appendChild(el);
   const pct = (a, b) => `${a / b * 100}%`;
   let man = null, pos = [];                     // pos[i] = { p, box, img: {L:{0,4},...}, lay4: {L,...} }
-  fetch(base + 'manifest.json').then(r => r.json()).then(m => {
+  fetch(base + 'manifest.json').then(r => { if (!r.ok) throw new Error(`manifest HTTP ${r.status}: ${base}`); return r.json(); }).then(m => {
     man = m;
     pos = m.positions.map(p => {
       const box = document.createElement('div');

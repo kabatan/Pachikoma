@@ -21,6 +21,7 @@ export class MedalRules {
     this.ResetVisualSecondsByLamps = o.ResetVisualSecondsByLamps ?? null;
     this.R2Enabled = o.R2Enabled ?? false;
     this.R3Enabled = o.R3Enabled ?? false;
+    this.ContinuousFire = o.ContinuousFire ?? false;
     this.MaxExtraCredits = o.MaxExtraCredits ?? 4;
     this.JackpotChainLamps = o.JackpotChainLamps ?? [5, 6];
     this.ChallengePrepareSeconds = o.ChallengePrepareSeconds ?? 0;
@@ -68,7 +69,7 @@ export class MedalRules {
         Array.from(r.ResetVisualSecondsByLamps).some(value => !Number.isFinite(value) || value < 0))) ||
       !Number.isInteger(r.MaxInFlight) || r.MaxInFlight < 1 || r.MaxInFlight > 6 || !Number.isFinite(r.FireInterval) || r.FireInterval < 0 ||
       typeof r.R2Enabled !== 'boolean' || typeof r.PrepareForcedChallenge !== 'boolean' ||
-      typeof r.R3Enabled !== 'boolean' || !Number.isInteger(r.MaxExtraCredits) || r.MaxExtraCredits < 1 || r.MaxExtraCredits > 10 ||
+      typeof r.R3Enabled !== 'boolean' || typeof r.ContinuousFire !== 'boolean' || (r.ContinuousFire && (!r.R3Enabled || r.MaxInFlight <= 1)) || !Number.isInteger(r.MaxExtraCredits) || r.MaxExtraCredits < 1 || r.MaxExtraCredits > 10 ||
       !Array.isArray(r.JackpotChainLamps) || r.JackpotChainLamps.length < 1 || r.JackpotChainLamps.some(x => !Number.isInteger(x) || x < 1 || x > 6) ||
       !isAscending(r.JackpotChainLamps) || r.JackpotChainLamps.at(-1) !== 6 ||
       !Number.isInteger(r.HighLampDuplicateProtectionCount) || r.HighLampDuplicateProtectionCount < 0 || r.HighLampDuplicateProtectionCount > 5 ||
@@ -137,6 +138,7 @@ export class MedalGame {
     this._displayClock = 0; this._resetDisplays = [];
     this._lamps = new Set(); this._sequence = 0;
     this.shots = []; this._pendingLandings = []; this._now = 0; this._sinceFire = Infinity; this._receiptAt = -1;   // 同時発射(MaxInFlight>1)用
+    this._settlementLeft = 0; this._loanLeft = 0;
   }
   get lamps() { return [...this._lamps].sort((a, b) => a - b); }
   get lampCount() { return this._lamps.size; }
@@ -181,6 +183,7 @@ export class MedalGame {
     return this._acceptingPhase() && this.wallet > 0 && this.secondsLeft > 0;
   }
   _acceptingPhase() {
+    if (this.rules.ContinuousFire) return [MedalPhase.Ready, MedalPhase.Flight, MedalPhase.Effect].includes(this.phase);
     if (this.phase === MedalPhase.Ready) return true;
     if ((this.rules.R2Enabled || this.rules.ResetWhileShooting) && this.phase === MedalPhase.Effect && this.receipt?.kind === MedalEvent.Reset) return true;
     // 演出の入力ロックが短い(点灯・保護・低灯の重複)間は次を撃てる。長いロック(勝負・払い出し・4/5灯の重複・JP)は撃てない。
@@ -188,6 +191,8 @@ export class MedalGame {
       [MedalEvent.Fresh, MedalEvent.Protected, MedalEvent.Reset].includes(this.receipt.kind);
   }
   get canFire() {
+    if (this.rules.ContinuousFire) return this._acceptingPhase() && !this.endPending && this.wallet > 0 && this.secondsLeft > 0 &&
+      this.shots.length < this.rules.MaxInFlight && this._sinceFire + 1e-9 >= this.rules.FireInterval;
     if (this.rules.R2Enabled && (this.endPending || (this.challengeIntent && this.challengeIntent.stage !== 'ready'))) return false;
     if (this.overlap) {
       if (!this._acceptingPhase() || this.wallet <= 0 || this.secondsLeft <= 0) return false;
@@ -304,8 +309,12 @@ export class MedalGame {
   launch() {
     if (!this.canFire) return null;
     this.wallet--; this.spent++; this.cycleSpent++;
-    const chainShot = this.rules.R3Enabled && !!this.jackpotChain?.inChallenge;
-    const shot = { id: ++this._sequence, challenge: this.armed || this.lampCount === 6, chain: chainShot, award: this.award, lamps: this.lamps };
+    // A following ball is ordinary while a challenge is awaiting judgement.
+    // The challenge keeps the lamp snapshot taken at its own launch.
+    const challenge = (this.armed || this.lampCount === 6) && (!this.rules.ContinuousFire ||
+      (!this.shots.some(s=>s.challenge) && !this.jackpotChain?.choicePending));
+    const chainShot = challenge && this.rules.R3Enabled && !!this.jackpotChain?.inChallenge;
+    const shot = { id: ++this._sequence, challenge, chain: chainShot, award: this.award, lamps: this.lamps };
     this.shot = shot;
     if (shot.challenge) {
       this.attempts++;
@@ -378,7 +387,7 @@ export class MedalGame {
       if (firstJpSeconds != null) duration = firstJpSeconds;
       this._lamps.clear(); this.armed = false; this.challengeIntent = null;
       if (this.rules.R3Enabled) { this.firstProtection = true; this.highLampDuplicateProtectionLeft = 0; }
-    } else if (!this._lamps.has(lane)) {
+    } else if (!this._lamps.has(lane) && (!this.rules.ContinuousFire || this.lampCount < 6)) {
       this._lamps.add(lane);
       kind = MedalEvent.Fresh; duration = 0.45;
       this.maxLamps = Math.max(this.maxLamps, this.lampCount);
@@ -390,9 +399,9 @@ export class MedalGame {
         this.armed = true;
         if (this.rules.R2Enabled && !this.challengeIntent) this.challengeIntent = { stage: 'draining', forced: true, left: 0 };
       }
-    } else if (this.firstProtection || (this.rules.R3Enabled && this.lampCount >= 4 && this.highLampDuplicateProtectionLeft > 0)) {
+    } else if (this.firstProtection || (this.rules.ContinuousFire && this.lampCount === 6) || (this.rules.R3Enabled && this.lampCount >= 4 && this.highLampDuplicateProtectionLeft > 0)) {
       kind = MedalEvent.Protected; duration = 0.45;
-      if (this.rules.R3Enabled && !this.firstProtection && this.lampCount >= 4) this.highLampDuplicateProtectionLeft--;
+      if (this.rules.R3Enabled && !this.firstProtection && this.lampCount >= 4 && this.highLampDuplicateProtectionLeft > 0) this.highLampDuplicateProtectionLeft--;
     }
     else {
       kind = MedalEvent.Reset;
@@ -433,7 +442,13 @@ export class MedalGame {
     while (roll >= weights[index]) roll -= weights[index++];
     return index;
   }
-  _beginEffect() { this.phase = MedalPhase.Effect; this.effectLeft = this.receipt.duration; }
+  _beginEffect() {
+    this.phase = MedalPhase.Effect; this.effectLeft = this.receipt.duration;
+    if (this.rules.ContinuousFire) {
+      if ([MedalEvent.Win,MedalEvent.Miss,MedalEvent.Loan].includes(this.receipt.kind)) this._settlementLeft = Math.max(this._settlementLeft,this.receipt.duration);
+      if (this.receipt.kind === MedalEvent.Loan) this._loanLeft = this.receipt.duration;
+    }
+  }
   _startResetDisplay(receipt, duration) {
     const replaced = this._resetDisplays.length === 3 ? this._resetDisplays.shift() : null;
     const used = new Set(this._resetDisplays.map(display => display.slot));
@@ -452,6 +467,7 @@ export class MedalGame {
       return;
     }
     if (this.phase !== MedalPhase.Ready && this.phase !== MedalPhase.Flight && this.phase !== MedalPhase.Effect && this.phase !== MedalPhase.ChainChoice) return;
+    if (this.rules.ContinuousFire) {this._advanceContinuous(seconds);return;}
     this._sinceFire += seconds;
     if (this.rules.R2Enabled && this.challengeIntent?.stage === 'preparing') {
       this.challengeIntent.left = Math.max(0, this.challengeIntent.left - seconds);
@@ -503,7 +519,27 @@ export class MedalGame {
     if (this.rules.R3Enabled ? this.extraCreditsUsed >= this.rules.MaxExtraCredits : this.addedCredit) this.finish();
     else { this.phase = MedalPhase.Continue; this.offerLeft = this.rules.ContinueSeconds; }
   }
+  _advanceContinuous(seconds) {
+    this._sinceFire += seconds;
+    const loan = this.rules.ClockStartsAfterLoan ? Math.min(seconds,this._loanLeft) : 0;
+    this._loanLeft = Math.max(0,this._loanLeft-seconds);
+    this.secondsLeft = Math.max(0,this.secondsLeft-seconds+loan);
+    this._settlementLeft = Math.max(0,this._settlementLeft-seconds);
+    this.effectLeft = Math.max(this._settlementLeft,Math.max(0,this.effectLeft-seconds));
+    if (this.challengeIntent) {this.challengeIntent.stage='ready';this.challengeIntent.left=0;}
+    if (this.phase !== MedalPhase.ChainChoice) this.phase = this.effectLeft > 1e-9 ? MedalPhase.Effect :
+      this.jackpotChain?.choicePending ? MedalPhase.ChainChoice : MedalPhase.Ready;
+    if (this.shots.length || this._settlementLeft > 1e-9) return;
+    if (this.wallet > 0 && this.secondsLeft > 0) {this.endPending=false;this.endGraceLeft=0;return;}
+    if (!this.endPending) {this.endPending=true;this.endGraceLeft=this.rules.EndGraceSeconds;}
+    else this.endGraceLeft=Math.max(0,this.endGraceLeft-seconds);
+    if (this.endGraceLeft>1e-9)return;
+    this.endReason=this.wallet===0?'持ち玉を使いきりました':'時間になりました';
+    if(this.extraCreditsUsed>=this.rules.MaxExtraCredits)this.finish();
+    else {this.phase=MedalPhase.Continue;this.offerLeft=this.rules.ContinueSeconds;}
+  }
   finish() {
+    if(this.rules.ContinuousFire&&this._settlementLeft>1e-9)return false;
     if (this.shots.length) return false;
     if (![MedalPhase.Ready, MedalPhase.ChainChoice, MedalPhase.Continue, MedalPhase.Fault].includes(this.phase) && !this.canFire) return false;
     if (!this.endReason) this.endReason = 'ここで計数';

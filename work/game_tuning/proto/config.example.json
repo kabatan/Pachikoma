@@ -1,7 +1,0 @@
-{
-  "name": "M1 n75_10・射出揺らぎサンプル",
-  "stageDir": "work/game_tuning/lab/variants/mix_n75_10",
-  "jitter": { "x_mm": 3, "vx_pct": 15, "vy_pct": 0 },
-  "rules": "docs/handoff/reference/rules/medal_game.json",
-  "seed": 1201201
-}

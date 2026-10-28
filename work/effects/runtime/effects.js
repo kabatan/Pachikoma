@@ -130,7 +130,9 @@
       }
       // 同時に複数の玉が落ちる時(最大3球・0.6秒間隔): 着地の演出は新しい着地を優先して上書きする。前の着地の演出(別の種類)は途中で畳み、1.0秒の山場を重ねない(調整担当メモ 10/17)
       // 同時に着地が続いた時: 光は新しい着地を優先して前の着地の光を畳む。液晶の場面は管制(_gateCue)が最低表示時間を守って順に出すので、ここでは液晶を止めない(以前はここで前の液晶を即座に消し、途中で切れた: R2-E 調査)
-      if (['lamp123', 'dup_protect', 'lamp4', 'lamp5'].includes(id)) for (const o of ['lamp123', 'dup_protect', 'lamp4', 'lamp5']) if (o !== id) this.dir.stop(o);
+      const landingBurst = ['lamp123', 'dup_protect', 'lamp4', 'lamp5', 'lamp6', 'roulette', 'ascend'].includes(id);
+      if (this.overlapLandingLights && landingBurst) params = Object.assign({}, params, {replace:false});
+      if (!this.overlapLandingLights && ['lamp123', 'dup_protect', 'lamp4', 'lamp5'].includes(id)) for (const o of ['lamp123', 'dup_protect', 'lamp4', 'lamp5']) if (o !== id) this.dir.stop(o);
       if (this.lcdOk && ['lamp123', 'dup_protect', 'lamp4', 'lamp5', 'lamp6'].includes(id)) { root.LCD.stop('lamp123'); root.LCD.stop('dup_protect'); }   // 初回の説明つき『1灯』などは、次の着地で畳む(新しい灯の数と食い違う絵を残さない)。灯4以上の液晶は管制が順に出す
       if (this.lcdOk) {                                  // 残り時間(右上)は start から timeup/結果まで常設
         if (id === 'start' || id === 'add100') root.LCD.setState({ hudOn: true });
@@ -144,7 +146,7 @@
       if (id === 'ticket' && this.lcdOk) this.stop('howto');   // ルール説明を飛ばした時も、チケットへすぐ移る
       if (this.lcdOk && this.tutorial && root.Tutorial) root.Tutorial.notify(this, id, params);   // 初見ヒント(判定と済みの記録は runtime/tutorial.js)
       // 勝負の暗い液晶・赤い花びらは、宣言(1.6秒)のあとも発射して入賞するまで保つ。結果が出たら外す。
-      if (['success_small', 'success_big', 'jp', 'fail', 'lamp123', 'lamp4', 'lamp5', 'lamp6', 'dup_protect', 'roulette', 'challenge_cancel', 'timeup', 'finish_count', 'result', 'attract', 'ticket'].includes(id)) this.stop('challenge_flight');
+      if ((!this.overlapLandingLights || !landingBurst) && ['success_small', 'success_big', 'jp', 'fail', 'lamp123', 'lamp4', 'lamp5', 'lamp6', 'dup_protect', 'roulette', 'challenge_cancel', 'timeup', 'finish_count', 'result', 'attract', 'ticket'].includes(id)) this.stop('challenge_flight');
       if (id === 'add100' || id === 'finish_count') this.stop('timeup');   // 継続の選択が済んだら、TIME UP の金の電飾(最大10秒)を続けない。追加後は ticket と同じ紺の盤に戻す
       // 6灯は次の1球が自動でJPチャンス(ゲーム側は armed のまま宣言の合図を出さない)。灯の演出(JPチャンスの知らせ)のあと、自分で宣言を出して暗い液晶・赤い花びらの保持へつなぐ
       if (id === 'lamp6') this._later(3.3, () => { if (!this._ended() && d.state.declared && !d.isActive('challenge_declare') && !d.isActive('challenge_flight')) this.notify('challenge_declare', { jp: true }); }, 'game');

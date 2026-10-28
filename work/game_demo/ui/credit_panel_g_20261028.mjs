@@ -1,0 +1,22 @@
+// Approved 30s offer -> unlimited staff wait -> staff receipt -> resume.
+export function attachCreditPanel({parent,ctrl,overlay,onInput}){
+ const panel=document.createElement('section');panel.id='g-credit-panel';panel.setAttribute('aria-live','polite');
+ panel.style.cssText='position:absolute;left:6%;right:6%;bottom:2%;z-index:30;padding:16px;border:2px solid #e8c672;border-radius:14px;background:#10152bf2;color:#fff;text-align:center;font:600 clamp(15px,2.5vw,28px) sans-serif;box-shadow:0 4px 24px #0008';
+ const title=document.createElement('div'),detail=document.createElement('div'),buttons=document.createElement('div');
+ detail.style.cssText='margin:8px 0;font-weight:400';buttons.style.cssText='display:flex;justify-content:center;gap:12px';
+ const left=document.createElement('button'),right=document.createElement('button');
+ for(const b of [left,right])b.style.cssText='font:inherit;padding:10px 16px;border-radius:8px;border:1px solid #dcb766;color:#fff;background:#282f53';
+ left.textContent='左：100円で続ける';right.textContent='右：終了する';buttons.append(left,right);panel.append(title,detail,buttons);parent.append(panel);
+ const input=(action,source)=>{const phase=ctrl.phase,accepted=ctrl.dispatch(action);onInput?.({source,action,accepted,phase},ctrl.game);render();};
+ const onLeft=()=>input('requestExtra','pointer'),onRight=()=>input(ctrl.phase==='StaffWait'?'cancelExtra':'finish','pointer');
+ left.addEventListener('click',onLeft);right.addEventListener('click',onRight);
+ const key=e=>{if(e.code!=='KeyS'||e.repeat||ctrl.phase!=='StaffWait')return;e.preventDefault();input('staffActivate','staff-keyboard');};window.addEventListener('keydown',key);
+ function render(){
+  const g=ctrl.game,waiting=g.phase==='StaffWait';panel.hidden=!waiting&&g.phase!=='Continue';
+  title.textContent=waiting?'100円チケットをスタッフに渡してください':`つづけますか？ あと${Math.ceil(g.offerLeft)}秒`;
+  detail.textContent=waiting?'スタッフの確認後に再開します（スタッフ：Sキー）':'追加100円で＋22秒・＋10玉。今の続きから遊べます。';
+  left.hidden=waiting;right.textContent=waiting?'右：取り消して終了':'右：終了する';
+ }
+ const original=overlay.render;overlay.render=function(...args){const result=original.apply(this,args);render();return result;};render();
+ return ()=>{overlay.render=original;window.removeEventListener('keydown',key);left.removeEventListener('click',onLeft);right.removeEventListener('click',onRight);panel.remove();};
+}

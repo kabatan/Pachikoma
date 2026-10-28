@@ -1,0 +1,13 @@
+{
+  "name": "G 承認版 4段賞・自然物理・スタッフ追加",
+  "stageDir": "work/game_demo/physics/boards/F_natural_wide_return_v1_g_20261028",
+  "jitter": {
+    "x_mm": 0.5,
+    "vx_pct": 3,
+    "vy_pct": 0
+  },
+  "rules": "work/game_demo/rules/medal_rules_g_20261028.json",
+  "seed": null,
+  "rulesModule": "work/game_demo/rules/medal_rules_g_20261028.mjs",
+  "naturalBoardMotion": true
+}

@@ -4,22 +4,22 @@ import RAPIER from '../physics/node_modules/@dimforge/rapier3d-compat/dist/rapie
 import { installRigidSyncGuard } from '../physics/rigid_sync_guard.mjs';
 import { PhysicsAdapter, RAPID_SUPPLY } from '../physics/adapter.mjs';
 import { attachTrayVisual } from '../physics/tray_visual.mjs';
-import { createMedalApp } from '../ui/demo_host.mjs';
+import { createMedalApp } from '../ui/demo_host_g_20261028.mjs';
 import { HybridRenderer } from '../web/src/hybrid_renderer.mjs';
 import { Gen } from '../web/src/dummy.mjs';
 import { connectLayerPack, connectAssemblyBalls } from './render_bridge.mjs';
 import { createRuntime } from './runtime.mjs';
 import { EffectsBus } from './effects_bus.mjs';
-import { loadPlayConfig, loadPlayRules } from './config.mjs';
+import { loadPlayConfig, loadPlayRules } from './config_g_20261028.mjs';
 import { prewarm } from './prewarm.mjs';
 import { createLauncherBody } from './launcher_body.mjs';
-import { CabinetSerial } from './cabinet_serial.mjs';
+import { CabinetSerial } from './cabinet_serial_g_20261028.mjs';
 import { winSeconds, JACKPOT_SECONDS } from '../rules/medal_rules.mjs';
 
 async function main() {
 const q = new URLSearchParams(location.search);
 async function readText(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.text(); }
-const DEFAULT_PLAY_CONFIG = 'work/game_tuning/r3/config_r3.json', DEFAULT_PACK = '/assembly/sol61_v36_pack/stage2c/manifest.json';   // 引数なしで開いた時の本番構成(?config=&pack= で上書き、空文字で無効)
+const DEFAULT_PLAY_CONFIG = 'work/game_demo/play/config_g_20261028.json', DEFAULT_PACK = '/assembly/sol61_v36_pack/stage2c/manifest.json';   // 引数なしで開いた時の本番構成(?config=&pack= で上書き、空文字で無効)
 const M3_PROBE126_PACK = '/assembly/sol61_v36_pack/stage2c_probe126_rgb/manifest.json'; // Private default-M3 tail/bitset environment plus private RGB16F physical probes.
 const config = await loadPlayConfig(q.has('config') ? q.get('config') : DEFAULT_PLAY_CONFIG, readText);
 const seed = q.has('seed') ? Number(q.get('seed')) : config.seed ?? 1;
@@ -29,10 +29,12 @@ const CAB = new URL('../../cabinet/', import.meta.url);
 const paOptions = {
   readText: (p) => readText(new URL(p, CAB)), importModule: (p) => import(new URL(p, CAB).href), seed, stageDir: config.stageDir, jitter: config.jitter,
   ...(playRules.MaxInFlight > 1 ? RAPID_SUPPLY : {}),   // 同時発射なら玉の補給も連射に合わせる
+  continuousSupply: playRules.ContinuousFire,
   boardTimeScale: Number(q.get('pscale') ?? 0.35),   // 盤上の玉の進み(1=実時間)。落下を目で追える速さ(平均0.72秒→約2秒)。?pscale=1 で実時間
 };
 // ?physworker=1: 物理を専用 Worker で回す試験モード(同じ API の代理。physics/worker/README.md)。指定なしは従来どおり主スレッドの PhysicsAdapter
 const pa = q.get('physworker') === '1' ? await (await import('../physics/worker/physics_proxy.mjs')).PhysicsWorkerProxy.create(paOptions) : await PhysicsAdapter.create(RAPIER, paOptions);
+if (config.naturalBoardMotion) { pa.board.allowJamKick = false; pa.board.allowStuckNudge = false; }
 // 固定buildの独立file SHA証拠を前提とする。runtime認証ではない。?rigidsync=0で従来の同期。
 const syncGuards = [];
 if (!pa.isWorkerProxy && q.get('rigidsync') !== '0') {
@@ -124,7 +126,7 @@ let fxApi = null;
 if (!q.has('nofx')) {
   const { connectPlayEffects } = await import('../../effects/runtime/play_fx.mjs');
   // 動画液晶が既定。?lcd=legacyで旧Canvas液晶。m3ではpanelいっぱいに貼る
-  const lcd = q.get('lcd') !== 'legacy' ? await (await import('./lcd_surface/lcd_surface.mjs')).createLcdSurface({ manifestUrl: new URL(q.get('lcdclips') ?? './lcd_surface/ryugu1028/manifest.json', import.meta.url).href, jpManifestUrl: q.get('jpclips') === 'off' ? null : new URL(q.get('jpclips') ?? './lcd_surface/jp1029/manifest_title_v8.json', import.meta.url).href, onJpCue: c => { if(c.kind==='hold'){const rank=app.rules.PrizeNames.indexOf(runtime.getPrize());runtime.setJpHold(true);return rank;} if(c.kind==='reveal'){runtime.setJpHold(false);} if(c.kind==='tray')runtime.awardToTray(c.count==='payout'?c.payout:c.count,{rate:c.rate,origin:'jp_reveal'}); if(c.kind==='snd')window.dispatchEvent(new CustomEvent('jp-scene-cue',{detail:c})); if(c.kind==='end'&&runtime.jpHold){runtime.setJpHold(false);runtime.releaseAwards({rate:24});} }, getState: () => ({ ...effects.contextSnapshot().state, phase: ctrl.game.phase, howtoT: ctrl.howto?.t, prize: ctrl.game.prize, score: ctrl.game.jackpotEarnings, chain: ctrl.game.chainStatus, rules: app.rules }) }) : null;   // 最初のJPはd=4確認版。継続は既存の表示を保持する。
+  const lcd = q.get('lcd') !== 'legacy' ? await (await import('./lcd_surface/lcd_surface_bg2f.mjs')).createLcdSurface({ manifestUrl: new URL(q.get('lcdclips') ?? './lcd_surface/ryugu1028/manifest.json', import.meta.url).href, jpManifestUrl: q.get('jpclips') === 'off' ? null : new URL(q.get('jpclips') ?? './lcd_surface/jp1029/manifest_title_v8_bg2f.json', import.meta.url).href, onJpCue: c => { if(c.kind==='hold'){const rank=app.rules.PrizeNames.indexOf(runtime.getPrize());runtime.setJpHold(true);return rank;} if(c.kind==='reveal'){runtime.setJpHold(false);} if(c.kind==='tray')runtime.awardToTray(c.count==='payout'?c.payout:c.count,{rate:c.rate,origin:'jp_reveal'}); if(c.kind==='snd')window.dispatchEvent(new CustomEvent('jp-scene-cue',{detail:c})); if(c.kind==='end'&&runtime.jpHold){runtime.setJpHold(false);runtime.releaseAwards({rate:24});} }, getState: () => ({ ...effects.contextSnapshot().state, phase: ctrl.game.phase, howtoT: ctrl.howto?.t, prize: ctrl.game.prize, score: ctrl.game.jackpotEarnings, chain: ctrl.game.chainStatus, rules: app.rules }) }) : null;   // 最初のJPはd=4確認版。継続は既存の表示を保持する。
   // 新しいJP尺の音も起動時に作り、着地のフレームで長い音声バッファを生成しない。
   if(lcd?.jp && r2Audio){
     const {winPlan,createWinSound}=await import('../../audio/runtime/win_sound.mjs');const engine=r2Audio.engine;

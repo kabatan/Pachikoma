@@ -82,6 +82,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   { const alt = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('fxjs') : null; await loadScript(alt ? new URL(alt, location.href).href : new URL('./effects.js', here).href); }   // ?fxjs=... は前後比較の確認用(旧版の effects.js を差し替えて録画する)
   const [events, geom] = await Promise.all(['work/effects/spec/events.json', 'work/effects/spec/geometry.json'].map(async (p) => (await fetch(R(p))).json()));
   const fx = new window.Effects({ events, geom });
+  fx.overlapLandingLights = !!rules?.ContinuousFire;
   fx.tutorial = tutorial && !rules?.R3Enabled;   // R3では旧「勝負」チュートリアルを起動しない
   if (!lcd) { const ok = await fx.initLcd({ root }); if (!ok) throw new Error('LCD init failed'); }
   if (rules) fx.setState({ rules: { r3Enabled: rules.R3Enabled, awards: rules.Awards, loanBalls: rules.LoanBalls, extraSeconds: rules.ExtraSeconds, thresholds: (rules.PrizeThresholds || []).slice(1), jackpotAwards: rules.JackpotAwards } });   // 数値は規則から(固定値にしない)
