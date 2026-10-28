@@ -274,8 +274,11 @@ void main() {
       for (int j = 0; j < 7; j++) { vec4 s = dec(texture(uMD, vec3(ud, float(2 + j)))); sg += s.x * uSeg[j * 4] + s.y * uSeg[j * 4 + 1] + s.z * uSeg[j * 4 + 2] + s.w * uSeg[j * 4 + 3]; }
       vec3 add = sg * ${D.scale.toFixed(2)} * uSegC;
       for (int j = 0; j < 5; j++) if (uMet[j] > 0.0) add += dec(texture(uMD, vec3(ud, float(9 + j)))).rgb * ${D.scale.toFixed(2)} * uMet[j];
-      vec2 e = min(ud, 1.0 - ud) * vec2(${D.width}.0, ${D.height}.0);
-      float fade = smoothstep(0.0, 6.0, min(e.x, e.y));
+      // 得点板の絵は周りの枠まで含むので、枠の光（F0/F4）と色がずれて四角く見える。表示板の縁の内側だけを差し替える
+      vec2 dp = ud * vec2(${D.width}.0, ${D.height}.0), bc = vec2(235.0, 186.0), bh = vec2(207.0, 146.0);
+      vec2 bq = abs(dp - bc) - bh + 24.0;
+      float bd = length(max(bq, 0.0)) + min(max(bq.x, bq.y), 0.0) - 24.0;
+      float fade = 1.0 - smoothstep(-3.0, 1.0, bd);
       o = mix(o, Tm(invTm(off) + add), fade);
     }
   }

@@ -1,1 +1,5 @@
 work/game_demo/ui/logs/
+
+# Large original files restored automatically from release parts
+/work/game_demo/play/lcd_surface/jp1029/production_20261028/ryugu_continuous_approved_color.mp4
+*.joining-*

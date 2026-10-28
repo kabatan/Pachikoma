@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = (Resolve-Path -LiteralPath (Join-Path $here '..\..\..')).Path
 $work = Join-Path $repo 'work'
+& (Join-Path $here 'prepare_release.ps1')
 $types = @{
   '.html'='text/html; charset=utf-8'; '.mjs'='text/javascript'; '.js'='text/javascript'; '.json'='application/json'
   '.wav'='audio/wav'; '.ogg'='audio/ogg'; '.mp3'='audio/mpeg'; '.ttf'='font/ttf'; '.woff2'='font/woff2'

@@ -71,7 +71,7 @@ export class Board3 {
       for (let level=0;level<3;level++) if (p.y <= JP_LINES[level] && !(b.jpLines & (1 << level))) {
         const y=JP_LINES[level];
         b.jpLines = (b.jpLines ?? 0) | (1 << level);
-        this.events.push({ type: 'jp_line', shotId: id, level, y, x: p.x, vx: b.body.linvel(b._v).x / S });
+        { const v = b.body.linvel(b._v); this.events.push({ type: 'jp_line', shotId: id, level, y, x: p.x, vx: v.x / S, vy: v.y / S, mouthY: this.mouthY }); }
       }
       if (b.approach === undefined && p.y <= this.mouthY) {
         b.approach = { cup: this._cupOf(p.x), x: p.x };

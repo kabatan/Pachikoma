@@ -1,3 +1,4 @@
+import {prepareRelease} from './prepare_release.mjs';
 // 静的サーバ(loopback専用)。work/ を配信（game_demo と cabinet の両方が要る）。POST /api/medal-log は ui/logs に追記。
 //   node play/serve.mjs [port=8792]   → http://127.0.0.1:8792/game_demo/play/index.html
 import { createServer } from 'node:http';
@@ -12,6 +13,7 @@ import { extname, join, normalize, resolve, relative, isAbsolute } from 'node:pa
 import { fileURLToPath } from 'node:url';
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url))); const LOGS = join(ROOT, 'game_demo', 'ui', 'logs');
 const DOCS = resolve(ROOT, '../docs');
+await prepareRelease(resolve(ROOT,'..'));
 const PORT = Number(process.argv[2] ?? 8792);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.json': 'application/json', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.ttf': 'font/ttf', '.png': 'image/png', '.mp4': 'video/mp4', '.webm': 'video/webm', '.wasm': 'application/wasm', '.obj': 'text/plain; charset=utf-8', '.npy': 'application/octet-stream' };
 const mp4Pacer=createMp4Pacer({audit:process.env.MP4_PACING_AUDIT==='1'});

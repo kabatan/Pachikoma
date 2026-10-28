@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "work/game_demo/play/lcd_surface/jp1029/production_20261028/ryugu_continuous_approved_color.mp4",
+      "bytes": 189968970,
+      "sha256": "871760c669408e69fd98e013f5e614f1cfa6d85dd483e56868eec2e863dcd522",
+      "parts": [
+        {
+          "path": "work/game_demo/play/lcd_surface/jp1029/production_20261028/ryugu_continuous_approved_color.mp4.part00",
+          "bytes": 95000000
+        },
+        {
+          "path": "work/game_demo/play/lcd_surface/jp1029/production_20261028/ryugu_continuous_approved_color.mp4.part01",
+          "bytes": 94968970
+        }
+      ]
+    }
+  ]
+}

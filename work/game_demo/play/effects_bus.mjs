@@ -141,10 +141,14 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
       const p=cell ? jpFlight.unlit.reduce((sum,d)=>sum+cell.p[d-1],0) : 0;
       const tier=p>=.6?3:p>=.4?2:p>=.2?1:0;
       jpFlight.tier=Math.max(jpFlight.tier,tier);
-      send('jp_heat',{shotId:e.shotId,level:e.level,tier:jpFlight.tier,p,chain:jpFlight.chain,y:e.y});
+      // 中図柄用: 盤の各穴の見込み(cell.p)・位置/速さ・口までの予測時間(自由落下。ピンの反射は見込めない)
+      let eta = null;
+      if (Number.isFinite(e.vy) && Number.isFinite(e.mouthY) && e.y > e.mouthY) { const g = 9.81, disc = e.vy * e.vy + 2 * g * (e.y - e.mouthY); eta = Math.max(0, (e.vy + Math.sqrt(disc)) / g); }
+      send('jp_heat',{shotId:e.shotId,level:e.level,tier:jpFlight.tier,p,chain:jpFlight.chain,y:e.y,x:e.x,vx:e.vx,vy:e.vy,probs:cell?[...cell.p]:null,eta,unlit:jpFlight.unlit});
     }
     if (e.type === 'jp_mouth' && jpFlight?.shotId === e.shotId)
       send('jp_mouth',{shotId:e.shotId,cup:e.cup,unlit:jpFlight.unlit.includes(e.cup),chain:jpFlight.chain});
+    if (e.type === 'cup' && jpFlight?.shotId===e.shotId) send('jp_mouth',{shotId:e.shotId,cup:e.cup,unlit:jpFlight.unlit.includes(e.cup),chain:jpFlight.chain,phase:'cup'});   // 中図柄を実際に入った穴で止め直す(口から入れ替わった時用)
     if (['cup','lost'].includes(e.type) && jpFlight?.shotId===e.shotId) jpFlight=null;
     if (e.type === 'cup') landing = { cup: e.cup, approachCup: e.approachCup, crossed: !!e.crossed };
     // runtimeではlanding直後に呼ぶ。次の入力が来る前に確定receiptを通知する。

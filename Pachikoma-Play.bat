@@ -4,6 +4,8 @@ rem Uses Node.js if installed, otherwise the built-in PowerShell server. Opens y
 setlocal
 cd /d "%~dp0"
 set PORT=8800
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0work\game_demo\play\prepare_release.ps1"
+if errorlevel 1 goto end
 where node >nul 2>nul
 if %errorlevel%==0 goto usenode
 echo Node.js not found. Using the built-in PowerShell server.
