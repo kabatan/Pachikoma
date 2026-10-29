@@ -3,7 +3,7 @@ import {bindOwnedNativeQueryTraversal} from './native_contact_query.mjs';
 // audio notifications and must not mutate, step, add or remove physics bodies
 // during this synchronous traversal. All current runtime consumers meet this.
 // Pair enumeration, sleep/quiet decisions and numerical impulse math are intact.
-export function observeContacts(pa, receive, { onError=console.error, onPayout=null, nativeQueryProof=null }={}) {
+export function observeContacts(pa, receive, { onError=console.error, onPayout=null, nativeQueryProof=null, contactScan=new URLSearchParams(globalThis.location?.search??'').get('contactscan')!=='0' }={}) {
   const removers=[], metrics={ steps:0, contacts:0, errors:0, milliseconds:0 };
   for(const [region, owner, world, scale] of [['board',pa.board,pa.bw,10],['tray',pa.tray,pa.tw,pa.tray.S]]) {
     const original=world.step, pre=new Map(), balls=new Map(), movingLabels=new Map();
@@ -198,8 +198,12 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
           stateCount++;
           body.linvel(q.v); body.angvel(q.w); body.translation(q.p); q.sleeping=region==='tray'&&body.isSleeping();
           q.postQuiet=undefined; q.postFixed=undefined; q.postPositionValid=false;
-          q.linearSpeed=Math.hypot(q.v.x,q.v.y,q.v.z)/scale; q.angularSpeed=Math.hypot(q.w.x,q.w.y,q.w.z);
-          const quiet=region==='tray'&&q.linearSpeed<.005&&q.angularSpeed<.02;
+          // Magnitudes are used only by the tray quiet gate. Evaluate the
+          // identical expressions in order, stopping when the result is known.
+          // Board values and fast-ball angular magnitudes were never consumed.
+          let quiet;
+          if(contactScan) quiet=region==='tray'&&Math.hypot(q.v.x,q.v.y,q.v.z)/scale<.005&&Math.hypot(q.w.x,q.w.y,q.w.z)<.02;
+          else {q.linearSpeed=Math.hypot(q.v.x,q.v.y,q.v.z)/scale;q.angularSpeed=Math.hypot(q.w.x,q.w.y,q.w.z);quiet=region==='tray'&&q.linearSpeed<.005&&q.angularSpeed<.02;}
           q.quietFrames=quiet?(quietFrames.get(body.handle)??0)+1:0;
           if(quiet)quietFrames.set(body.handle,q.quietFrames);else quietFrames.delete(body.handle);
           pre.set(body.handle,q);
@@ -224,8 +228,12 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
           stateCount++;
           body.linvel(q.v); body.angvel(q.w); body.translation(q.p);
           q.postQuiet=undefined; q.postFixed=undefined; q.postPositionValid=false;
-          q.linearSpeed=Math.hypot(q.v.x,q.v.y,q.v.z)/scale; q.angularSpeed=Math.hypot(q.w.x,q.w.y,q.w.z);
-          const quiet=region==='tray'&&q.linearSpeed<.005&&q.angularSpeed<.02;
+          // Magnitudes are used only by the tray quiet gate. Evaluate the
+          // identical expressions in order, stopping when the result is known.
+          // Board values and fast-ball angular magnitudes were never consumed.
+          let quiet;
+          if(contactScan) quiet=region==='tray'&&Math.hypot(q.v.x,q.v.y,q.v.z)/scale<.005&&Math.hypot(q.w.x,q.w.y,q.w.z)<.02;
+          else {q.linearSpeed=Math.hypot(q.v.x,q.v.y,q.v.z)/scale;q.angularSpeed=Math.hypot(q.w.x,q.w.y,q.w.z);quiet=region==='tray'&&q.linearSpeed<.005&&q.angularSpeed<.02;}
           q.quietFrames=quiet?(quietFrames.get(body.handle)??0)+1:0;
           if(quiet)quietFrames.set(body.handle,q.quietFrames);else quietFrames.delete(body.handle);
           pre.set(body.handle,q); movingLabels.set(body.handle,id);

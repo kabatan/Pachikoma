@@ -186,6 +186,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
     try { adapter.setCabinet({ display: { digits: ballCountToDigits(Math.max(0, v), { blank: v < 0 }) } }); } catch (err) { console.warn('digits', err.message); }
   };
   // LCD板: 最初のフレームで中身ができてから作る
+  lcd?.attractSurface?.connectGpu({THREE,renderer:hr.renderer});
   let plate = null, last = null,uploadCanvas=null,uploadTexture=null,uploadRevision;
   const api = {
     get BL() { return BL; },
@@ -201,6 +202,11 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
       if (last.lcd) {
         if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain });
         const choice=lcd?.choiceV20;
+        if(!lcd?.displayRecoveryActive&&lcd?.attractSurface?.directActive){
+          const texture=lcd.attractSurface.compose();
+          if(texture){plate.mat.uniforms.uT.value=texture;uploadRevision=undefined;return last;}
+          lcd.attractSurface.materialize();
+        }
         const gpu=lcd?.gpuPanelSource,covered=((choice?.active||choice?.holding)&&gpu?.owner!=='choice')||lcd?.attractSurface?.active||(lcd?.finalResultSurface?.active&&gpu?.owner!=='final-result')||lcd?.timeupSurface?.active;
         if(gpu&&!covered){
           const texture=gpu.backend.compose();
