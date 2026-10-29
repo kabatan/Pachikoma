@@ -1,0 +1,37 @@
+{
+  "source": "work/game_demo/play/lcd_surface/jp1029/confirm_failure_rgbcrop_20261029_083606_v1",
+  "destination": "work/game_demo/play/lcd_surface/jp1029/confirm_failure_rgbcrop_xor_20261029_084408_v1",
+  "frames": 86,
+  "keyframes": [
+    64,
+    72,
+    80,
+    88,
+    96,
+    104,
+    112,
+    120,
+    128,
+    136,
+    144
+  ],
+  "fixedKeyframes": [
+    64,
+    72,
+    80,
+    88,
+    96,
+    104,
+    112,
+    120,
+    128,
+    136,
+    144
+  ],
+  "additionalKeyframes": [],
+  "sourceCompressedBytes": 583282842,
+  "compressedBytes": 165602766,
+  "allRcpPackedBytesReconstructExact": true,
+  "maxDeltaChain": 7,
+  "elapsedSeconds": 15.273069622926414
+}

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "compression": "zlib/deflate for each .bin",
+  "key": "Inflates directly to original RCP1 complete packed frame bytes; key .bin compressed bytes copied verbatim",
+  "deltaHeader": {
+    "0": "char[4] magic RCD1",
+    "4": "u16 little-endian baseFrame = frame-1",
+    "6": "u16 reserved = 0",
+    "8": "byte[] XOR of full RCP1 packed-frame bytes against predecessor"
+  },
+  "keyInterval": 8,
+  "first": 64,
+  "last": 149,
+  "maximumDeltaChain": 7,
+  "reconstructedBytes": 8764456,
+  "sourceRcpSchema": "../confirm_failure_rgbcrop_20261029_083606_v1/schema.json"
+}

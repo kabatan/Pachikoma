@@ -14,19 +14,29 @@ export async function attachFinalResultSurface(lcd,{controller,manifestUrl=new U
  let active=false,manual=false,time=0,state=null,disposed=false,game=null,replayAfter=null,renderedFrame=-1,presentedTime=0,videoCallback=null;
  const trackFrame=()=>{if(disposed||!video.requestVideoFrameCallback)return;videoCallback=video.requestVideoFrameCallback((_,meta)=>{presentedTime=meta.mediaTime;trackFrame();});};trackFrame();
  const recordError=e=>{const m=e.message??String(e);if(!errors.includes(m)){errors.push(m);console.error('[final-result]',m);}};
+ // A requested pause may cancel an earlier play promise. Preserve that receipt,
+ // but keep unowned AbortError and every other playback failure in errors.
+ let pauseGeneration=0,lastPauseReason=null,playRequest=0;
+ const playback={expectedPauseInterruptions:0,interruptions:[]};
+ const pauseVideo=reason=>{pauseGeneration++;lastPauseReason=reason;video.pause();};
+ const playVideo=()=>{const generation=pauseGeneration,request=++playRequest;video.play().catch(e=>{
+  if(e?.name==='AbortError'&&/interrupted by a call to pause\(\)/.test(e.message??'')&&pauseGeneration!==generation){
+   playback.expectedPauseInterruptions++;if(playback.interruptions.length<32)playback.interruptions.push({request,startedGeneration:generation,pausedGeneration:pauseGeneration,reason:lastPauseReason,message:e.message});
+  }else recordError(e);
+ });};
  const warm=()=>renderer.prewarm().catch(recordError);
  const seek=t=>new Promise(resolve=>{t=Math.min(video.duration-1/60,Math.max(0,t));if(Math.abs(video.currentTime-t)<.00001){resolve();return;}const done=()=>{clearTimeout(timer);video.removeEventListener('seeked',done);resolve();},timer=setTimeout(done,5000);video.addEventListener('seeked',done,{once:true});video.currentTime=t;});
- const exit=()=>{if(!active)return;active=false;video.pause();if(replayAfter!=null)controller.replayAfter=replayAfter;replayAfter=null;};
- const start=()=>{if(active&&game===controller.game)return;exit();game=controller.game;state=finalResultState(game,daily);time=0;presentedTime=0;renderedFrame=-1;active=true;video.currentTime=0;replayAfter=controller.replayAfter;controller.replayAfter=Math.max(replayAfter,controller.resultAge+DURATION);warm();if(!manual)video.play().catch(recordError);};
+ const exit=()=>{if(!active)return;active=false;pauseVideo('exit');if(replayAfter!=null)controller.replayAfter=replayAfter;replayAfter=null;};
+ const start=()=>{if(active&&game===controller.game)return;exit();game=controller.game;state=finalResultState(game,daily);time=0;presentedTime=0;renderedFrame=-1;active=true;video.currentTime=0;replayAfter=controller.replayAfter;controller.replayAfter=Math.max(replayAfter,controller.resultAge+DURATION);warm();if(!manual)playVideo();};
  lcd.onEvent=(id,...args)=>{const value=original.onEvent(id,...args);if(id==='finish_count'||id==='timeup')warm();if(id==='result')start();if(['start','attract','title','ticket','howto'].includes(id))exit();return value;};
- lcd.frame=(dt,F)=>{if(active&&(controller.game!==game||controller.game.phase!=='Result'))exit();original.frame(dt,F);if(!active)return;time+=dt;const mediaClock=!manual&&video.requestVideoFrameCallback&&time<DURATION?Math.min(time,presentedTime):time,f=Math.floor((mediaClock+1e-7)*30);if(!manual){const desired=Math.min(time,video.duration-1/60);if(Math.abs(video.currentTime-desired)>.14&&!video.seeking)video.currentTime=desired;if(time<video.duration-.04&&video.paused)video.play().catch(recordError);if(time>=video.duration-.04)video.pause();}
+ lcd.frame=(dt,F)=>{if(active&&(controller.game!==game||controller.game.phase!=='Result'))exit();original.frame(dt,F);if(!active)return;time+=dt;const mediaClock=!manual&&video.requestVideoFrameCallback&&time<DURATION?Math.min(time,presentedTime):time,f=Math.floor((mediaClock+1e-7)*30);if(!manual){const desired=Math.min(time,video.duration-1/60);if(Math.abs(video.currentTime-desired)>.14&&!video.seeking)video.currentTime=desired;if(time<video.duration-.04&&video.paused)playVideo();if(time>=video.duration-.04)pauseVideo('ended');}
   if(f!==renderedFrame){renderer.render(f,state);renderedFrame=f;}
   ctx.fillStyle='#000';ctx.fillRect(0,0,lcd.canvas.width,lcd.canvas.height);ctx.drawImage(renderer.canvas,PX,PY,W,H);
  };
- lcd.setManual=on=>{manual=!!on;video.pause();original.setManual(on);if(active&&!manual)video.play().catch(recordError);};
+ lcd.setManual=on=>{manual=!!on;pauseVideo('manual');original.setManual(on);if(active&&!manual)playVideo();};
  lcd.prepare=async dt=>{if(!active){await original.prepare(dt);return;}if(manual){await warm();await seek(time+dt);}};
  if(revision)Object.defineProperty(lcd,'uploadRevision',{configurable:true,enumerable:true,get:()=>active?undefined:revision.call(lcd)});
- lcd.finalResultSurface={video,renderer,errors,manifest:man,daily,get active(){return active;},get time(){return time;},get state(){return state;},get frame(){return renderedFrame;}};
+ lcd.finalResultSurface={video,renderer,errors,playback,manifest:man,daily,get active(){return active;},get time(){return time;},get state(){return state;},get frame(){return renderedFrame;}};
  lcd.dispose=()=>{if(disposed)return;disposed=true;exit();if(videoCallback!=null)video.cancelVideoFrameCallback?.(videoCallback);video.removeAttribute('src');video.load();renderer.dispose();original.dispose();};
  // Load sparse lossless FX while attract/howto is displayed, never on a result stamp.
  await renderer.prewarm();return lcd;

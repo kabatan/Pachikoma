@@ -16,7 +16,7 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
  const load=async path=>{const r=await fetch(new URL(path,base));if(!r.ok)throw Error('Palace atlas HTTP '+r.status);const im=await createImageBitmap(await r.blob(),{premultiplyAlpha:'none',colorSpaceConversion:'none'});images.push(im);return im;};
  let producer,legacy=null,disposed=false,failed=false,legacyMode=false,manual=false,lastInput=null,flash={alpha:0,color:'#fff'},hud=null,hudTexture=null;
  let rawPanel=null,rawCtx=null,rawVisible=null,rawVisibleCtx=null;
- const stats={producerCalls:0,heldFrames:0,composites:0,boundaryMaterializations:0,legacyCalls:0,failures:[],boundaryReadbackMaySynchronize:true};
+ const stats={producerCalls:0,heldFrames:0,composites:0,boundaryMaterializations:0,legacyCalls:0,legacyCreates:0,legacyInitMs:0,legacyInitMaxMs:0,legacyDrawMs:0,legacyDrawMaxMs:0,boundaryReadMs:0,boundaryReadMaxMs:0,failures:[],boundaryReadbackMaySynchronize:true};
  try{
   const centerImages=center?{F:await load(center.F),T:await load(center.T),meta:center.meta}:null;
   producer=createPalaceGpuProducer({THREE,renderer,centerImages});
@@ -29,12 +29,15 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
    fragmentShader:'varying vec2 q;uniform sampler2D raw,hud;uniform float hudOn,flashA;uniform vec3 flashRGB;void main(){vec3 c=texture2D(raw,q).rgb;vec2 p=vec2(q.x*1240.,(1.-q.y)*1510.);if(p.x>=34.&&p.x<1186.&&p.y>=28.&&p.y<1296.)c=mix(c,flashRGB,flashA);vec2 h=(p-vec2(866.,156.))/vec2(304.,308.);if(hudOn>.5&&all(greaterThanEqual(h,vec2(0.)))&&all(lessThan(h,vec2(1.)))){vec4 t=texture2D(hud,vec2(h.x,1.-h.y));c=mix(c,t.rgb,t.a);}gl_FragColor=vec4(c,1.);}'
   });
   const geometry=new THREE.PlaneGeometry(2,2),scene=new THREE.Scene(),camera=new THREE.Camera(),mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;scene.add(mesh);
-  const fallbackImage=()=>{if(!lastInput)throw Error('No previous palace descriptor for fallback');if(!legacy)legacy=createContinuousRyuguBg({background,centerImages});stats.legacyCalls++;return legacy.render(lastInput);};
+  const fallbackImage=()=>{if(!lastInput)throw Error('No previous palace descriptor for fallback');
+   if(!legacy){const at=performance.now();try{legacy=createContinuousRyuguBg({background,centerImages});stats.legacyCreates++;}finally{const ms=performance.now()-at;stats.legacyInitMs+=ms;stats.legacyInitMaxMs=Math.max(stats.legacyInitMaxMs,ms);}}
+   stats.legacyCalls++;const at=performance.now();try{return legacy.render(lastInput);}finally{const ms=performance.now()-at;stats.legacyDrawMs+=ms;stats.legacyDrawMaxMs=Math.max(stats.legacyDrawMaxMs,ms);}
+  };
   const prepareCanvases=()=>{if(rawPanel)return;rawPanel=document.createElement('canvas');rawPanel.width=PANEL.width;rawPanel.height=PANEL.height;rawCtx=rawPanel.getContext('2d',{alpha:false});rawVisible=document.createElement('canvas');rawVisible.width=PANEL.w;rawVisible.height=PANEL.h;rawVisibleCtx=rawVisible.getContext('2d',{alpha:false});};
   const fillFromLegacy=()=>{prepareCanvases();const image=fallbackImage();rawCtx.fillStyle='#000';rawCtx.fillRect(0,0,PANEL.width,PANEL.height);rawCtx.drawImage(image,PANEL.x,PANEL.y,PANEL.w,PANEL.h);rawVisibleCtx.drawImage(image,0,0,PANEL.w,PANEL.h);return {panel:rawPanel,visible:rawVisible,fallback:true};};
   const boundary=createBoundaryCache({read(){
    // Synchronous GPU->CPU readback: boundary-only, explicitly not a steady path.
-   const read=producer.readPixels(),rowBytes=read.width*4,top=new Uint8ClampedArray(read.bytes.length);
+   const at=performance.now();let read;try{read=producer.readPixels();}finally{const ms=performance.now()-at;stats.boundaryReadMs+=ms;stats.boundaryReadMaxMs=Math.max(stats.boundaryReadMaxMs,ms);}const rowBytes=read.width*4,top=new Uint8ClampedArray(read.bytes.length);
    for(let y=0;y<read.height;y++)top.set(read.bytes.subarray((read.height-1-y)*rowBytes,(read.height-y)*rowBytes),y*rowBytes);
    prepareCanvases();rawCtx.putImageData(new ImageData(top,read.width,read.height),0,0);
    rawVisibleCtx.drawImage(rawPanel,PANEL.x,PANEL.y,PANEL.w,PANEL.h,0,0,PANEL.w,PANEL.h);
