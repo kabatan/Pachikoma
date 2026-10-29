@@ -14,7 +14,7 @@ export function attachTimerDisplay(lcd,{getState}){
   const ctx=lcd.canvas.getContext('2d'),sprites=new Map();
   const rects=[{x:832,y:128,w:304,h:150},{x:832,y:286,w:304,h:150}];
   const saved=rects.map(r=>{const c=document.createElement('canvas');c.width=r.w;c.height=r.h;return {canvas:c,ctx:c.getContext('2d',{alpha:false}),dirty:false};});
-  const gpuHud=document.createElement('canvas');gpuHud.width=304;gpuHud.height=308;const gpuHudCtx=gpuHud.getContext('2d');
+  const gpuHud=document.createElement('canvas');gpuHud.width=496;gpuHud.height=410;const gpuHudCtx=gpuHud.getContext('2d');gpuHudCtx.translate(176,26);   // 10/30 HUD の領域を広げた（旧 304x308 の位置へ寄せる）
   let shown=null,uploadKey=null,revision=0,frameRevision;
   const sourceRevision=Object.getOwnPropertyDescriptor(lcd,'uploadRevision')?.get;
   const updateRevision=()=>{
@@ -67,7 +67,7 @@ export function attachTimerDisplay(lcd,{getState}){
   lcd.frame=(dt,F)=>{
     clear();base.frame(dt,F);shown=timerValues(getState());
     if(lcd.gpuPanelSource){
-      gpuHudCtx.clearRect(0,0,304,308);
+      gpuHudCtx.clearRect(-176,-26,496,410);
       if(shown){paintGpu(0,'残り時間',shown.seconds,shown.warning,shown.pulse);if(shown.offer!==null)paintGpu(1,'追加受付',shown.offer,shown.offer<=10,shown.offerPulse);}
       lcd.gpuPanelSource.backend.setHudCanvas(shown?gpuHud:null);
     }else if(shown){

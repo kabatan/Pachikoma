@@ -154,17 +154,27 @@
   "DuplicateExtension": "natural",
   "DuplicateSegments": [
     {
-      "Until": 0.6,
+      "Until": 0.35,
       "ResetWeights": [
-        50,
-        30,
-        15,
-        5
+        100,
+        0,
+        0,
+        0
       ],
       "HighLampDuplicateProtectionCount": 0
     },
     {
-      "Until": 0.8,
+      "Until": 0.55,
+      "ResetWeights": [
+        100,
+        0,
+        0,
+        0
+      ],
+      "HighLampDuplicateProtectionCount": 1
+    },
+    {
+      "Until": 0.75,
       "ResetWeights": [
         100,
         0,
@@ -252,12 +262,15 @@
     "467": 4,
     "567": 5
   },
-  "DuplicateSixthLampClearUntil": 0.4,
+  "DuplicateSixthLampClearUntil": 0,
   "DuplicateRestartScaleAfterJp": 0.42,
   "ChainContinueMinSeconds": 0,
   "ChainContinueNeedsAddAtZero": true,
   "ChainAnnounceSeconds": 2.5,
   "ChainFirstAuto": true,
   "RuleVariant": "H_20261029",
-  "RouletteStartDelaySeconds": 5.8
+  "RouletteStartDelaySeconds": 5.8,
+  "DuplicateSixthLampTeasePlateau": 0.4,
+  "DuplicateSixthLampTeaseUntil": 0.6,
+  "DuplicateSixthLampTeaseMax": 3
 }

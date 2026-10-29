@@ -3,7 +3,7 @@ import {createVideoBoundaryReplay} from './video_boundary_replay_1029.mjs';
 // playback, decoder allocation, fetch, rules/audio, or production routing.
 export const VIDEO_BODY_VERTEX='varying vec2 q;void main(){q=position.xy*.5+.5;gl_Position=vec4(position.xy,0.,1.);}';
 export const VIDEO_BODY_FRAGMENT='varying vec2 q;uniform sampler2D current,next;uniform float mixNext;void main(){vec3 a=texture2D(current,q).rgb;vec3 b=texture2D(next,q).rgb;gl_FragColor=vec4(mix(a,b,mixNext),1.);}';
-export const VIDEO_PANEL_FRAGMENT='varying vec2 q;uniform sampler2D raw,overlay,hud;uniform float overlayOn,hudOn,flashA;uniform vec4 overlayRect;uniform vec3 flashRGB;void main(){vec2 p=vec2(q.x*1240.,(1.-q.y)*1510.);vec2 s=(p-vec2(34.,28.))/vec2(1152.,1268.);vec3 c=vec3(0.);if(all(greaterThanEqual(s,vec2(0.)))&&all(lessThan(s,vec2(1.)))){c=texture2D(raw,vec2(s.x,1.-s.y)).rgb;vec2 u=(p-vec2(34.,28.)-overlayRect.xy)/overlayRect.zw;if(overlayOn>.5&&all(greaterThanEqual(u,vec2(0.)))&&all(lessThan(u,vec2(1.)))){vec4 o=texture2D(overlay,vec2(u.x,1.-u.y));c+=o.rgb*o.a*(vec3(1.)-c);}c=mix(c,flashRGB,flashA);}vec2 h=(p-vec2(866.,156.))/vec2(304.,308.);if(hudOn>.5&&all(greaterThanEqual(h,vec2(0.)))&&all(lessThan(h,vec2(1.)))){vec4 t=texture2D(hud,vec2(h.x,1.-h.y));c=mix(c,t.rgb,t.a);}gl_FragColor=vec4(c,1.);}';
+export const VIDEO_PANEL_FRAGMENT='varying vec2 q;uniform sampler2D raw,overlay,hud;uniform float overlayOn,hudOn,flashA;uniform vec4 overlayRect;uniform vec3 flashRGB;void main(){vec2 p=vec2(q.x*1240.,(1.-q.y)*1510.);vec2 s=(p-vec2(34.,28.))/vec2(1152.,1268.);vec3 c=vec3(0.);if(all(greaterThanEqual(s,vec2(0.)))&&all(lessThan(s,vec2(1.)))){c=texture2D(raw,vec2(s.x,1.-s.y)).rgb;vec2 u=(p-vec2(34.,28.)-overlayRect.xy)/overlayRect.zw;if(overlayOn>.5&&all(greaterThanEqual(u,vec2(0.)))&&all(lessThan(u,vec2(1.)))){vec4 o=texture2D(overlay,vec2(u.x,1.-u.y));c+=o.rgb*o.a*(vec3(1.)-c);}c=mix(c,flashRGB,flashA);}vec2 h=(p-vec2(690.,130.))/vec2(496.,410.);if(hudOn>.5&&all(greaterThanEqual(h,vec2(0.)))&&all(lessThan(h,vec2(1.)))){vec4 t=texture2D(hud,vec2(h.x,1.-h.y));c=mix(c,t.rgb,t.a);}gl_FragColor=vec4(c,1.);}';
 const W=1152,H=1268,PW=1240,PH=1510,PX=34,PY=28;
 export const HISTORY_COPY_FRAGMENT='varying vec2 q;uniform sampler2D sourceTex;uniform vec4 sourceUv;void main(){gl_FragColor=vec4(texture2D(sourceTex,sourceUv.xy+q*sourceUv.zw).rgb,1.);}';
 export const HISTORY_STEP_FRAGMENT='varying vec2 q;uniform sampler2D historyTex,sourceTex;uniform float opAlpha;void main(){vec3 s=texture2D(sourceTex,q).rgb;vec3 c=opAlpha>=1.?s:mix(texture2D(historyTex,q).rgb,s,opAlpha);gl_FragColor=vec4(c,1.);}';
@@ -20,6 +20,7 @@ export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visib
  const context=r.getContext(),owned=new Set(),videos=new Map(),identities=new WeakMap();let identitySequence=0;
  const own=x=>(owned.add(x),x),release=x=>{if(x&&owned.delete(x))x.dispose();};
  let disposed=false,enabled=true,failed=false,status='initial',reason='no-completed-body',bodyRevision=0,compositeRevision=0,rawValid=false,outputValid=false;
+ let hudCanvasRevision;
  let completed=null,lastRequest=null,overlayTexture=null,overlaySource=null,hudTexture=null,hudSource=null,hud=null,hudRevision=0,overlayRevision=0,flashRevision=0,flash={alpha:0,color:'miss'};
  const stats={kind:'video_compositor_injected',renderRequests:0,bodyDraws:0,composites:0,waitingFrames:0,recoveries:0,unsupportedFrames:0,disabledFrames:0,videoTexturesCreated:0,videoTexturesDisposed:0,videoUpdateRequests:0,videoTexturesMax:0,overlayUploads:0,hudUpdates:0,failures:[],boundary:{rawReads:0,panelReads:0,hits:0,failures:0,cpuFallbackPanels:0,readMs:0,readMaxMs:0}};
  const configure=(t,flip)=>{t.colorSpace=T.NoColorSpace;t.minFilter=t.magFilter=T.LinearFilter;t.wrapS=t.wrapT=T.ClampToEdgeWrapping;t.generateMipmaps=false;t.flipY=flip;t.premultiplyAlpha=false;t.unpackAlignment=4;return t;};
@@ -83,7 +84,7 @@ export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visib
   const uniformSets=[bodyUniforms,panelUniforms,copyU,stepU,historyU],saved=[...new Set(uniformSets.flatMap(o=>Object.values(o)))].map(u=>[u,u.value]);
   let scratch=null,warmHud=null;const kinds=[],at=performance.now();
   try{
-   scratch=document.createElement('canvas');scratch.width=304;scratch.height=308;const c=scratch.getContext('2d');if(!c)throw Error('HUD warm canvas unavailable');c.clearRect(0,0,304,308);c.fillStyle='rgba(255,255,255,0.5)';c.fillRect(0,0,304,308);
+   scratch=document.createElement('canvas');scratch.width=496;scratch.height=410;const c=scratch.getContext('2d');if(!c)throw Error('HUD warm canvas unavailable');c.clearRect(0,0,496,410);c.fillStyle='rgba(255,255,255,0.5)';c.fillRect(0,0,496,410);
    warmHud=own(new T.CanvasTexture(scratch));configure(warmHud,true);
    withRendererState(T,r,()=>{
     for(const t of [raw,historySpare,output])r.initRenderTarget(t);r.initTexture(dummy);r.initTexture(warmHud);
@@ -129,7 +130,7 @@ export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visib
    }catch(error){pendingReplay?.discard();return fail(error,'render');}
   },
   setFlash(alpha=0,color='miss'){assertLive();const next={alpha:Math.max(0,Math.min(1,alpha||0)),color:color==='hit'?'hit':'miss'};if(next.alpha!==flash.alpha||next.color!==flash.color)flashRevision++;flash=next;},
-  setHudCanvas(canvas){assertLive();hud=canvas;if(canvas){if(hudSource!==canvas){release(hudTexture);hudTexture=configure(own(new T.CanvasTexture(canvas)),true);hudSource=canvas;}hudTexture.needsUpdate=true;hudRevision++;stats.hudUpdates++;}},
+  setHudCanvas(canvas,revision){assertLive();hud=canvas;if(canvas){if(hudSource!==canvas){release(hudTexture);hudTexture=configure(own(new T.CanvasTexture(canvas)),true);hudSource=canvas;hudCanvasRevision=undefined;}if(!Number.isSafeInteger(revision)||revision<0||hudCanvasRevision!==revision){hudTexture.needsUpdate=true;hudRevision++;stats.hudUpdates++;}hudCanvasRevision=revision;}},
   compose(){if(history.owned)return composeHistory();assertLive();if(!rawValid||failed)return null;try{assertBoundary();withRendererState(T,r,()=>{panelValues(true);outputValid=false;draw(panelScene,output);});outputValid=true;compositeRevision++;stats.composites++;return output.texture;}catch(error){return fail(error,'compose');}},
   rawCanvas(reasonValue='raw-capture'){assertLive();return history.owned?historyRawCanvas():rawCanvas(reasonValue);},
   materializeTo({panelCtx=null,heldCtx=null,reason:reasonValue='boundary'}={}){assertLive();if(history.owned)return materializeHistoryTo({panelCtx,heldCtx,includeBridge:true,reason:reasonValue});return replay.materializeTo({panelCtx,heldCtx,flash});

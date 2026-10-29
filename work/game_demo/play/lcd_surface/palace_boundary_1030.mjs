@@ -23,8 +23,8 @@ void main(){
 }`;
 const COPY='in vec2 q;out vec4 color;uniform sampler2D sourceTex;void main(){color=texelFetch(sourceTex,ivec2(gl_FragCoord.xy),0);}';
 const HUD=`in vec2 q;out vec4 color;uniform sampler2D sourceTex,hud;uniform float hudOn;void main(){
- vec3 c=texelFetch(sourceTex,ivec2(gl_FragCoord.xy),0).rgb;vec2 p=vec2(q.x*1240.,(1.-q.y)*1510.),h=(p-vec2(866.,156.))/vec2(304.,308.);
- if(hudOn>.5&&all(greaterThanEqual(h,vec2(0.)))&&all(lessThan(h,vec2(1.)))){vec4 t=texelFetch(hud,ivec2(gl_FragCoord.xy)-ivec2(866,1046),0);c=t.rgb+c*(1.-t.a);}
+ vec3 c=texelFetch(sourceTex,ivec2(gl_FragCoord.xy),0).rgb;vec2 p=vec2(q.x*1240.,(1.-q.y)*1510.),h=(p-vec2(690.,130.))/vec2(496.,410.);
+ if(hudOn>.5&&all(greaterThanEqual(h,vec2(0.)))&&all(lessThan(h,vec2(1.)))){vec4 t=texelFetch(hud,ivec2(gl_FragCoord.xy)-ivec2(690,970),0);c=t.rgb+c*(1.-t.a);}
  color=vec4(c,1.);
 }`;
 

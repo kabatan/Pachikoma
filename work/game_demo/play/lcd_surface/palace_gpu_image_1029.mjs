@@ -28,7 +28,7 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
   const uniforms={raw:{value:producer.surface.texture},hud:{value:dummy},hudOn:{value:0},flashA:{value:0},flashRGB:{value:new THREE.Vector3(1,1,1)}};
   const material=new THREE.ShaderMaterial({uniforms,depthTest:false,depthWrite:false,blending:THREE.NoBlending,toneMapped:false,
    vertexShader:'varying vec2 q;void main(){q=position.xy*.5+.5;gl_Position=vec4(position.xy,0.,1.);}',
-   fragmentShader:'varying vec2 q;uniform sampler2D raw,hud;uniform float hudOn,flashA;uniform vec3 flashRGB;void main(){vec3 c=texture2D(raw,q).rgb;vec2 p=vec2(q.x*1240.,(1.-q.y)*1510.);if(p.x>=34.&&p.x<1186.&&p.y>=28.&&p.y<1296.)c=mix(c,flashRGB,flashA);vec2 h=(p-vec2(866.,156.))/vec2(304.,308.);if(hudOn>.5&&all(greaterThanEqual(h,vec2(0.)))&&all(lessThan(h,vec2(1.)))){vec4 t=texture2D(hud,vec2(h.x,1.-h.y));c=mix(c,t.rgb,t.a);}gl_FragColor=vec4(c,1.);}'
+   fragmentShader:'varying vec2 q;uniform sampler2D raw,hud;uniform float hudOn,flashA;uniform vec3 flashRGB;void main(){vec3 c=texture2D(raw,q).rgb;vec2 p=vec2(q.x*1240.,(1.-q.y)*1510.);if(p.x>=34.&&p.x<1186.&&p.y>=28.&&p.y<1296.)c=mix(c,flashRGB,flashA);vec2 h=(p-vec2(690.,130.))/vec2(496.,410.);if(hudOn>.5&&all(greaterThanEqual(h,vec2(0.)))&&all(lessThan(h,vec2(1.)))){vec4 t=texture2D(hud,vec2(h.x,1.-h.y));c=mix(c,t.rgb,t.a);}gl_FragColor=vec4(c,1.);}'
   });
   const geometry=new THREE.PlaneGeometry(2,2),scene=new THREE.Scene(),camera=new THREE.Camera(),mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;scene.add(mesh);
   const fallbackImage=()=>{if(!lastInput)throw Error('No previous palace descriptor for fallback');

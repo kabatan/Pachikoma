@@ -85,7 +85,7 @@ export class MedalPresenter {
       case MedalEvent.Fresh:
         this._banner('fresh', `${r.after.length}灯`, `次の一球 +${g.rules.Awards[r.after.length]}玉`, 0.9);
         this.cue(`medal_lamp_${Math.min(6, Math.max(1, r.after.length))}`); break;
-      case MedalEvent.Protected: this._banner('keep', 'キープ', '最初の4灯まで重複では消えません', 0.9); this.cue('medal_keep'); break;
+      case MedalEvent.Protected: if (r.tease) break; this._banner('keep', 'キープ', '最初の4灯まで重複では消えません', 0.9); this.cue('medal_keep'); break;
       case MedalEvent.Reset:
         if (r.before.length > 1) this._roulette(r);
         else this._banner('reset', '消灯', '重複しました', 0.9);

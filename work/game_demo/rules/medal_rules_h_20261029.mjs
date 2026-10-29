@@ -58,6 +58,10 @@ export class MedalRules extends GRules {
     // --- 重複の追加（候補3） ---
     this.DuplicateSixthLampClearUntil = o.DuplicateSixthLampClearUntil ?? 0;   // 経過割合（JP後は補正後）がこれ未満の間、5灯から6灯目の穴に入ったら6灯目を点けず全消灯（ガセ）。0で無効
     this.DuplicateRestartScaleAfterJp = o.DuplicateRestartScaleAfterJp ?? 1;   // JPチャンスが一度あった後は、重複区間とガセの判定に使う経過割合をこの倍にする（1で無効）
+    // --- 6灯目の「点かない」（10/30 監督指摘で全消灯のガセの代わりに追加）。全消灯せず、灯は何も減らない。 ---
+    this.DuplicateSixthLampTeaseUntil = o.DuplicateSixthLampTeaseUntil ?? 0;        // 経過割合（JP後は補正後）がこの値に届くと確率0。0で無効
+    this.DuplicateSixthLampTeasePlateau = o.DuplicateSixthLampTeasePlateau ?? 0;    // この割合までは確率1、そこから Until まで直線で下がる
+    this.DuplicateSixthLampTeaseMax = o.DuplicateSixthLampTeaseMax ?? null;         // 1プレイあたりの最大回数（null=無制限）
     // --- 時計0の継続（候補3） ---
     this.ChainContinueNeedsAddAtZero = o.ChainContinueNeedsAddAtZero ?? false; // true: 配当後に残り0以下なら、継続の選択は「100円追加で継続」のみ。追加で時間・玉が入り、そのまま継続の連打へ。払わなければ確定
     // --- 賞の判定（10/30）。'wallet': 終了（精算）の瞬間の持ち玉 wallet だけで決める。'earnings': 従来（JPで得た玉 jackpotEarnings、500配当の確保でS）
@@ -120,6 +124,9 @@ export class MedalRules extends GRules {
     const bad =
       !laneOk(r.JpMeterByLane) || !setOk(r.ChainThresholdByHitSet) ||
       !isNum(r.DuplicateSixthLampClearUntil) || r.DuplicateSixthLampClearUntil < 0 || r.DuplicateSixthLampClearUntil > 1 ||
+      !isNum(r.DuplicateSixthLampTeaseUntil) || r.DuplicateSixthLampTeaseUntil < 0 || r.DuplicateSixthLampTeaseUntil > 1 ||
+      !isNum(r.DuplicateSixthLampTeasePlateau) || r.DuplicateSixthLampTeasePlateau < 0 || r.DuplicateSixthLampTeasePlateau > r.DuplicateSixthLampTeaseUntil ||
+      !(r.DuplicateSixthLampTeaseMax === null || (Number.isInteger(r.DuplicateSixthLampTeaseMax) && r.DuplicateSixthLampTeaseMax >= 0)) ||
       !isNum(r.DuplicateRestartScaleAfterJp) || r.DuplicateRestartScaleAfterJp <= 0 || r.DuplicateRestartScaleAfterJp > 1 ||
       typeof r.ChainContinueNeedsAddAtZero !== 'boolean' || typeof r.ChainFirstAuto !== 'boolean' || !isNum(r.ChainAnnounceSeconds) || r.ChainAnnounceSeconds < 0 || r.ChainAnnounceSeconds > 10 ||
       !posInt(r.JpMeterThreshold) || !isNum(r.JpMeterSeconds) || r.JpMeterSeconds <= 0 || !isNum(r.JpMeterIntroSeconds) || r.JpMeterIntroSeconds < 0 ||
@@ -147,7 +154,7 @@ export class MedalGame extends GGame {
     super(rules, seed);
     this.meter = null; this.roulette = null;
     this._events = []; this._eventListeners = new Set();
-    this._dupUsed = 0; this._dupIdx = 0; this._extensions = 0; this._epoch = { start: 0, length: rules.InitialSeconds };
+    this._dupUsed = 0; this.teases = 0; this._dupIdx = 0; this._extensions = 0; this._epoch = { start: 0, length: rules.InitialSeconds };
     this.meterSuccesses = 0; this.meterFailures = 0; this.freeShots = 0; this.meterHits = 0;
   }
 
@@ -283,6 +290,13 @@ export class MedalGame extends GGame {
     // 序盤のガセ: 5灯から6灯目の穴に入ったら、6灯目を点けず全消灯（継続の選択が保留の間は6灯目を点けない決まりが先）
     if (r.DuplicateSixthLampClearUntil > 0 && this.lampCount === 5 && !this._lamps.has(lane) && !this.jackpotChain?.choicePending && this._dupFraction() < r.DuplicateSixthLampClearUntil)
       return this._fakeSixth(shot, lane);
+    // 序盤の「点かない」: 5灯から6灯目の穴に入っても6灯目を点けない（灯は減らさない）。確率は plateau まで1、Until まで直線で0へ。
+    if (r.DuplicateSixthLampTeaseUntil > 0 && this.lampCount === 5 && !this._lamps.has(lane) && !this.jackpotChain?.choicePending &&
+        (r.DuplicateSixthLampTeaseMax === null || (this.teases ?? 0) < r.DuplicateSixthLampTeaseMax)) {
+      const p = this._dupFraction(), a = r.DuplicateSixthLampTeasePlateau, b = r.DuplicateSixthLampTeaseUntil;
+      const prob = p < a ? 1 : p >= b ? 0 : 1 - (p - a) / (b - a);
+      if (prob >= 1 || (prob > 0 && this._rng() < prob)) return this._teaseSixth(shot, lane);
+    }
     const seg = this.duplicateSegment();
     const keep = { w: r.ResetWeights, wl: r.ResetWeightsByLamps, p: r.HighLampDuplicateProtectionCount };
     if (seg.ResetWeights !== undefined) r.ResetWeights = seg.ResetWeights;
@@ -303,6 +317,20 @@ export class MedalGame extends GGame {
       if (this.secondsLeft > 0) this._startJpMeter();
     }
     return ok;
+  }
+
+  /** 点かない: 6灯目が点かず、灯は何も減らない（種別は Protected。receipt.tease=true）。 */
+  _teaseSixth(shot, lane) {
+    const walletBefore = this.wallet, before = this.lamps;
+    this.receipt = this._receipt(MedalEvent.Protected, lane, 0, 0, before, this.lamps, walletBefore, 0.45);
+    this.receipt.tease = true; this.receipt.duplicateSegment = this.duplicateSegment().index;
+    const quiet = typeof this.rules.quietGate === 'function' && !!this.rules.quietGate(this);
+    if (quiet) { this.receipt.quiet = true; this.receipt.uncounted = true; }
+    this.teases = (this.teases ?? 0) + 1;
+    this.shots = this.shots.filter((x) => x !== shot); this.shot = this.shots[this.shots.length - 1] ?? null;
+    this._beginEffect();
+    this._prepareChallenge();
+    return true;
   }
 
   /** ガセ: 6灯目が点かず、5灯がすべて消える（種別は「全部消える重複」と同じ Reset。receipt.fake=true）。 */

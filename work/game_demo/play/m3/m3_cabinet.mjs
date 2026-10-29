@@ -359,7 +359,7 @@ function completeScriptRegions(s) {
   return s?.script1029===true&&regionNumbers(s.K,8)&&regionNumbers(s.recolor,8)&&regionTriples(s.Kc,8)&&regionTriples(s.wash,8)&&regionTriples(s.zone,8)&&regionTriples(s.ring,4);
 }
 
-export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLamps = null, getPrize = null, prizeNames = null, ownedInitialEnvironment = null, packUrl = new URL('./pack1026/manifest.json', import.meta.url).href, q = new URLSearchParams() }) {
+export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLamps = null, getMeter = null, onMeterLand = null, getPrize = null, prizeNames = null, ownedInitialEnvironment = null, packUrl = new URL('./pack1026/manifest.json', import.meta.url).href, q = new URLSearchParams() }) {
   const t0 = performance.now();
   const man = await (await fetch(packUrl)).json();
   const base = new URL('.', packUrl);
@@ -443,7 +443,14 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
   const FLASH_PEAK = Number(q.get('m3flash') ?? 0.5), WS = Number(q.get('m3washref') ?? 4.0), ZONEK = Number(q.get('m3zonek') ?? 0.5);
   const HOLE_BASE = Number(q.get('m3hole') ?? 2.0), HOLE_HIT = Number(q.get('m3hit') ?? 12);   // 10/21 夜：監督「光り方が甘い」→ 強く（元 0.9・6）
   const hitAt = new Array(7).fill(-99), pendingHit = [];
-  presenter?.on?.((type, d) => { if (type === 'receipt' && d.lane >= 1 && d.lane <= 7 && d.kind !== 'Loan') pendingHit.push(d.lane - 1); });
+  // 「点かない」(receipt.tease): 入ったのに6灯目が点かない。白い閃きは出さず、その穴だけ弱く短く（約0.35秒）明滅する
+  const teaseAt = new Array(7).fill(-99), pendingTease = [];
+  presenter?.on?.((type, d) => { if (type === 'receipt' && d.lane >= 1 && d.lane <= 7 && d.kind !== 'Loan') (d.tease ? pendingTease : pendingHit).push(d.lane - 1); });
+  // JPチャンス（連打メーター）中の「入れる穴」強調：当たりの穴だけを速く脈打たせ、ほかの灯を落とし、入った瞬間に強く閃かせる。?jpholehl=0 で旧挙動（メーター中も穴は通常のまま）
+  // 確保なし：状態は固定長の配列と数値だけ。meter はゲームの生の状態（targets=まだ光っていない穴、stage=intro|firing|settling）
+  const JPHL = q.get('jpholehl') !== '0', hlMask = new Uint8Array(7), sealAt = new Array(7).fill(-99), pendingSeal = [];
+  let hlK = 0, hlClock = 0;
+  if (JPHL && onMeterLand) onMeterLand((lane) => { if (lane >= 1 && lane <= 7) pendingSeal.push(lane - 1); });
   // 払い出しの速さ：1 秒に 10 個より遅い払い出し（演出の JP 30 個＝n÷長さで 4.7 個/秒、速さの指定なし＝物理の既定 0.15 秒に 1 個）を 10 個/秒に（統括の目安 10〜15）。
   // 速いもの（開始の貸し玉 80 個＝40 個/秒の指定）はそのまま。指定なしは 12 個/秒。?m3payrate=0 で元のまま
   const PAYMIN = Number(q.get('m3payrate') ?? 10);
@@ -546,6 +553,7 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
     }
     // 穴の LED：意味は「球が入った」と「穴の状態」だけ。演出の色（F.pocket）は使わない
     if (pendingHit.length) { for (const i of pendingHit) hitAt[i] = clock; pendingHit.length = 0; }
+    if (pendingTease.length) { for (const i of pendingTease) teaseAt[i] = clock; pendingTease.length = 0; }
     const lamps = getLamps ? [...getLamps()] : [], nn = Math.min(6, lamps.length);
     // 灯った穴の色（灯の数で：〜3 灯は暖かい白、4 灯は桃、5 灯は橙、6 灯は金）。白っぽく褪せないよう濃く
     const PC = [[1, .82, .55], [1, .82, .55], [1, .82, .55], [1, .82, .55], [1, .06, .38], [1, .32, .02], [1, .58, 0]][nn];
@@ -559,6 +567,8 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
       const hc=F.m3?.hole;
       if(hc?.mode==='target_pulse'&&!lit&&lamps.length===6){const gain=HOLE_BASE*(hc.level??((hc.gain??1)*(.55+.35*Math.sin(2*Math.PI*(hc.hz??1.7)*clock))));c=(hc.rgb??[1,.58,0]).map(v=>v*gain);}
       if(hc?.mode==='near_miss'&&hc.cup===i+1){c=c.map((v,q)=>Math.max(v,(hc.rgb??[.45,.35,.6])[q]*HOLE_BASE*(hc.gain??0)));}
+      const dt = clock - teaseAt[i];
+      if (dt >= 0 && dt < 0.35) { const k = Math.sin(Math.PI * dt / 0.35) ** 2 * 0.5 * HOLE_BASE; c = [Math.max(c[0], k), Math.max(c[1], .58 * k), c[2]]; }
       const d = clock - hitAt[i];
       if (d >= 0 && d < 0.6) {   // 入った瞬間：白い閃き → 穴の色
         // 0〜0.06 秒は白、そのあと濃い穴の色が強く残り（0.5 秒で状態の明るさへ）
@@ -570,6 +580,30 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
     for (let j = 0; j < 7; j++) {   // 柱：入った穴の閃きのにじみだけ（ふだんは消灯）
       const w = Math.max(flashOf[j], flashOf[Math.min(6, j + 1)]) * HOLE_HIT * 0.25;
       U.uPil.value[j].set(w, w, w);
+    }
+    if (JPHL && getMeter) {   // JPチャンス中の強調（上の穴の灯を後から上書き）
+      const jm = getMeter(), on = !!jm && jm.targets.length > 0;
+      const dtc = Math.min(0.1, Math.max(0, clock - hlClock)); hlClock = clock;
+      if (on) { for (let i = 0; i < 7; i++) hlMask[i] = jm.targets.includes(i + 1) ? 1 : 0; hlK = Math.min(1, hlK + dtc / 0.2); }
+      else if (hlK > 0) hlK = Math.max(0, hlK - dtc / 0.35);
+      if (pendingSeal.length) { for (const i of pendingSeal) if (on && hlMask[i]) sealAt[i] = clock; pendingSeal.length = 0; }
+      if (hlK > 0) {
+        const hz = on && jm.stage !== 'intro' ? 4.4 : 2.4, ph = 0.5 + 0.5 * Math.sin(2 * Math.PI * hz * clock), s = ph * ph * (3 - 2 * ph);   // 速い脈動（なめらかな山）
+        const gain = HOLE_BASE * (1.3 + 1.9 * s) * hlK;                                                                                       // 暗い谷でも通常の灯より明るい
+        const dim = 1 - 0.78 * hlK;
+        for (let i = 0; i < 7; i++) {
+          const v = U.uHole.value[i];
+          if (hlMask[i]) {
+            let gx = gain, gy = gain * (0.68 + 0.27 * s), gz = gain * (0.10 + 0.5 * s * s);   // 金（谷）→ 白金（山）
+            const d = clock - sealAt[i];
+            if (d >= 0 && d < 0.9) { const k = Math.exp(-d / 0.3), w = Math.exp(-d / 0.05); gx += HOLE_HIT * (0.5 * k + 0.5 * w); gy += HOLE_HIT * (0.42 * k + 0.55 * w); gz += HOLE_HIT * (0.18 * k + 0.55 * w); }   // 入った瞬間：白→金の強い閃光
+            v.set(Math.max(v.x * (1 - hlK), gx), Math.max(v.y * (1 - hlK), gy), Math.max(v.z * (1 - hlK), gz));
+            // 柱：当たりの穴の両脇の縁もにじませる
+            if (i > 0) { const p = U.uPil.value[i - 1]; p.set(p.x + gx * 0.2, p.y + gy * 0.17, p.z + gz * 0.1); }
+            const p2 = U.uPil.value[i]; p2.set(p2.x + gx * 0.2, p2.y + gy * 0.17, p2.z + gz * 0.1);
+          } else v.set(v.x * dim, v.y * dim, v.z * dim);
+        }
+      }
     }
     // 得点表示板：7 セグ（setCabinet の桁）とメーター（演出の seg.meter）
     for (let i = 0; i < 28; i++) U.uSeg.value[i] = digits[i] * (F.m3?.displayGain ?? A);

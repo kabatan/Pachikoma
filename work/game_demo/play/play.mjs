@@ -184,7 +184,7 @@ if (!q.has('nofx')) {
   if(lcd?.production) await (await import('./lcd_surface/choice_surface_v20_20261029.mjs')).attachChoiceSurface(lcd,{choiceImageFactory,getState:()=>({phase:ctrl.game.chainAnnouncing?'ChainAnnounce':ctrl.game.phase}),controller:ctrl,canvas:document.getElementById('c'),onInput:app.onInput,unlock:()=>app.audio.unlock()});
   if(lcd?.production && ctrl.game.rules.RuleVariant === 'H_20261029') await (await import('./lcd_surface/rules_h_20261029.mjs')).attachRulesH(lcd, { controller: ctrl, style: q.get('meter') ?? undefined, hint: q.get('hint') === '0' ? null : Object.fromEntries([...q].filter(([k]) => k.startsWith('hint_')).map(([k, v]) => [k.slice(5), Number.isNaN(+v) ? v : +v])) });   // 新ルールH(連打メーター・ボタンで止めるルーレット)の液晶。?rules=h のときだけ
   if(M3 && lcd?.production && q.get('cabinetlights')!=='off') await (await import('../../effects/cabinet_light_script/cabinet_light_script_20261029.mjs')).attachCabinetLightScript(lcd,{getLamps:()=>ctrl.game.lamps,getState:()=>{const g=ctrl.game,p=g.phase;lightState.secondsLeft=g.secondsLeft;lightState.playing=p==='Ready'||p==='Flight'||p==='Effect'||p==='Meter'||p==='Roulette';return lightState;}});
-  if(lcd?.production) (await import(q.get('timer')==='v1030'?'./lcd_surface/timer_display_20261030.mjs':'./lcd_surface/timer_display_20261029.mjs')).attachTimerDisplay(lcd,{getState:()=>({phase:ctrl.game.phase,secondsLeft:ctrl.game.secondsLeft,offerLeft:ctrl.game.offerLeft,howto:!!ctrl.howto})});
+  if(lcd?.production) (await import(q.get('timer')==='old'?'./lcd_surface/timer_display_20261029.mjs':'./lcd_surface/timer_display_20261030.mjs')).attachTimerDisplay(lcd,{getState:()=>({phase:ctrl.game.phase,secondsLeft:ctrl.game.secondsLeft,offerLeft:ctrl.game.offerLeft,howto:!!ctrl.howto})});
   if(lcd?.production) await (await import('./lcd_surface/timeup_surface_20261029.mjs')).attachTimeupSurface(lcd,{controller:ctrl,canvas:document.getElementById('c'),onInput:app.onInput,unlock:()=>app.audio.unlock()});
   if(lcd?.timeupSurface)document.getElementById('g-credit-panel')?.setAttribute('data-lcd','1');   // 液晶が追加画面を出すのでHTMLの箱は隠す
   // 新しいJP尺の音も起動時に作り、着地のフレームで長い音声バッファを生成しない。
@@ -202,7 +202,7 @@ if (!q.has('nofx')) {
   if (!q.has('oldui')) app.overlay.setBare(true);   // 旧UI(上の帯・持ち玉・口の番号・キー表示・待機/時間切れ/結果の画面)は出さない。液晶と7セグが正式。?oldui で旧表示(デバッグ用)
 }
 let m3 = null;
-if (M3) { m3 = await (await import('./m3/m3_cabinet.mjs')).installM3Cabinet({ hr, fxApi, presenter, pa, q, getLamps: () => ctrl.game.lamps, getPrize: () => runtime.getPrize(), prizeNames: app.rules?.PrizeNames, ownedInitialEnvironment: M3 && !q.has('pack') ? hr.env : null }); pack.info.cabinet = { name: 'm3', ...m3.info }; window.__m3 = m3; }
+if (M3) { m3 = await (await import('./m3/m3_cabinet.mjs')).installM3Cabinet({ hr, fxApi, presenter, pa, q, getLamps: () => ctrl.game.lamps, getMeter: () => ctrl.game.meter ?? null, onMeterLand: (fn) => ctrl.onAction((act) => { if (act === 'meterLand' && ctrl.lastGameEvent?.hit) fn(ctrl.lastGameEvent.lane); }), getPrize: () => runtime.getPrize(), prizeNames: app.rules?.PrizeNames, ownedInitialEnvironment: M3 && !q.has('pack') ? hr.env : null }); pack.info.cabinet = { name: 'm3', ...m3.info }; window.__m3 = m3; }
 // 固定筐体の基底＋低解像度照明を合成。液晶は直接読み、球の輪郭は等倍/MSAA4。?prebake=0 で従来経路。
 if (M3 && fxApi && !q.has('pack') && !q.has('fxjs') && q.get('prebake') !== '0') {
   try { window.__prebakeRelight = await (await import('./m3/prebake_relight_1029.mjs')).installPrebakeRelight(hr, { m3, getPlate: () => fxApi.plate }); }
