@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>パソコンの音を録音(劣化なし)</title>
+<style>
+  body { font: 15px/1.7 system-ui, sans-serif; background: #12131a; color: #e8e8f0; margin: 0; padding: 16px; max-width: 760px; }
+  h1 { font-size: 18px; } h2 { font-size: 14px; color: #9db; margin: 22px 0 6px; }
+  button { font: inherit; padding: 9px 18px; margin: 4px 6px 4px 0; border: 1px solid #556; border-radius: 6px; background: #232638; color: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { background: #343a58; } button:disabled { opacity: .4; cursor: default; }
+  button.rec { background: #7a2430; border-color: #b04050; }
+  .meter { height: 18px; background: #232638; border-radius: 4px; overflow: hidden; margin: 6px 0; } .meter > div { height: 100%; width: 0; background: #4a9; transition: width .05s; }
+  .warn { color: #fc8; } .ok { color: #8d9; } small { color: #99a; } ol { padding-left: 20px; } code { background: #232638; padding: 1px 5px; border-radius: 3px; }
+</style>
+<h1>パソコンの音を録音(スピーカーもマイクも通さない)</h1>
+<p>パソコンの内部で音を取り込むので、スマホで録った時のような、低音の欠落・雑音・スピーカーの色付けが入りません。<br>
+<small>ご自身が使用してよい曲に使ってください。録音した音はこのページ内だけで処理され、どこにも送信されません。</small></p>
+
+<h2>手順</h2>
+<ol>
+  <li>元の曲を流せる状態にしておく(別のタブやアプリで、まだ再生しない)。</li>
+  <li>下の「共有を開始」を押し、<b>画面全体</b>(または曲を流すタブ)を選び、<b>「システムの音声を共有」(タブなら「タブの音声を共有」)にチェック</b>を入れて共有する。</li>
+  <li>曲を再生して、下のレベルメーターが振れること(ピークが-6〜-1dB付近)を確認する。割れる(赤字)なら、パソコン側の音量を下げる。</li>
+  <li>曲の頭からもう一度再生し直して、「録音を開始」→曲が終わったら「停止して保存」。曲の前後の無音は残してよい。</li>
+  <li>保存された <code>normal_clean.wav</code> を、リポジトリの <code>work\audio\bgm\user\</code> に置く。</li>
+</ol>
+
+<h2>録音</h2>
+<button id="share">① 共有を開始</button>
+<button id="start" class="rec" disabled>② 録音を開始</button>
+<button id="stop" disabled>③ 停止して保存</button>
+<div class="meter"><div id="bar"></div></div>
+<div id="status">待機中</div>
+<audio id="check" controls style="width:100%;margin-top:10px;display:none"></audio>
+<p><button id="selftest" hidden>自己テスト(合成音で録音の経路を確認)</button></p>
+
+<script>
+const $ = id => document.getElementById(id), status = $('status');
+let ctx = null, stream = null, proc = null, chunks = [], recording = false, rms = 0, peak = 0, clipped = 0, recPeak = 0, recClip = 0, count = 0;
+const db = v => v > 1e-6 ? (20 * Math.log10(v)).toFixed(1) : '-∞';
+
+async function attach(s) {
+  stream = s;
+  const tracks = s.getAudioTracks();
+  if (!tracks.length) { s.getTracks().forEach(t => t.stop()); status.innerHTML = '<span class="warn">音声が共有されていません。もう一度「共有を開始」を押し、「システムの音声を共有」(タブなら「タブの音声を共有」)にチェックを入れてください。</span>'; return false; }
+  ctx = new AudioContext({ sampleRate: 48000 });
+  const src = ctx.createMediaStreamSource(new MediaStream(tracks));
+  proc = ctx.createScriptProcessor(4096, 2, 2);
+  proc.onaudioprocess = e => {
+    const l = e.inputBuffer.getChannelData(0), r = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : l;
+    let p = 0, s2 = 0, c = 0; for (let i = 0; i < l.length; i++) { const a = Math.max(Math.abs(l[i]), Math.abs(r[i])); if (a > p) p = a; s2 += l[i] * l[i]; if (a >= .999) c++; }
+    rms = Math.sqrt(s2 / l.length); peak = p;
+    $('bar').style.width = Math.min(100, Math.max(0, (20 * Math.log10(p + 1e-6) + 60) / 60 * 100)) + '%'; $('bar').style.background = p >= .999 ? '#c44' : p > .7 ? '#ca4' : '#4a9';
+    if (recording) { chunks.push([l.slice(), r.slice()]); count += l.length; recPeak = Math.max(recPeak, p); recClip += c; status.innerHTML = `録音中 ${(count / ctx.sampleRate).toFixed(1)} 秒 / ピーク ${db(recPeak)} dB` + (recClip ? ` <span class="warn">(割れ ${recClip} サンプル)</span>` : ''); }
+    else status.textContent = `共有中(未録音)。現在のピーク ${db(p)} dB`;
+  };
+  const mute = ctx.createGain(); mute.gain.value = 0; src.connect(proc); proc.connect(mute).connect(ctx.destination);
+  tracks[0].addEventListener('ended', () => { if (recording) finish(); });
+  $('start').disabled = false; $('share').disabled = true;
+  return true;
+}
+$('share').onclick = async () => {
+  try {
+    const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 1 }, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, systemAudio: 'include' });
+    await attach(s);
+  } catch (e) { status.innerHTML = '<span class="warn">共有できませんでした: ' + e.message + '(Chrome / Edge で開いてください)</span>'; }
+};
+$('start').onclick = () => { chunks = []; count = 0; recPeak = 0; recClip = 0; recording = true; $('start').disabled = true; $('stop').disabled = false; };
+$('stop').onclick = () => finish();
+
+function wav24(chs, sr) {
+  const n = chs[0].length, ch = chs.length, data = new Uint8Array(44 + n * ch * 3), dv = new DataView(data.buffer);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + n * ch * 3, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, ch, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * ch * 3, true); dv.setUint16(32, ch * 3, true); dv.setUint16(34, 24, true); w(36, 'data'); dv.setUint32(40, n * ch * 3, true);
+  let o = 44; for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { const v = Math.round(Math.max(-1, Math.min(1, chs[c][i])) * 8388607); data[o++] = v & 255; data[o++] = (v >> 8) & 255; data[o++] = (v >> 16) & 255; }
+  return new Blob([data], { type: 'audio/wav' });
+}
+function finish() {
+  if (!recording && !chunks.length) return; recording = false;
+  const n = chunks.reduce((s, c) => s + c[0].length, 0), L = new Float32Array(n), R = new Float32Array(n); let o = 0; for (const [l, r] of chunks) { L.set(l, o); R.set(r, o); o += l.length; }
+  const sr = ctx.sampleRate, blob = wav24([L, R], sr), url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'normal_clean.wav'; document.body.append(a); a.click(); a.remove();
+  stream?.getTracks().forEach(t => t.stop()); proc?.disconnect();
+  status.innerHTML = `<span class="ok">保存しました: normal_clean.wav(${(n / sr).toFixed(1)}秒、ピーク ${db(recPeak)} dB、24bit・48kHz・ステレオ、${(blob.size / 1e6).toFixed(1)}MB)</span>` + (recClip ? ` <span class="warn">割れ ${recClip} サンプル: パソコンの音量を下げて撮り直すと良いです。</span>` : '') + (recPeak < .05 ? ' <span class="warn">音がほとんど入っていません。共有時に音声へチェックを入れたか確認してください。</span>' : '');
+  $('check').src = url; $('check').style.display = 'block'; $('share').disabled = false; $('start').disabled = true; $('stop').disabled = true;
+}
+// 自己テスト: 合成音をMediaStreamにして同じ経路で録音する(?selftest=1 で表示)
+if (new URLSearchParams(location.search).has('selftest')) {
+  $('selftest').hidden = false;
+  $('selftest').onclick = async () => {
+    const tctx = new AudioContext({ sampleRate: 48000 }), osc = tctx.createOscillator(), g = tctx.createGain(), dest = tctx.createMediaStreamDestination();
+    osc.frequency.value = 440; g.gain.value = .5; osc.connect(g).connect(dest); osc.start(); window.__testCtx = tctx;
+    if (await attach(dest.stream)) { $('start').click(); setTimeout(() => $('stop').click(), 1500); }
+  };
+}
+</script>

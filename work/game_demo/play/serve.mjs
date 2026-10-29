@@ -15,7 +15,7 @@ const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url))); const LO
 const DOCS = resolve(ROOT, '../docs');
 await prepareRelease(resolve(ROOT,'..'));
 const PORT = Number(process.argv[2] ?? 8792);
-const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.json': 'application/json', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.ttf': 'font/ttf', '.png': 'image/png', '.mp4': 'video/mp4', '.webm': 'video/webm', '.wasm': 'application/wasm', '.obj': 'text/plain; charset=utf-8', '.npy': 'application/octet-stream' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.json': 'application/json', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.ttf': 'font/ttf', '.png': 'image/png', '.mp4': 'video/mp4', '.webm': 'video/webm', '.wasm': 'application/wasm', '.obj': 'text/plain; charset=utf-8', '.npy': 'application/octet-stream' };
 const mp4Pacer=createMp4Pacer({audit:process.env.MP4_PACING_AUDIT==='1'});
 process.on('message',async m=>{if(m?.kind==='pacing-snapshot')process.send?.({kind:'pacing-snapshot',id:m.id,snapshot:mp4Pacer.snapshot()});if(m?.kind==='pacing-close')process.send?.({kind:'pacing-close',id:m.id,snapshot:await mp4Pacer.close()});});
 const server = createServer(async (req, res) => {

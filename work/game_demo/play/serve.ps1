@@ -9,7 +9,7 @@ $work = Join-Path $repo 'work'
 & (Join-Path $here 'prepare_release.ps1')
 $types = @{
   '.html'='text/html; charset=utf-8'; '.mjs'='text/javascript'; '.js'='text/javascript'; '.json'='application/json'
-  '.wav'='audio/wav'; '.ogg'='audio/ogg'; '.mp3'='audio/mpeg'; '.ttf'='font/ttf'; '.woff2'='font/woff2'
+  '.wav'='audio/wav'; '.ogg'='audio/ogg'; '.mp3'='audio/mpeg'; '.m4a'='audio/mp4'; '.ttf'='font/ttf'; '.woff2'='font/woff2'
   '.png'='image/png'; '.jpg'='image/jpeg'; '.jpeg'='image/jpeg'; '.webp'='image/webp'; '.svg'='image/svg+xml'
   '.wasm'='application/wasm'; '.obj'='text/plain; charset=utf-8'; '.css'='text/css'; '.webm'='video/webm'; '.mp4'='video/mp4'
 }

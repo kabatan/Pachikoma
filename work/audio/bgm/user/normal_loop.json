@@ -1,0 +1,16 @@
+{
+ "source": "normal_clean.wav(パソコンの内部で録音した劣化のない音源。もとの曲はユーザーの作品。スマホ録音の normal.m4a は旧版)",
+ "file": "normal_loop.ogg",
+ "codec": "Ogg Opus 256kbps stereo",
+ "sample_rate": 48000,
+ "bpm": 160.18,
+ "time_signature": "4/4",
+ "bar0_sec_in_source": 4.9548,
+ "key": "F major(またはA minor)系と推定",
+ "rms_dbfs_loop": -22.5,
+ "loop_start_samples": 717021,
+ "loop_end_samples": 4169137,
+ "loop_bars": 48,
+ "structure": "曲の区切りは10・26・42・58・74小節(16小節周期)。導入は先頭〜10小節、ループは10〜58小節",
+ "note": "先頭は音源の5.0秒を切り(その前は無音)、10小節(約15秒)の導入のあと48小節(約72秒)をループ。loop_end直前はloop_start直前へ0.75秒クロスフェード済み。曲には触れず、音量(-22.5dB RMS)とループだけ整えた。加工手順は work/audio/tools/build_bgm.mjs の buildBgmClean"
+}

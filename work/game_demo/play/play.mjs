@@ -110,6 +110,8 @@ if (q.get('audio') !== 'legacy') {
     });
     const { bindBgmControls } = await import('../../audio/runtime/bgm_controls.mjs');
     bindBgmControls(r2Audio.engine, document.getElementById('audio-panel'));
+    // 通常演出の録音BGM・実機風SE・玉の音。?pachi=0で従来の音
+    if (q.get('pachi') !== '0') { try { window.__pachiSound = await (await import('../../audio/runtime/pachi_sound.mjs')).installPachiSound(r2Audio.engine); } catch (error) { console.error('[pachi-sound]', error); } }
     const { VOICE_CREDITS } = await import('../../audio/runtime/voice_catalog.mjs');
     const voiceCredit = VOICE_CREDITS[r2Audio.engine.voiceProvider];
     document.getElementById('audio-credits').hidden = r2Audio.engine.voiceProvider === 'off' || !voiceCredit;
