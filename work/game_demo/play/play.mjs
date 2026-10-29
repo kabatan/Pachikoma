@@ -190,6 +190,11 @@ if (!q.has('nofx')) {
 }
 let m3 = null;
 if (M3) { m3 = await (await import('./m3/m3_cabinet.mjs')).installM3Cabinet({ hr, fxApi, presenter, pa, q, getLamps: () => ctrl.game.lamps, getPrize: () => runtime.getPrize(), prizeNames: app.rules?.PrizeNames, ownedInitialEnvironment: M3 && !q.has('pack') ? hr.env : null }); pack.info.cabinet = { name: 'm3', ...m3.info }; window.__m3 = m3; }
+// 固定筐体の基底＋低解像度照明を合成。液晶は直接読み、球の輪郭は等倍/MSAA4。?prebake=0 で従来経路。
+if (M3 && fxApi && !q.has('pack') && !q.has('fxjs') && q.get('prebake') !== '0') {
+  try { window.__prebakeRelight = await (await import('./m3/prebake_relight_1029.mjs')).installPrebakeRelight(hr, { m3, getPlate: () => fxApi.plate }); }
+  catch (error) { window.__prebakeError = error.message; console.warn('[prebake fallback]', error); }
+}
 // 初回だけ重い処理(画像デコード・GPUアップロード・シェーダ)を遊技の前に済ませる。?prewarm=0 で無効
 if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi, rules: app.rules });
 window.__r2Audio = r2Audio;
