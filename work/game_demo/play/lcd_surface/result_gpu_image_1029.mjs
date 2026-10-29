@@ -9,6 +9,8 @@ function withRendererState(THREE,r,fn){
 // Synchronous image contract shared with normal/palace. Exported for CPU mocks.
 export function createResultImageBackend({THREE,renderer,core,onFailure=()=>{},boundaryGpu=null}){
  let disposed=false,failed=false,cachedRevision=null,cachedVisible=null,cachedPanel=null,visibleCtx=null,panelCtx=null,hud=null,hudTexture=null,flash={alpha:0,color:'#fff'};
+ const beforeOverwrite=new Set();let notifyingOverwrite=false;
+ const notifyBeforeOverwrite=next=>{if(notifyingOverwrite)return;notifyingOverwrite=true;try{for(const notify of [...beforeOverwrite])notify(next);}finally{notifyingOverwrite=false;}};
  const boundaryToken={};let boundaryOwner=null,completedBoundary=null,boundaryHasRendered=false;const boundaryPrototype={captures:0,rejected:0,lastUnsupported:null};
  const stats={kind:'result_compositor_injected',composites:0,boundaryMaterializations:0,boundaryReadMs:0,boundaryReadMaxMs:0,failures:[]},boundary={reads:0,hits:0,failures:0};
  const output=new THREE.WebGLRenderTarget(PW,PH,{format:THREE.RGBAFormat,type:THREE.UnsignedByteType,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,generateMipmaps:false,depthBuffer:false,stencilBuffer:false,samples:0,colorSpace:THREE.NoColorSpace});
@@ -20,7 +22,7 @@ export function createResultImageBackend({THREE,renderer,core,onFailure=()=>{},b
   fragmentShader:'varying vec2 q;uniform sampler2D raw,hud;uniform float hudOn,flashA;uniform vec3 flashRGB;void main(){vec2 p=vec2(q.x*1240.,(1.-q.y)*1510.);vec2 s=(p-vec2(34.,28.))/vec2(1152.,1268.);vec3 c=vec3(0.);if(all(greaterThanEqual(s,vec2(0.)))&&all(lessThan(s,vec2(1.)))){c=texture2D(raw,vec2(s.x,1.-s.y)).rgb;c=mix(c,flashRGB,flashA);}vec2 h=(p-vec2(866.,156.))/vec2(304.,308.);if(hudOn>.5&&all(greaterThanEqual(h,vec2(0.)))&&all(lessThan(h,vec2(1.)))){vec4 t=texture2D(hud,vec2(h.x,1.-h.y));c=mix(c,t.rgb,t.a);}gl_FragColor=vec4(c,1.);}'});
  const geometry=new THREE.PlaneGeometry(2,2),scene=new THREE.Scene(),camera=new THREE.Camera(),mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;scene.add(mesh);
  const sentinel={width:W,height:H,readyState:4,gpuResultImage:null,get resultRevision(){return core.surface.revision;}};
- const fail=(error,reason)=>{const message=String(error?.message??error);if(!failed){failed=true;stats.failures.push({reason,message});onFailure(error,reason);}return message;};
+ const fail=(error,reason)=>{const message=String(error?.message??error);if(!failed){notifyBeforeOverwrite(null);failed=true;stats.failures.push({reason,message});onFailure(error,reason);}return message;};
  function nativeImage(reason){
   const revision=core.surface.revision;if(!revision||disposed)return cachedVisible;
   if(cachedRevision===revision){boundary.hits++;return cachedVisible;}
@@ -37,7 +39,13 @@ export function createResultImageBackend({THREE,renderer,core,onFailure=()=>{},b
  function drawCleanBoundary(target){const old={raw:uniforms.raw.value,hud:uniforms.hud.value,hudOn:uniforms.hudOn.value,flashA:uniforms.flashA.value};try{uniforms.raw.value=core.surface.texture;uniforms.hud.value=dummy;uniforms.hudOn.value=0;uniforms.flashA.value=0;renderer.autoClear=false;renderer.setRenderTarget(target);renderer.setViewport(0,0,PW,PH);renderer.setScissorTest(false);renderer.render(scene,camera);}finally{uniforms.raw.value=old.raw;uniforms.hud.value=old.hud;uniforms.hudOn.value=old.hudOn;uniforms.flashA.value=old.flashA;}}
  const api={
   get canvas(){return failed?cachedVisible:core.surface.revision?sentinel:null;},surface:core.surface,
-  render(...args){if(disposed)throw Error('Result GPU image disposed');if(failed)return cachedVisible;try{const result=core.render(...args);if(result){boundaryHasRendered=true;completedBoundary=boundaryOwner?{ownerId:'result',...boundaryOwner,kind:args[0],frame:Math.min(args[0]==='confirm'?213:149,Math.max(args[0]==='confirm'?84:64,args[1])),value:args[2],chain:args[3],revision:core.surface.revision}:null;}return result?sentinel:null;}catch(error){fail(error,'render');nativeImage('render-failed-capture');return cachedVisible;}},
+  render(...args){if(disposed)throw Error('Result GPU image disposed');if(failed)return cachedVisible;
+   const first=args[0]==='confirm'?84:64,last=args[0]==='confirm'?213:149,f=Math.min(last,Math.max(first,args[1]));
+   if(completedBoundary&&args[1]>=first&&core.ready(args[0],f)){
+    const next={ownerId:'result',...boundaryOwner,kind:args[0],frame:f,value:args[2],chain:args[3],revision:core.surface.revision};
+    if(!['generation','serial','kind','frame','value','chain'].every(k=>next[k]===completedBoundary[k])||completedBoundary.revision!==core.surface.revision){next.revision=core.surface.revision+1;notifyBeforeOverwrite(next);}
+   }
+   try{const result=core.render(...args);if(result){boundaryHasRendered=true;completedBoundary=boundaryOwner?{ownerId:'result',...boundaryOwner,kind:args[0],frame:Math.min(args[0]==='confirm'?213:149,Math.max(args[0]==='confirm'?84:64,args[1])),value:args[2],chain:args[3],revision:core.surface.revision}:null;}return result?sentinel:null;}catch(error){fail(error,'render');nativeImage('render-failed-capture');return cachedVisible;}},
   setFlash(alpha=0,color='miss'){flash={alpha:Math.max(0,Math.min(1,alpha||0)),color:color==='hit'?'#fff':'#736099'};},
   setHudCanvas(canvas){hud=canvas;if(canvas){if(!hudTexture){hudTexture=new THREE.CanvasTexture(canvas);hudTexture.colorSpace=THREE.NoColorSpace;hudTexture.generateMipmaps=false;hudTexture.minFilter=hudTexture.magFilter=THREE.LinearFilter;}hudTexture.needsUpdate=true;}},
   getComposedPanelContext(){return renderer.getContext();},
@@ -48,6 +56,7 @@ export function createResultImageBackend({THREE,renderer,core,onFailure=()=>{},b
   },
   setBoundaryOwner({generation,serial,dim=false}={}){if(disposed)throw Error('Result GPU image disposed');if(!Number.isInteger(generation)||generation<0||!Number.isInteger(serial)||serial<0)throw Error('Result boundary generation/serial required');boundaryOwner={generation,serial,dim:!!dim};},
   boundarySource,
+  addBeforeBoundaryOverwrite(notify){if(disposed)throw Error('Result GPU image disposed');if(typeof notify!=='function')throw TypeError('Result overwrite listener required');beforeOverwrite.add(notify);return ()=>beforeOverwrite.delete(notify);},
   warmBoundary(){if(disposed||boundaryHasRendered)throw Error('Result boundary warm is boot-only');if(!boundaryGpu)return {skipped:true,reason:'boundary-helper-not-injected'};return boundaryGpu.warm({drawClean:drawCleanBoundary});},
   captureCleanPanel({expectedRevision,expectedGeneration,reason='result-exit'}={}){if(disposed)return null;const stamp=boundarySource();if(!boundaryGpu||!stamp||stamp.flashAlpha!==0||stamp.dim){boundaryPrototype.rejected++;boundaryPrototype.lastUnsupported=!boundaryGpu?'boundary-helper-not-injected':!stamp?'no-current-completed-stamp':'flash-or-dim';return null;}const lease=boundaryGpu.capture({producerContext:renderer.getContext(),producerToken:boundaryToken,stamp:{...stamp,reason},expectedRevision,expectedGeneration,drawClean:target=>{if(core.surface.revision!==stamp.revision)throw Error('Result revision changed before boundary copy');drawCleanBoundary(target);if(core.surface.revision!==stamp.revision)throw Error('Result revision changed during boundary copy');}});if(lease){boundaryPrototype.captures++;boundaryPrototype.lastUnsupported=null;}else{boundaryPrototype.rejected++;boundaryPrototype.lastUnsupported=boundaryGpu.diagnostics().lastUnsupported??'capture-failed';}return lease;},
   rawCanvas(reason='result-raw-capture'){return nativeImage(reason);},
@@ -59,7 +68,7 @@ export function createResultImageBackend({THREE,renderer,core,onFailure=()=>{},b
   },
   fail,
   diagnostics(){return {...stats,failures:stats.failures.map(f=>({...f})),revision:core.surface.revision,failed,disposed,boundary:{...boundary,revision:cachedRevision},boundaryPrototype:{...boundaryPrototype,completed:completedBoundary?{...completedBoundary}:null,source:boundarySource()},segment:core.segmentDiagnostics(),extraContexts:0};},
-  dispose(){if(disposed)return;disposed=true;output.dispose();material.dispose();geometry.dispose();dummy.dispose();hudTexture?.dispose();core.dispose();}
+  dispose(){if(disposed)return;notifyBeforeOverwrite(null);disposed=true;beforeOverwrite.clear();output.dispose();material.dispose();geometry.dispose();dummy.dispose();hudTexture?.dispose();core.dispose();}
  };
  sentinel.gpuResultImage=api;return api;
 }

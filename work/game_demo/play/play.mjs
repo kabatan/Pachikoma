@@ -12,6 +12,7 @@ import { createRuntime } from './runtime.mjs';
 import { EffectsBus } from './effects_bus.mjs';
 import { loadPlayConfig, loadPlayRules } from './config_h_20261029.mjs';   // 既定は G の読み込みに渡す。?rules=h のときだけ H の設定(config_h_20261029.json)
 import { prewarm } from './prewarm.mjs';
+import { createFrameFaultBoundary, installLcdRecoveryBoundary } from './frame_fault_boundary_1030.mjs';
 import { createLauncherBody } from './launcher_body.mjs';
 import { CabinetSerial } from './cabinet_serial_r3_20261029.mjs';
 import { createLedStrip } from './led_strip_20261029.mjs';
@@ -183,6 +184,7 @@ if (!q.has('nofx')) {
     for(const duration of durations){const plan=winPlan({id:'jp',data:{duration}},engine.winTiming),key='jp:'+plan.duration;if(!engine.winCache.has(key))engine.winCache.set(key,createWinSound(engine.ctx,engine.buffers,engine.winTiming,plan));}
   }
   if (lcd && M3 && !q.has('m3lcdfit')) q.set('m3lcdfit', 'panel');
+  if (lcd?.production) installLcdRecoveryBoundary(lcd);
   if (lcd) window.__lcdSurface = lcd;
   if (lcd?.production && r2Audio && q.get('afterjp') !== '0') { try { window.__afterJp = await (await import('../../audio/runtime/after_jp_sound_1029.mjs')).installAfterJpSound(r2Audio.engine, { lcd, controller: ctrl }); } catch (error) { console.error('[after-jp]', error); } }   // JP後(継続・確定・時間切れ・最終リザルト)の音。?afterjp=0 で無効
   fxApi = await connectPlayEffects({ hr, bus: effects, getSnapshot: () => effects.contextSnapshot(), lightingSources: pack.lighting.sources, rules: app.rules, lcdGain: Number(q.get('lcdgain') ?? 1), tray: q.has('notray') ? null : { ...runtime, get jpHold(){return runtime.jpHold;}, displayWallet: () => presenter.displayWallet() }, lcd, ownedFrontEarlyClip: M3, ownedBackEarlyClip: M3, ownedFrameSnapshot: M3 && !q.has('pack') && !q.has('fxjs') });
@@ -213,34 +215,60 @@ function draw() {
   if (fxApi && !app.overlay.bare) app.overlay.screen.style.display = ctrl.howto ? 'none' : '';   // ルール説明(howto)中は待機画面のDOMを消して、液晶の説明を見せる
   return s;
 }
+let frameStage = 'runtime';
 function frame(dt, render = true) {
+  frameStage = 'runtime';
   const t0 = performance.now(), timing = runtime.advance(dt);
+  frameStage = 'effects';
   if (fxApi) fxApi.frame(dt);
   m3Clock += dt;
   if (ctrl.phase === 'Fault') r2Audio?.engine.stopAll();
+  frameStage = 'draw';
   let s = null; if (render) s = draw();
   window.__play.lastTiming = { ...timing, totalMs: performance.now() - t0 };
   return s;
 }
 let last = null, frames = 0, acc = 0, paused = false;
+const loopState = {callbacks:0,completedFrames:0,recovered:0,faulted:false};
+const frameFaultBoundary = createFrameFaultBoundary({
+  recover(error) {
+    const lcd=window.__lcdSurface;
+    if (!lcd?.displayRecoveryActive && !lcd?.recoverDisplayError?.(error,{force:true})) return false;
+    // Retry display only: runtime.advance and physical events must run at most once.
+    if (fxApi) fxApi.frame(0); draw(); return true;
+  },
+  onRecovered(error,stage) { loopState.recovered++; window.__displayRecovery={stage,message:String(error?.message??error)}; },
+  onFault(error,stage,state) {
+    paused=true;last=null;loopState.faulted=true;try{r2Audio?.engine.stopAll();}catch{}
+    window.__renderFault={stage,message:String(error?.message??error),state};
+    const fault=document.createElement('div');fault.id='render-fault';fault.setAttribute('role','alert');
+    fault.textContent='表示エラーのため停止しました。係員を呼んでください。';
+    fault.style.cssText='position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:#102450;color:white;font:700 24px sans-serif;padding:32px;text-align:center';
+    document.body.append(fault);console.error('[render-fault]',stage,error);
+  },
+});
 const hud = document.getElementById('hud'); if (q.has('debug')) hud.style.display = 'block';
 const debugConfig = document.getElementById('config-debug');
 debugConfig.textContent = `${config.name}\n釘 ${pa.board.layout.pins.length}本 / σx ${config.jitter.x_mm} mm / σvx ${config.jitter.vx_pct}% / σvy ${config.jitter.vy_pct}%`;
 debugConfig.hidden = !q.has('debug');
 const loop = (now) => {
+  loopState.callbacks++;
+  try {
   if (last === null) last = now;
   const elapsed = (now - last) / 1000; last = now;
   if (!paused && !document.hidden) {
     // 追い付けない時間は規則・物理・光を一緒に停止する。最大24step。
     if (elapsed > .05) app.log.write('clock_pause', { tick: pa.tick, droppedSeconds: elapsed - .05 });
-    const s = frame(Math.min(.05, elapsed)); acc += window.__play.lastTiming.totalMs; frames++;
+    const s = frame(Math.min(.05, elapsed)); acc += window.__play.lastTiming.totalMs; frames++;loopState.completedFrames++;
     if (frames % 30 === 0) { hud.textContent = `CPU ${(acc / 30).toFixed(2)} ms  balls ${s.count}\n${JSON.stringify(s.ledger)}`; acc = 0; }
   }
-  requestAnimationFrame(loop);
+  } catch(error) { frameFaultBoundary.handle(error,frameStage); }
+  finally { requestAnimationFrame(loop); }
 };
 window.__play = { app, pa, hr, stats, fxApi, runtime, cabinet, awardToTray: runtime.awardToTray, releaseAwards: runtime.releaseAwards, setAwardHold: runtime.setAwardHold, trayStatus: runtime.trayStatus, config: pa.playConfig, pack: pack.info, frame, draw, lastTiming: null,
   tick: (seconds, dt = 1 / 60) => { let left = seconds; while (left > 1e-10) { frame(Math.min(left, dt), false); left -= dt; } return draw(); },
-  pause: (value) => { paused = value; last = null; },
+  loopDiagnostics: () => ({...loopState,paused,boundary:frameFaultBoundary.snapshot()}),
+  pause: (value) => { paused = loopState.faulted || value; last = null; },
 };
 document.addEventListener('visibilitychange', () => { last = null; app.log.write('visibility', { tick: pa.tick, hidden: document.hidden }); });
 // 音: ブラウザは最初の操作まで鳴らせない。ボタンは見せず、最初のキー/クリックで有効にして読み込む(?oldui のときだけボタンも見せる)
