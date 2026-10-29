@@ -62,7 +62,7 @@ main.down{opacity:.3;pointer-events:none;filter:grayscale(.6)}
       <button id="allResume" class="primary">全台 再開</button>
     </div>
     <div class="row two" style="margin-top:8px">
-      <button id="allStaff" class="staff">スタッフ待ちの台に OK</button>
+      <button id="allStaff" class="staff">チケット受領・再開（待ちの全台）</button>
       <button id="allReset" class="danger">全台 リセット</button>
     </div>
   </section>
@@ -126,7 +126,7 @@ function toast(text, cls) {
   const t = $('toast'); t.textContent = text; t.className = cls || ''; t.style.display = 'block';
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = 'none'; }, cls === 'ng' ? 6000 : 3500);
 }
-const CMD_NAME = { reset: 'リセット', pause: '停止', resume: '再開', staff: 'チケット追加OK' };
+const CMD_NAME = { reset: 'リセット', pause: '停止', resume: '再開', staff: 'チケット受領・再開', staffcancel: '取消（終了）' };
 function showResult(m) {
   if (!m.results) return toast(`${CMD_NAME[m.cmd] ?? m.cmd}: ${m.error || '失敗'}`, 'ng');
   const lines = Object.entries(m.results).map(([id, r]) => `${stationName(id)}: ${r.ok ? '✓ ' : '× '}${r.msg || ''}`);
@@ -144,14 +144,14 @@ function badge(st) {
 function render() {
   if (!snap || !authed) return;
   const cards = $('cards'), stations = snap.stations;
-  cards.innerHTML = stations.map((st) => {
+  cards.innerHTML = [...stations].sort((x, y) => (y.online && !y.stale && y.state?.phase === 'StaffWait') - (x.online && !x.stale && x.state?.phase === 'StaffWait')).map((st) => {
     const s = st.state, [btxt, bcls] = badge(st), online = st.online && !st.stale, waiting = online && s?.phase === 'StaffWait';
     const paused = !!s?.paused, can = online && s && !s.loading;
     const meta = [];
     if (online && s && !s.loading) {
       if (['Ready', 'Flight', 'Effect', 'ChainChoice'].includes(s.phase) && s.secondsLeft != null) meta.push(`残り <b>${s.secondsLeft}</b> 秒`);
       if (s.phase === 'Continue' && s.offerLeft != null) meta.push(`案内あと <b>${s.offerLeft}</b> 秒`);
-      if (s.phase === 'StaffWait') meta.push(`待ち <b>${s.staffWait ?? 0}</b> 秒`);
+      if (s.phase === 'StaffWait') meta.push(`チケット待ち <b>${s.staffWait ?? 0}</b> 秒`, `受領で <b>+${s.extraSeconds ?? '?'}</b>秒 <b>+${s.extraBalls ?? '?'}</b>玉`);
       if (s.wallet != null) meta.push(`持ち玉 <b>${s.wallet}</b>`);
       if (s.earnings) meta.push(`JP獲得 <b>${s.earnings}</b>`);
       if (s.extraMax != null) meta.push(`追加 <b>${s.extraUsed}</b>/${s.extraMax}回`);
@@ -163,7 +163,8 @@ function render() {
       <div class="top"><span class="name">${esc(stationName(st.id))}${paused ? '<span class="paused-tag">停止中</span>' : ''}</span><span class="badge ${bcls}">${esc(btxt)}</span></div>
       <div class="phase ${waiting ? 'staffwait' : ''}">${esc(online || (st.online && s) ? phaseText(s) : (st.online ? '状態不明' : 'ゲームがまだつながっていません'))}</div>
       <div class="meta">${meta.join('<span style="opacity:.4">|</span>')}</div>
-      <button class="staff" data-act="staff" ${waiting ? '' : 'disabled'} style="margin-bottom:8px">チケット追加 OK</button>
+      <button class="staff" data-act="staff" ${waiting ? '' : 'disabled'} style="margin-bottom:8px;min-height:68px;font-size:20px">チケット受領・再開</button>
+      ${waiting ? '<button class="danger" data-act="staffcancel" style="margin-bottom:8px;min-height:44px;font-size:15px">取消（追加しないで終了）</button>' : ''}
       <div class="row two">
         <button data-act="${paused ? 'resume' : 'pause'}" class="${paused ? 'primary' : ''}" ${can ? '' : 'disabled'}>${paused ? '再開' : '停止'}</button>
         <button data-act="reset" class="danger" ${st.online ? '' : 'disabled'}>リセット</button>
@@ -173,7 +174,7 @@ function render() {
   const key = waits.map((st) => st.id).join(',');
   const a = $('alert');
   a.style.display = waits.length ? 'block' : 'none';
-  a.textContent = waits.length ? `スタッフ待ち: ${waits.map((st) => stationName(st.id)).join('・')}` : '';
+  a.textContent = waits.length ? `チケットを受け取ってください: ${waits.map((st) => stationName(st.id) + '（' + (st.state.staffWait ?? 0) + '秒）').join('・')}` : '';
   document.title = waits.length ? `(!) スタッフ待ち ${waits.length}台` : 'パチコマ 司令塔';
   if (key !== lastWaiting) { if (key && (!lastWaiting || key.split(',').some((id) => !lastWaiting.split(',').includes(id)))) { try { navigator.vibrate?.([200, 100, 200]); } catch { /* */ } } lastWaiting = key; }
   const anyOnline = stations.some((st) => st.online);
@@ -183,8 +184,9 @@ function render() {
 setInterval(render, 1000);
 
 // ---- 操作（リセットは確認を一段はさむ） ----
-function ask(title, body, yes) {
+function ask(title, body, yes, yesText = '実行する', noText = 'やめる', kind = 'danger') {
   $('mTitle').textContent = title; $('mBody').textContent = body; $('modal').style.display = 'flex';
+  $('mYes').textContent = yesText; $('mNo').textContent = noText; $('mYes').className = kind;
   $('mNo').onclick = () => { $('modal').style.display = 'none'; };
   $('mYes').onclick = () => { $('modal').style.display = 'none'; yes(); };
 }
@@ -193,7 +195,8 @@ $('cards').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-act]'); if (!b || b.disabled) return;
   const id = b.closest('.card').dataset.id, act = b.dataset.act, name = stationName(id);
   if (act === 'reset') ask(`${name}をリセット`, `${name}のゲームを最初からやり直します。\n遊技中の人がいないか確認してください。`, () => send('reset', [id]));
-  else if (act === 'staff') send('staff', [id]);   // 台ごとのOKは確認なし（スタッフ待ちの台だけ押せる。筐体の両ボタン長押しと同じ軽さ）
+  else if (act === 'staff') ask(`${name}：チケット受領・再開`, `${name}のお客さまからチケットを1枚受け取りましたか？\n受け取ったら「受領して再開」を押します。押すとすぐ遊技が再開します。`, () => send('staff', [id]), '受領して再開', 'まだ（戻る）', 'staff');   // 押し間違い対策: 一段の確認
+  else if (act === 'staffcancel') ask(`${name}：取消`, `${name}は追加をしないで終了にします。\nチケットを受け取っていない／お客さまがやめた場合だけ押します。`, () => send('staffcancel', [id]), '取り消して終了');
   else send(act, [id]);
 });
 $('allPause').onclick = () => send('pause', 'all');
@@ -205,7 +208,7 @@ $('allReset').onclick = () => {
 $('allStaff').onclick = () => {
   const ids = (snap?.stations ?? []).filter((st) => st.online && !st.stale && st.state?.phase === 'StaffWait').map((st) => st.id);
   if (!ids.length) return;
-  ask('スタッフ待ちの台に追加OK', `${stationLine(ids)}のチケットを、すべて確認しましたか？`, () => send('staff', ids));
+  ask('チケット受領・再開（まとめて）', `${stationLine(ids)}のチケットを、すべて受け取りましたか？`, () => send('staff', ids), '受領して再開', 'まだ（戻る）', 'staff');
 };
 connect();
 </script></body></html>

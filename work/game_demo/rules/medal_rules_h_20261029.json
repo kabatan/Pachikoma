@@ -256,7 +256,8 @@
   "DuplicateRestartScaleAfterJp": 0.42,
   "ChainContinueMinSeconds": 0,
   "ChainContinueNeedsAddAtZero": true,
-  "ChainAnnounceSeconds": 2.5,
+  "ChainAnnounceSeconds": 9.0,
+  "ChainAnnounceSecondsFirst": 9.5,
   "ChainFirstAuto": true,
   "RuleVariant": "H_20261029"
 }

@@ -168,8 +168,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       case 'chain_continue': card('もう一度！', ['光っていない穴へ！', '左のボタンで 玉をうつ'], '#ffb4dc', `${p.lamps ?? 1}灯`); break;
       case 'chain_stop': card('確定！', ['積み増しを獲得！'], '#fff2a0', `${p.banked ?? p.total ?? 0}玉`); break;
       case 'fail': card('また挑戦しよう！', [p.chain ? `最初の ${p.base ?? 0}玉 は残ります` : 'ランプを集めて もう一度！'], '#c5d9ff', p.chainLost > 0 ? `積み増し −${p.chainLost}玉` : null); break;
-      case 'timeup': card('時間です', ['追加で ＋22秒・10玉', '追加しないと 計数へ進みます'], '#ffccac'); break;
-      case 'add100': card('まだまだ！', ['続きを楽しもう！'], '#ffdb92', `＋${p.seconds ?? 22}秒`); break;
+      case 'timeup': card('時間です', [`追加で ＋${p.seconds ?? s.rules?.extraSeconds ?? ''}秒・${p.balls ?? s.rules?.extraLoanBalls ?? ''}玉`, '追加しないと 計数へ進みます'], '#ffccac'); break;
+      case 'add100': card('まだまだ！', ['続きを楽しもう！'], '#ffdb92', `＋${p.seconds ?? s.rules?.extraSeconds ?? ''}秒`); break;
       case 'finish_count': card('計数中', [p.basis === 'wallet' ? '持ち玉の数で賞が決まります' : `JPの合計 ${p.score ?? s.score ?? 0}玉`], '#b8e8ff', `${p.total ?? p.balls ?? s.balls}玉`); break;
       case 'result': card(s.prize || ['参加賞','C賞','B賞','A賞','S賞'][p.rankIndex ?? p.rank ?? 0], ['ありがとうございました！'], '#ffe198', p.basis === 'wallet' ? `持ち玉 ${p.balls ?? p.score ?? s.score ?? 0}玉` : `JP合計 ${p.score ?? s.score ?? 0}玉`); break;
       case 'reset_fallback': card('重複！', ['ランプが消えた… もう一度！'], '#ffb0ba'); break;
@@ -219,9 +219,9 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     if (id === 'ascend') return; // reset動画内の昇天を二重起動しない。
     if (id === 'launch') { launchPulses.push(clock); launchPulses = launchPulses.slice(-3); return; }
     if (id === 'start') { if(mode)bridge();mode = null; shotOn = false; return; }
-    if (['attract','title','howto','ticket','timeup','finish_count','result','add100','challenge_wait','challenge_declare','challenge_flight','jp','chain_choice','chain_announce','chain_continue','chain_stop','fail'].includes(id)) {
+    if (['attract','title','howto','ticket','timeup','timeup_call','finish_count','result','add100','challenge_wait','challenge_declare','challenge_flight','jp','chain_choice','chain_announce','chain_continue','chain_stop','fail'].includes(id)) {
       if (id === 'attract' || id === 'ticket') { variants = {}; normalN = 0; guard = null; }
-      const ttl = id === 'jp' ? Math.max(.5, p.duration ?? 6.3) : id === 'fail' ? Math.max(1.35, p.duration ?? 0) : id === 'chain_stop' ? 1.8 : id === 'chain_announce' ? Math.max(.5, p.seconds ?? 2.5) : id === 'add100' ? (cards?.ttl?.('add100') ?? 1.5) : id === 'ticket' ? (cards?.ttl?.('ticket') ?? Infinity) : Infinity;
+      const ttl = id === 'jp' ? Math.max(.5, p.duration ?? 6.3) : id === 'fail' ? Math.max(1.35, p.duration ?? 0) : id === 'chain_stop' ? 1.8 : id === 'chain_announce' ? Math.max(.5, p.seconds ?? 2.5) : id === 'add100' ? (cards?.ttl?.('add100') ?? 1.5) : id === 'timeup_call' ? Math.max(.6, p.duration ?? 1.4) : id === 'ticket' ? (cards?.ttl?.('ticket') ?? Infinity) : Infinity;
       temporary(id, p, ttl);
     }
     if (id === 'challenge_cancel') {bridge();mode = null;}

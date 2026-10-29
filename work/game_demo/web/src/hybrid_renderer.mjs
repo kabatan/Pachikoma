@@ -223,7 +223,8 @@ export class HybridRenderer {
   }
 
   _buildBalls() {
-    const geo = new THREE.IcosahedronGeometry(1, 4);
+    const detail = new URLSearchParams(globalThis.location?.search??'').get('ballmesh')==='0'?4:2;
+    const geo = new THREE.IcosahedronGeometry(1, detail); // 500→180 triangles per sphere; physics shapes unchanged.
     const mat = this.ballMat = new THREE.ShaderMaterial({
       vertexShader: /* glsl */`
         uniform vec3 uPPos[${N_PROBES}]; uniform float uPZone[${N_PROBES}];

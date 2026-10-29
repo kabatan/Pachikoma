@@ -319,6 +319,9 @@
     "m": "offer1"
    }
   ],
+  "chain_success": [
+    { "f": 0, "m": "offer2" }
+  ],
   "chain_offer@chain": [
    {
     "f": 0,

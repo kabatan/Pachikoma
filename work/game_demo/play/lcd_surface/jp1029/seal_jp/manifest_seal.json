@@ -1,0 +1,721 @@
+{
+ "scenes": {
+  "jp_aim_seal_d1_in": {
+   "file": "seal_jp/seal_n3_in.mp4",
+   "frames": 56,
+   "digit": 1,
+   "lights_key": "jp_aim_d1",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_aim_d1"
+    }
+   ],
+   "seal": {
+    "N": 3,
+    "skipF": 30
+   },
+   "next": "jp_aim_seal_d1_s0"
+  },
+  "jp_aim_seal_d1_s0": {
+   "file": "seal_jp/seal_n3_s0.mp4",
+   "frames": 90,
+   "digit": 1,
+   "lights_key": "jp_aim_d1",
+   "cues": [],
+   "seal": {
+    "N": 3
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d1_s1": {
+   "file": "seal_jp/seal_n3_s1.mp4",
+   "frames": 90,
+   "digit": 1,
+   "lights_key": "jp_aim_d1",
+   "cues": [],
+   "seal": {
+    "N": 3
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d1_s2": {
+   "file": "seal_jp/seal_n3_s2.mp4",
+   "frames": 90,
+   "digit": 1,
+   "lights_key": "jp_aim_d1",
+   "cues": [],
+   "seal": {
+    "N": 3
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d1_b1": {
+   "file": "seal_jp/seal_n3_b1.mp4",
+   "frames": 78,
+   "digit": 1,
+   "lights_key": "jp_aim_d1",
+   "cues": [],
+   "seal": {
+    "N": 3,
+    "skipF": 26
+   },
+   "next": "jp_aim_seal_d1_s1"
+  },
+  "jp_aim_seal_d1_b2": {
+   "file": "seal_jp/seal_n3_b2.mp4",
+   "frames": 78,
+   "digit": 1,
+   "lights_key": "jp_aim_d1",
+   "cues": [],
+   "seal": {
+    "N": 3,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d1_s2"
+  },
+  "jp_aim_seal_d1_open": {
+   "file": "seal_jp/seal_n3_open.mp4",
+   "frames": 100,
+   "digit": 1,
+   "lights_key": "jp_aim_d1",
+   "cues": [],
+   "seal": {
+    "N": 3
+   },
+   "next": "jp_rush"
+  },
+  "jp_aim_seal_d2_in": {
+   "file": "seal_jp/seal_n4_in.mp4",
+   "frames": 56,
+   "digit": 2,
+   "lights_key": "jp_aim_d2",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_aim_d2"
+    }
+   ],
+   "seal": {
+    "N": 4,
+    "skipF": 30
+   },
+   "next": "jp_aim_seal_d2_s0"
+  },
+  "jp_aim_seal_d2_s0": {
+   "file": "seal_jp/seal_n4_s0.mp4",
+   "frames": 90,
+   "digit": 2,
+   "lights_key": "jp_aim_d2",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d2_s1": {
+   "file": "seal_jp/seal_n4_s1.mp4",
+   "frames": 90,
+   "digit": 2,
+   "lights_key": "jp_aim_d2",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d2_s2": {
+   "file": "seal_jp/seal_n4_s2.mp4",
+   "frames": 90,
+   "digit": 2,
+   "lights_key": "jp_aim_d2",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d2_s3": {
+   "file": "seal_jp/seal_n4_s3.mp4",
+   "frames": 90,
+   "digit": 2,
+   "lights_key": "jp_aim_d2",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d2_b1": {
+   "file": "seal_jp/seal_n4_b1.mp4",
+   "frames": 86,
+   "digit": 2,
+   "lights_key": "jp_aim_d2",
+   "cues": [],
+   "seal": {
+    "N": 4,
+    "skipF": 26
+   },
+   "next": "jp_aim_seal_d2_s1"
+  },
+  "jp_aim_seal_d2_b2": {
+   "file": "seal_jp/seal_n4_b2.mp4",
+   "frames": 78,
+   "digit": 2,
+   "lights_key": "jp_aim_d2",
+   "cues": [],
+   "seal": {
+    "N": 4,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d2_s2"
+  },
+  "jp_aim_seal_d2_b3": {
+   "file": "seal_jp/seal_n4_b3.mp4",
+   "frames": 78,
+   "digit": 2,
+   "lights_key": "jp_aim_d2",
+   "cues": [],
+   "seal": {
+    "N": 4,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d2_s3"
+  },
+  "jp_aim_seal_d2_open": {
+   "file": "seal_jp/seal_n4_open.mp4",
+   "frames": 100,
+   "digit": 2,
+   "lights_key": "jp_aim_d2",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "next": "jp_rush"
+  },
+  "jp_aim_seal_d3_in": {
+   "file": "seal_jp/seal_n4_in.mp4",
+   "frames": 56,
+   "digit": 3,
+   "lights_key": "jp_aim_d3",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_aim_d3"
+    }
+   ],
+   "seal": {
+    "N": 4,
+    "skipF": 30
+   },
+   "next": "jp_aim_seal_d3_s0"
+  },
+  "jp_aim_seal_d3_s0": {
+   "file": "seal_jp/seal_n4_s0.mp4",
+   "frames": 90,
+   "digit": 3,
+   "lights_key": "jp_aim_d3",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d3_s1": {
+   "file": "seal_jp/seal_n4_s1.mp4",
+   "frames": 90,
+   "digit": 3,
+   "lights_key": "jp_aim_d3",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d3_s2": {
+   "file": "seal_jp/seal_n4_s2.mp4",
+   "frames": 90,
+   "digit": 3,
+   "lights_key": "jp_aim_d3",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d3_s3": {
+   "file": "seal_jp/seal_n4_s3.mp4",
+   "frames": 90,
+   "digit": 3,
+   "lights_key": "jp_aim_d3",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d3_b1": {
+   "file": "seal_jp/seal_n4_b1.mp4",
+   "frames": 86,
+   "digit": 3,
+   "lights_key": "jp_aim_d3",
+   "cues": [],
+   "seal": {
+    "N": 4,
+    "skipF": 26
+   },
+   "next": "jp_aim_seal_d3_s1"
+  },
+  "jp_aim_seal_d3_b2": {
+   "file": "seal_jp/seal_n4_b2.mp4",
+   "frames": 78,
+   "digit": 3,
+   "lights_key": "jp_aim_d3",
+   "cues": [],
+   "seal": {
+    "N": 4,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d3_s2"
+  },
+  "jp_aim_seal_d3_b3": {
+   "file": "seal_jp/seal_n4_b3.mp4",
+   "frames": 78,
+   "digit": 3,
+   "lights_key": "jp_aim_d3",
+   "cues": [],
+   "seal": {
+    "N": 4,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d3_s3"
+  },
+  "jp_aim_seal_d3_open": {
+   "file": "seal_jp/seal_n4_open.mp4",
+   "frames": 100,
+   "digit": 3,
+   "lights_key": "jp_aim_d3",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "next": "jp_rush"
+  },
+  "jp_aim_seal_d4_in": {
+   "file": "seal_jp/seal_n2_in.mp4",
+   "frames": 56,
+   "digit": 4,
+   "lights_key": "jp_aim_d4",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_aim_d4"
+    }
+   ],
+   "seal": {
+    "N": 2,
+    "skipF": 30
+   },
+   "next": "jp_aim_seal_d4_s0"
+  },
+  "jp_aim_seal_d4_s0": {
+   "file": "seal_jp/seal_n2_s0.mp4",
+   "frames": 90,
+   "digit": 4,
+   "lights_key": "jp_aim_d4",
+   "cues": [],
+   "seal": {
+    "N": 2
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d4_s1": {
+   "file": "seal_jp/seal_n2_s1.mp4",
+   "frames": 90,
+   "digit": 4,
+   "lights_key": "jp_aim_d4",
+   "cues": [],
+   "seal": {
+    "N": 2
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d4_b1": {
+   "file": "seal_jp/seal_n2_b1.mp4",
+   "frames": 78,
+   "digit": 4,
+   "lights_key": "jp_aim_d4",
+   "cues": [],
+   "seal": {
+    "N": 2,
+    "skipF": 26
+   },
+   "next": "jp_aim_seal_d4_s1"
+  },
+  "jp_aim_seal_d4_open": {
+   "file": "seal_jp/seal_n2_open.mp4",
+   "frames": 99,
+   "digit": 4,
+   "lights_key": "jp_aim_d4",
+   "cues": [],
+   "seal": {
+    "N": 2
+   },
+   "next": "jp_rush"
+  },
+  "jp_aim_seal_d5_in": {
+   "file": "seal_jp/seal_n4_in.mp4",
+   "frames": 56,
+   "digit": 5,
+   "lights_key": "jp_aim_d5",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_aim_d5"
+    }
+   ],
+   "seal": {
+    "N": 4,
+    "skipF": 30
+   },
+   "next": "jp_aim_seal_d5_s0"
+  },
+  "jp_aim_seal_d5_s0": {
+   "file": "seal_jp/seal_n4_s0.mp4",
+   "frames": 90,
+   "digit": 5,
+   "lights_key": "jp_aim_d5",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d5_s1": {
+   "file": "seal_jp/seal_n4_s1.mp4",
+   "frames": 90,
+   "digit": 5,
+   "lights_key": "jp_aim_d5",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d5_s2": {
+   "file": "seal_jp/seal_n4_s2.mp4",
+   "frames": 90,
+   "digit": 5,
+   "lights_key": "jp_aim_d5",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d5_s3": {
+   "file": "seal_jp/seal_n4_s3.mp4",
+   "frames": 90,
+   "digit": 5,
+   "lights_key": "jp_aim_d5",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d5_b1": {
+   "file": "seal_jp/seal_n4_b1.mp4",
+   "frames": 86,
+   "digit": 5,
+   "lights_key": "jp_aim_d5",
+   "cues": [],
+   "seal": {
+    "N": 4,
+    "skipF": 26
+   },
+   "next": "jp_aim_seal_d5_s1"
+  },
+  "jp_aim_seal_d5_b2": {
+   "file": "seal_jp/seal_n4_b2.mp4",
+   "frames": 78,
+   "digit": 5,
+   "lights_key": "jp_aim_d5",
+   "cues": [],
+   "seal": {
+    "N": 4,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d5_s2"
+  },
+  "jp_aim_seal_d5_b3": {
+   "file": "seal_jp/seal_n4_b3.mp4",
+   "frames": 78,
+   "digit": 5,
+   "lights_key": "jp_aim_d5",
+   "cues": [],
+   "seal": {
+    "N": 4,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d5_s3"
+  },
+  "jp_aim_seal_d5_open": {
+   "file": "seal_jp/seal_n4_open.mp4",
+   "frames": 100,
+   "digit": 5,
+   "lights_key": "jp_aim_d5",
+   "cues": [],
+   "seal": {
+    "N": 4
+   },
+   "next": "jp_rush"
+  },
+  "jp_aim_seal_d6_in": {
+   "file": "seal_jp/seal_n3_in.mp4",
+   "frames": 56,
+   "digit": 6,
+   "lights_key": "jp_aim_d6",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_aim_d6"
+    }
+   ],
+   "seal": {
+    "N": 3,
+    "skipF": 30
+   },
+   "next": "jp_aim_seal_d6_s0"
+  },
+  "jp_aim_seal_d6_s0": {
+   "file": "seal_jp/seal_n3_s0.mp4",
+   "frames": 90,
+   "digit": 6,
+   "lights_key": "jp_aim_d6",
+   "cues": [],
+   "seal": {
+    "N": 3
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d6_s1": {
+   "file": "seal_jp/seal_n3_s1.mp4",
+   "frames": 90,
+   "digit": 6,
+   "lights_key": "jp_aim_d6",
+   "cues": [],
+   "seal": {
+    "N": 3
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d6_s2": {
+   "file": "seal_jp/seal_n3_s2.mp4",
+   "frames": 90,
+   "digit": 6,
+   "lights_key": "jp_aim_d6",
+   "cues": [],
+   "seal": {
+    "N": 3
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d6_b1": {
+   "file": "seal_jp/seal_n3_b1.mp4",
+   "frames": 78,
+   "digit": 6,
+   "lights_key": "jp_aim_d6",
+   "cues": [],
+   "seal": {
+    "N": 3,
+    "skipF": 26
+   },
+   "next": "jp_aim_seal_d6_s1"
+  },
+  "jp_aim_seal_d6_b2": {
+   "file": "seal_jp/seal_n3_b2.mp4",
+   "frames": 78,
+   "digit": 6,
+   "lights_key": "jp_aim_d6",
+   "cues": [],
+   "seal": {
+    "N": 3,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d6_s2"
+  },
+  "jp_aim_seal_d6_open": {
+   "file": "seal_jp/seal_n3_open.mp4",
+   "frames": 100,
+   "digit": 6,
+   "lights_key": "jp_aim_d6",
+   "cues": [],
+   "seal": {
+    "N": 3
+   },
+   "next": "jp_rush"
+  },
+  "jp_aim_seal_d7_in": {
+   "file": "seal_jp/seal_n5_in.mp4",
+   "frames": 56,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_aim_d7"
+    }
+   ],
+   "seal": {
+    "N": 5,
+    "skipF": 30
+   },
+   "next": "jp_aim_seal_d7_s0"
+  },
+  "jp_aim_seal_d7_s0": {
+   "file": "seal_jp/seal_n5_s0.mp4",
+   "frames": 90,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d7_s1": {
+   "file": "seal_jp/seal_n5_s1.mp4",
+   "frames": 90,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d7_s2": {
+   "file": "seal_jp/seal_n5_s2.mp4",
+   "frames": 90,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d7_s3": {
+   "file": "seal_jp/seal_n5_s3.mp4",
+   "frames": 90,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d7_s4": {
+   "file": "seal_jp/seal_n5_s4.mp4",
+   "frames": 90,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5
+   },
+   "loop": true
+  },
+  "jp_aim_seal_d7_b1": {
+   "file": "seal_jp/seal_n5_b1.mp4",
+   "frames": 78,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5,
+    "skipF": 26
+   },
+   "next": "jp_aim_seal_d7_s1"
+  },
+  "jp_aim_seal_d7_b2": {
+   "file": "seal_jp/seal_n5_b2.mp4",
+   "frames": 78,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d7_s2"
+  },
+  "jp_aim_seal_d7_b3": {
+   "file": "seal_jp/seal_n5_b3.mp4",
+   "frames": 78,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d7_s3"
+  },
+  "jp_aim_seal_d7_b4": {
+   "file": "seal_jp/seal_n5_b4.mp4",
+   "frames": 78,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5,
+    "skipF": 24
+   },
+   "next": "jp_aim_seal_d7_s4"
+  },
+  "jp_aim_seal_d7_open": {
+   "file": "seal_jp/seal_n5_open.mp4",
+   "frames": 100,
+   "digit": 7,
+   "lights_key": "jp_aim_d7",
+   "cues": [],
+   "seal": {
+    "N": 5
+   },
+   "next": "jp_rush"
+  }
+ },
+ "byD": {
+  "1": {
+   "N": 3
+  },
+  "2": {
+   "N": 4
+  },
+  "3": {
+   "N": 4
+  },
+  "4": {
+   "N": 2
+  },
+  "5": {
+   "N": 4
+  },
+  "6": {
+   "N": 3
+  },
+  "7": {
+   "N": 5
+  }
+ }
+}

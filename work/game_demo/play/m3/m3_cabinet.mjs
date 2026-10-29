@@ -566,6 +566,7 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
       if (hint && !lit && (hint.pockets === 'unlit' || (hint.pockets || []).includes(i + 1))) { const w = HOLE_BASE * (.25 + .5 * (.5 + .5 * Math.sin(2 * Math.PI * .8 * hph - Math.PI / 2))); c = c.map((v, q) => Math.max(v, [.5, .82, 1][q] * w)); }   // 説明の「ここを狙う」（チュートリアル）
       const hc=F.m3?.hole;
       if(hc?.mode==='target_pulse'&&!lit&&lamps.length===6){const gain=HOLE_BASE*(hc.level??((hc.gain??1)*(.55+.35*Math.sin(2*Math.PI*(hc.hz??1.7)*clock))));c=(hc.rgb??[1,.58,0]).map(v=>v*gain);}
+      if(hc?.mode==='script'&&hc.v){const a=hc.v;c=[Math.max(c[0],a[i*3]*HOLE_BASE),Math.max(c[1],a[i*3+1]*HOLE_BASE),Math.max(c[2],a[i*3+2]*HOLE_BASE)];}   // 10/30 newlight：場面の台本が穴ごとの色を渡す（?newlight=0 では来ない）
       if(hc?.mode==='near_miss'&&hc.cup===i+1){c=c.map((v,q)=>Math.max(v,(hc.rgb??[.45,.35,.6])[q]*HOLE_BASE*(hc.gain??0)));}
       const dt = clock - teaseAt[i];
       if (dt >= 0 && dt < 0.35) { const k = Math.sin(Math.PI * dt / 0.35) ** 2 * 0.5 * HOLE_BASE; c = [Math.max(c[0], k), Math.max(c[1], .58 * k), c[2]]; }

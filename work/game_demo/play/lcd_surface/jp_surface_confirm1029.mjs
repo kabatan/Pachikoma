@@ -184,6 +184,10 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   // 継続成功v4は専用スロットに常駐(起動時に読み込み済み)。再生中の遅延読み込みと追い出しを避ける。
   const pinned=man.scenes.chain_success?.pinned?{v:Object.assign(document.createElement('video'),{muted:true,playsInline:true,preload:'auto'}),name:null,ready:false,promise:null,pinned:true}:null;
   if(pinned)slots.push(pinned);
+  // 継続告知 v09（10/30）の映像も専用スロットに常駐（manifest の pinned。起動時に読み込み・復号）。?chainannounce=old では読まない
+  const extraPinnedNames=new URLSearchParams(typeof location==='undefined'?'':location.search).get('chainannounce')==='old'?[]:Object.keys(man.scenes).filter(k=>/^chain_announce_/.test(k)&&man.scenes[k].pinned);
+  const extraPinned=extraPinnedNames.map(name=>({v:Object.assign(document.createElement('video'),{muted:true,playsInline:true,preload:'auto'}),name:null,ready:false,promise:null,pinned:true,pinName:name}));
+  slots.push(...extraPinned);
   man.directionTable=await (await fetch(new URL(man.direction,base))).json();
   const offer=await createChainOffer();
   const resultFactory={requested:!!resultImageFactory,mode:'native',failures:[]};let compositor=null;
@@ -221,11 +225,13 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   };
   const reserve=(name)=>{let slot=slots.find(s=>s.name===name);if(!slot){slot=slots.find(s=>!s.pinned&&s!==current&&s!==visible&&s!==previous&&s.name===null)??slots.find(s=>!s.pinned&&s!==current&&s!==visible&&s!==previous);if(slot)load(slot,name);}return slot;};
   if(pinned){await load(pinned,'chain_success',false);if(!pinned.ready){errors.push('chain_success:startup');pinned.pinned=false;pinned.name=null;pinned.promise=null;}}
+  for(const slot of extraPinned){await load(slot,slot.pinName,false);if(!slot.ready){errors.push(slot.pinName+':startup');slot.pinned=false;slot.name=null;slot.promise=null;}}
   const chainTarget=()=>{const s=getState(),n=s.chain?.nextLamps??1;return targetDigit({pockets:(s.rules?.JackpotChainLaneOrder??[1,2,3,4,5,6,7]).slice(0,n)},s,1);};
   const sResult=()=>man.scenes[model.name]?.result_kind;
   function sync(){
     // 常駐の継続成功v4は、使われていない間に先頭へ巻き戻し、次回の最初のコマに前回の末尾を出さない。
     if(pinned?.pinned&&pinned.ready&&pinned!==current&&pinned!==visible&&pinned!==previous&&!pinned.v.seeking&&pinned.v.currentTime>.001){pinned.v.pause();pinned.v.currentTime=0;}
+    for(const x of extraPinned)if(x.pinned&&x.ready&&x!==current&&x!==visible&&x!==previous&&!x.v.seeking&&x.v.currentTime>.001){x.v.pause();x.v.currentTime=0;}
     if(!model.active){for(const s of slots)if(!s.v.paused)s.v.pause();return;}
     if(man.scenes[model.name]?.offer){if(serial!==model.serial){serial=model.serial;offer.begin(man.scenes[visible?.name]?.layered?palace.canvas:visible?.v);for(const s of slots)s.v.pause();current=null;previous=null;const d=chainTarget();reserve(`chain_jp_aim_d${d}`);reserve(`chain_fly_in_d${d}`);record('start',{name:model.name});log(model.name);}return;}
     if(serial!==model.serial){current=reserve(model.name);if(!current)return;serial=model.serial;hole=null;if(current.ready)current.v.currentTime=0;record('request',{name:model.name});log(model.name);if(sResult())compositor?.prefetch(sResult(),sResult()==='confirm'?84:64);}
@@ -257,7 +263,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     gateSince??=model.clock;if(model.clock-gateSince>12)return false;   // 万一の保険: 12秒で必ず解く(導入〜狙いの場面までは約8.3秒。10/29 30秒→12秒)
     return true;
   };
-  return {man,model,get center(){return center;},get active(){return model.active&&model.delay<=0;},get claimed(){return model.active;},get blocksChallengeLaunch(){return blocksChallengeLaunch();},
+  return {man,model,reserve,get center(){return center;},get active(){return model.active&&model.delay<=0;},get claimed(){return model.active;},get blocksChallengeLaunch(){return blocksChallengeLaunch();},
     warmResults:async()=>{const result=await(compositor?.warmup?.()??{skipped:true,reason:'no-result-compositor'});const boundary=compositor?.warmBoundary?.();return boundary?{...result,boundary}:result;},
     prepareResultFrame:(kind,frame)=>compositor?.prepare(kind,frame)??Promise.resolve(null),
     resultFrameReady:(kind,frame)=>!!compositor?.ready(kind,frame),
@@ -287,8 +293,9 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
       if(model.active||model.clock!==0||model.serial!==0||current||visible||previous||serial!==-1)throw Error('chain warm is boot-only');
       const result=[],one=(slot,name)=>withRestored2D(ctx,()=>warmPausedVideo(slot.v,async v=>{ctx.drawImage(v,0,0,w,h);await afterDraw(v);})).then(r=>({name,...r}));
       if(pinned?.pinned&&pinned.ready)result.push(await one(pinned,'chain_success'));
+      for(const x of extraPinned)if(x.pinned&&x.ready)result.push(await one(x,x.pinName));   // 継続告知 v09
       // 配当(reward)は起動時に一度ずつ読み込み・復号し、再生中に初めて触れないようにする。
-      for(const name of Object.keys(man.scenes).filter(k=>/^reward_\d+$/.test(k))){
+      for(const name of Object.keys(man.scenes).filter(k=>/^(reward_\d+|tutorial_jp_(n\d|fin))$/.test(k))){   // JPチャンスのチュートリアル(10/30)の映像も起動時に一度復号しておく
         const slot=slots.find(s=>!s.pinned&&s.name===null);if(!slot){result.push({name,skipped:true,reason:'no-empty-slot'});continue;}
         try{await load(slot,name,false);result.push(slot.ready?await one(slot,name):{name,skipped:true,reason:'not-ready'});}
         catch(e){result.push({name,skipped:true,reason:e.message});}
@@ -309,6 +316,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     async prepare(dt){await palace.prepare(dt);sync();if(!manual||!current||model.delay>0||man.scenes[model.name]?.offer)return;await current.promise;if(!current.ready)return;const t=Math.min(model.time+dt,(man.scenes[model.name].frames-.1)/man.fps);if(Math.abs(current.v.currentTime-t)<1e-5)return;await new Promise(resolve=>{const done=()=>{clearTimeout(timer);current?.v.removeEventListener('seeked',done);resolve();};const timer=setTimeout(done,2000);current.v.addEventListener('seeked',done,{once:true});current.v.currentTime=t;});},
     frame(dt){palace.advance(dt);sync();if(man.scenes[model.name]?.offer){const waiting=getState().phase!=='ChainChoice';const v=offer.frame(palace.video,model.time,waiting);model.update(waiting?0:dt);sync();return v;}stuckWatch(dt);const kind=sResult();if(!kind)blockedFor=0;if(kind&&compositor){const first=kind==='confirm'?84:64;const f=Math.min(man.scenes[model.name].frames-1,Math.floor((current?.v.currentTime??model.time)*man.fps+1e-6));compositor.prefetch(kind,Math.max(first,f));if(f>=first&&!compositor.ready(kind,f)&&(blockedFor+=dt)<1.5){blockedResult=current;if(current&&!current.v.paused)current.v.pause();return visible?.ready&&Math.floor((visible.v.currentTime??0)*man.fps)<first?visible.v:compositor.canvas;}}
       blockedFor=compositor&&kind&&!compositor.ready(kind,Math.max(0,Math.floor((current?.v.currentTime??model.time)*man.fps)))?blockedFor:0;if(blockedResult){blockedResult=null;if(model.active&&!manual&&current?.ready&&model.delay<=0&&current.v.paused&&!current.v.ended)current.v.play().catch(()=>{});}
+      {const sk=man.scenes[model.name]?.skip;if(sk&&model.active&&model.delay<=0&&model.serial===serial){const live=!manual&&current?.ready,cf=(live?current.v.currentTime:model.time)*man.fps;for(const [a,b] of sk)if(cf>=a&&cf<b){if(live)current.v.currentTime=b/man.fps;else model.time=b/man.fps;break;}}}   // 10/30 演出の短縮: 場面に skip:[[始め,終わり]]（fx_trim_1030.mjs が入れたときだけ。?fxtrim=0 で無し）のコマを飛ばす
       const oldTime=model.time;model.update(current?.ready||model.delay>0?dt:0,manual||model.delay>0?null:current?.ready?current.v.currentTime:model.time);if(current&&model.active&&model.serial===serial&&model.time<oldTime){current.v.currentTime=model.time;if(!manual)current.v.play().catch(()=>{});}sync();if(previous){fade=Math.min(1,fade+Math.min(dt,1/30)/.12);if(fade>=1){previous.v.pause();record('end',{name:previous.name,reason:'crossfade',time:previous.v.currentTime});previous=null;}}if(model.active&&visible?.ready&&man.scenes[visible.name]?.layered){const prior=previous&&man.scenes[previous.name]?.layered?previous.v:null;const vs=man.scenes[visible.name],lf=visible.name===model.name?model.lastF:Math.floor(visible.v.currentTime*man.fps);return palace.render(visible.v,prior,1-fade,visible.name,lf,center&&vs.center?center.stateFor(vs.source_frames[Math.max(0,Math.min(vs.frames-1,lf))],vs,dt):null,!!vs.black_bg);}palace.hidden();if(sResult()&&compositor){const f=Math.min(man.scenes[model.name].frames-1,Math.floor((visible?.v.currentTime??model.time)*man.fps+1e-6));const boundaryOwner={generation:model.serial,serial:model.serial,dim:!!model.where()?.dim};onResultBeforeReuse(boundaryOwner);compositor.setBoundaryOwner?.(boundaryOwner);const result=compositor.render(sResult(),f,Math.max(0,Math.round(model.earnings??0)),model.resultChain??1);if(result){result.readyState=4;return result;}}return visible?.ready?visible.v:null;},
     // Read-only image contract: frame(dt) above is the sole timeline/video owner.
     // Use the actual return/visible source, not a requested scene or pending slot.

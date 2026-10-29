@@ -111,7 +111,7 @@ setInterval(() => {   // 死んだ接続の掃除(ping送信、30秒無音は切
 
 function sendCommand(phone, msg) {
   const cmd = String(msg.cmd);
-  if (!['reset', 'pause', 'resume', 'staff'].includes(cmd)) return phone.send({ type: 'result', cmd, ok: false, error: '未対応の操作です' });
+  if (!['reset', 'pause', 'resume', 'staff', 'staffcancel'].includes(cmd)) return phone.send({ type: 'result', cmd, ok: false, error: '未対応の操作です' });
   const all = msg.targets === 'all';
   const targets = (all ? stationOrder() : Array.isArray(msg.targets) ? msg.targets.map(String) : []);
   if (!targets.length) return phone.send({ type: 'result', cmd, ok: false, error: '対象の台がありません' });

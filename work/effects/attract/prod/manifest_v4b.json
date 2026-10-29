@@ -1,0 +1,19 @@
+{
+  "version": 20261029,
+  "file": "../prod_v4b/attract_wait_v4b_prod.mp4",
+  "width": 1152,
+  "height": 1268,
+  "fps": 30,
+  "frames": 600,
+  "duration": 20,
+  "loop": true,
+  "codec": "h264",
+  "crf": 8,
+  "preset": "slow",
+  "tune": "film",
+  "gop": 15,
+  "color": "bt709 limited",
+  "master": "../prod_v4b/frames/%04d.png",
+  "variant": "v4b",
+  "source": "../v4/comp/attract_comp_v4b.py"
+}

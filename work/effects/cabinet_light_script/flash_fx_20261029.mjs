@@ -15,7 +15,11 @@ const sq = (x, duty = .5) => frac(x) < duty ? 1 : 0;                  // square 
 const pulse = (x, decay) => Math.exp(-frac(x) * decay);                 // fast attack, exponential fall once per cycle
 const GOLD = [1, .52, .02], RED = [1, .02, .03], PINK = [1, .06, .42], VIOLET = [.42, .04, 1], BLUE = [.05, .3, 1], WHITE = [1, .95, .85], VIOLET_DEEP = [.38, .02, .8];
 
-export function createFx() { return { gain: 1, white: 0, floor: 0, mode: 0, mix: 0, hue: 0, spread: 0, r: 0, g: 0, b: 0, active: false, cDepth: 0, cHz: 0, cSharp: 2, cWave: 1, aDepth: 0, aHz: 0, aWave: 1 }; }
+// 10/30 newlight: abs = 'absolute' scene (newlight_1030.mjs). aK[8] region level, aC[24] region colour, aR[4] ring level, hv[21] hole script (rgb per hole), holeOn.
+export function createFx() { return { gain: 1, white: 0, floor: 0, mode: 0, mix: 0, hue: 0, spread: 0, r: 0, g: 0, b: 0, active: false, cDepth: 0, cHz: 0, cSharp: 2, cWave: 1, aDepth: 0, aHz: 0, aWave: 1, abs: false, holeOn: false, aK: new Float32Array(8), aC: new Float32Array(24), aR: new Float32Array(4), hv: new Float32Array(21), sOv: false, sc: new Float32Array(3), ringOwn: false }; }
+const REG = Object.create(null);
+export const registerGrammar = (name, fn) => { REG[name] = fn; };
+export const isRegistered = g => !!REG[g];
 // Running light: each cabinet region dims by up to `depth` as a crest travels around the frame at hz (regions are phased by PH in the runtime). cWave = the same crest for the one-colour strip (whole-strip throb).
 function chase(o, depth, hz, sharp = 2) { o.cDepth = depth; o.cHz = hz; o.cSharp = sharp; }
 
@@ -36,6 +40,7 @@ const HEAT_COLOR = { flight_heat0: VIOLET, flight_heat1: PINK, flight_heat2: RED
 // c: { grammar, name, t (seconds in the clip / mode), clock, lampN, hitAge (s since a ball entered a hole), secondsLeft, playing, source }
 export function evalFx(o, c) {
   const t = c.t, ck = c.clock, g = c.grammar;
+  o.abs = false; o.holeOn = false; o.sOv = false; o.ringOwn = false;
   o.gain = 1; o.white = 0; o.mode = 0; o.mix = 0; o.hue = 0; o.spread = 0; o.floor = 0; o.cDepth = 0; o.cHz = 0; o.aDepth = 0; o.aHz = 0;
   switch (g) {
     case 'sea_breathe': {                          // normal lamps: the more lamps, the more it throbs
@@ -142,9 +147,9 @@ export function evalFx(o, c) {
     case 'count': { o.gain = .6 + .7 * pulse(ck * 3.5, 2.4); tint(o, BLUE, .7); chase(o, .35, 1.5, 2); break; }
     case 'result': { o.gain = .65 + .7 * pulse(ck * 2, 2.2) + .3 * sq(ck * 7, .2); tint(o, GOLD, .9); chase(o, .35, 1.5, 2); break; }
     case 'continue': { o.gain = .55 + .9 * pulse(ck * 4, 2.2); tint(o, PINK, .9); chase(o, .4, 2.2, 3); break; }
-    default: break;
+    default: { const fn = REG[g]; if (fn) fn(o, c); break; }
   }
-  if (BOOST) boostPass(o, c, g);
+  if (BOOST && !REG[g]) boostPass(o, c, g);
   // A ball that just entered a hole: bright flick on top of whatever is playing.
   const age = c.hitAge;
   if (age >= 0 && age < .6) {
@@ -161,7 +166,7 @@ export function evalFx(o, c) {
   }
   o.cWave = o.cDepth > 0 ? Math.pow(.5 + .5 * Math.cos(TAU * ck * o.cHz), o.cSharp) : 1;
   o.aWave = o.aDepth > 0 ? sq(ck * o.aHz, .5) : 1;
-  o.active = o.aDepth > 0 || o.gain !== 1 || o.white > 0 || o.mix > 0 || o.mode !== 0 || o.floor > 0 || o.cDepth > 0;
+  o.active = o.abs || o.aDepth > 0 || o.gain !== 1 || o.white > 0 || o.mix > 0 || o.mode !== 0 || o.floor > 0 || o.cDepth > 0;
   return o;
 }
 
@@ -233,6 +238,15 @@ export function hsvTo(out, i, h) {
 // One RGB for the monitor-surround strip (floats 0..1 written into strip[0..2]) from the *unmodified* table row.
 const scratch = new Float32Array(3);
 export function stripFrom(strip, o, K, Kc) {
+  if (o.abs) {   // absolute scene: colour = level-weighted region colours, brightness = mean level
+    let s = 0, r = 0, g = 0, b = 0;
+    for (let i = 0; i < 8; i++) { const k = o.aK[i]; s += k; r += k * o.aC[i * 3]; g += k * o.aC[i * 3 + 1]; b += k * o.aC[i * 3 + 2]; }
+    if (s > 1e-4) { r /= s; g /= s; b /= s; }
+    if (o.sOv) { r = o.sc[0]; g = o.sc[1]; b = o.sc[2]; }   // scene gives the strip colour itself (e.g. rainbow: an average would wash out)
+    const m = Math.max(r, g, b, 1e-3), amp = clamp(s / 8 * 1.5 + .05, 0, 1) / m;
+    strip[0] = clamp(r * amp + o.white, 0, 1); strip[1] = clamp(g * amp + o.white * .93, 0, 1); strip[2] = clamp(b * amp + o.white * .8, 0, 1);
+    return;
+  }
   let sum = 0, r = 0, g = 0, b = 0;
   for (let i = 0; i < 8; i++) { const k = K[i]; sum += k; r += k * Kc[i][0]; g += k * Kc[i][1]; b += k * Kc[i][2]; }
   if (sum > 1e-4) { r /= sum; g /= sum; b /= sum; } else { r = Kc[0][0]; g = Kc[0][1]; b = Kc[0][2]; }

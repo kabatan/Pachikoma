@@ -1,0 +1,33 @@
+{
+ "mode": "repeat",
+ "file": "announce_repeat_1152.mp4",
+ "frames": 288,
+ "fps": 30,
+ "seconds": 9.0,
+ "white_from": 268,
+ "choice_from": 56,
+ "choice_end": 257,
+ "T0": 1.85,
+ "land": {
+  "p33": 0.3,
+  "ng_de": 0.55,
+  "ng": 0.7,
+  "sub": 1.15,
+  "num": 1.55,
+  "tama": 1.7,
+  "boshu": 2.05,
+  "p67": 2.55,
+  "ok_de": 2.8,
+  "ok": 2.95,
+  "r1": 3.4,
+  "r2": 3.85
+ },
+ "fade": {
+  "start": 257,
+  "frames": 6
+ },
+ "num": {
+  "num": 1.55,
+  "tama": 1.7
+ }
+}

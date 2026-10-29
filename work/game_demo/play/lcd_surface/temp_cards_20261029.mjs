@@ -9,11 +9,11 @@ const ease = k => 1 - (1 - Math.min(1, Math.max(0, k))) ** 3;
 const back = k => { k = Math.min(1, Math.max(0, k)); const c = 1.9; return 1 + (c + 1) * (k - 1) ** 3 + c * (k - 1) ** 2; };
 const clamp01 = v => Math.min(1, Math.max(0, v));
 
-export const CARD_DURATIONS = { ticket: 1.9, add100: 1.8, reset_fallback: 1.6, guard: 1.1 };
+export const CARD_DURATIONS = { ticket: 1.9, add100: 1.8, reset_fallback: 1.6, guard: 1.1, timeup_call: 1.4 };
 
 export async function createTempCards({warmContext = null} = {}) {
   const load = n => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(Error('temp card asset ' + n)); i.src = new URL(n, DIR).href; });
-  const names = ['start_main', 'start_sub', 'count_main', 'count_jp', 'more_main', 'more_sub', 'guard_main', 'dup_main', 'dup_sub'];
+  const names = ['start_main', 'start_sub', 'count_main', 'count_jp', 'more_main', 'more_sub', 'guard_main', 'guard_sub', 'dup_main', 'dup_sub', 'timeup_main', 'ballout_main'];
   const P = {}; await Promise.all(names.map(async n => { P[n] = await load(n + '.png'); }));
   const atlas = await load('digits_gold.png');
   const receipt = await (await fetch(new URL('plates_receipt.json', DIR))).json();
@@ -77,9 +77,18 @@ export async function createTempCards({warmContext = null} = {}) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(0, 700, 1152, 568); ctx.restore();
       glow(ctx, CX, 540, 560, 'gold', .42 * e);
       telop(ctx, P.more_main, CX, 500, 900, { t, alpha: e, dy: -16 * ease(t / .5), sheen: (t - .3) / .7 });
-      number(ctx, `＋${p.seconds ?? 22}秒`, CX, 710, 180, { alpha: e * clamp01((t - .22) / .15), maxW: 620, scale: .9 + .1 * back((t - .22) / .25) });
+      number(ctx, `＋${p.seconds ?? s.rules?.extraSeconds ?? 0}秒`, CX, 710, 180, { alpha: e * clamp01((t - .22) / .15), maxW: 620, scale: .9 + .1 * back((t - .22) / .25) });
       telop(ctx, P.more_sub, CX, 905, 780, { t: t - .45, pop: false, alpha: e, dy: 16 * (1 - ease((t - .45) / .3)) });
       sparkles(ctx, t, 16, 1000, 760, 480, .85 * e, 'gold', 5);
+    },
+    // 時間切れ(0秒)・玉切れの瞬間の一言。追加画面の前の猶予(EndGraceSeconds)の間だけ出す(10/30 D6)
+    timeup_call(ctx, p, t, s) {
+      const dur = Math.max(.6, p.duration ?? CARD_DURATIONS.timeup_call), e = env(t, dur, .25);
+      if (e <= 0) return true;
+      glow(ctx, CX, 560, 700, p.reasonCode === 'balls' ? 'aqua' : 'gold', .55 * e * (.85 + .15 * Math.sin(t * 9)));
+      glow(ctx, CX, 560, 380, 'white', .4 * e * Math.max(0, 1 - t * 2.2));
+      telop(ctx, p.reasonCode === 'balls' ? P.ballout_main : P.timeup_main, CX, 560, 940, { t, pop: true, alpha: e, dx: 12 * Math.exp(-t * 9) * Math.sin(t * 50), sheen: (t - .15) / .6 });
+      sparkles(ctx, t, 14, 800, 480, 440, .8 * e, 'white', 4);
     },
     finish_count(ctx, p, t, s) {
       const total = p.total ?? p.balls ?? s.balls ?? 0, score = p.score ?? s.score ?? 0, e = clamp01(t / .3);
@@ -92,8 +101,11 @@ export async function createTempCards({warmContext = null} = {}) {
       const shown = Math.min(Math.round(total * ease(k)), live), rolling = k < 1 || live < total;
       number(ctx, `${shown}玉`, CX, 700, 230, { alpha: e, maxW: 980, scale: rolling ? 1 : 1 + .03 * Math.max(0, Math.sin(t * 5)) });
       if (!rolling) glow(ctx, CX, 640, 440, 'white', .16 * (.5 + .5 * Math.sin(t * 5)));
-      telop(ctx, P.count_jp, CX - 170, 900, 440, { t: t - .5, pop: false, alpha: e });
-      number(ctx, `${Math.round(score * ease(clamp01((t - .5) / 1.2)))}玉`, CX + 190, 900, 110, { alpha: e * clamp01((t - .5) / .2), maxW: 420 });
+      // 持ち玉で賞が決まる規則(basis='wallet')では、大きい数字がそのまま賞の数字。「JPの合計」の行は出さない(字と数字の食い違い、10/30 D1)
+      if (p.basis !== 'wallet' && s.rules?.PrizeBasis !== 'wallet') {
+        telop(ctx, P.count_jp, CX - 170, 900, 440, { t: t - .5, pop: false, alpha: e });
+        number(ctx, `${Math.round(score * ease(clamp01((t - .5) / 1.2)))}玉`, CX + 190, 900, 110, { alpha: e * clamp01((t - .5) / .2), maxW: 420 });
+      }
       sparkles(ctx, t, 10 + Math.round(12 * rise), 1020, 700, 480, (.45 + .5 * rise) * e, 'white', 7);
     },
     reset_fallback(ctx, p, t, s) {
@@ -139,7 +151,8 @@ export async function createTempCards({warmContext = null} = {}) {
     guard(ctx, t) {
       const dur = CARD_DURATIONS.guard, e = env(t, dur, .3); if (e <= 0) return true;
       glow(ctx, CX, 1000, 260, 'gold', .28 * e);
-      telop(ctx, P.guard_main, CX, 1000, 440, { t, alpha: e, dy: -20 * ease(t / dur), sheen: (t - .2) / .5 });
+      telop(ctx, P.guard_main, CX, 975, 400, { t, alpha: e, dy: -20 * ease(t / dur), sheen: (t - .2) / .5 });
+      telop(ctx, P.guard_sub, CX, 1085, 760, { t: t - .15, pop: false, alpha: e, dy: -20 * ease(t / dur) });   // 10/30 A1: 「耐えた！」だけでは意味が伝わらないので「セーフ！／同じ穴でも消えない」
       return true;
     },
     assets: { plates: P, atlas }, scenes,

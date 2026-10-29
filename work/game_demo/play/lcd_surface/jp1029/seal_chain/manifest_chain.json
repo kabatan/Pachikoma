@@ -1,0 +1,69 @@
+{
+ "byN": {
+  "3": {
+   "open": {
+    "file": "seal_jp/seal_n3_open.mp4",
+    "frames": 100
+   },
+   "s0": {
+    "file": "seal_jp/seal_n3_s0.mp4",
+    "frames": 90
+   },
+   "s1": {
+    "file": "seal_jp/seal_n3_s1.mp4",
+    "frames": 90
+   },
+   "s2": {
+    "file": "seal_jp/seal_n3_s2.mp4",
+    "frames": 90
+   },
+   "b1": {
+    "file": "seal_jp/seal_n3_b1.mp4",
+    "frames": 78,
+    "skipF": 26
+   },
+   "b2": {
+    "file": "seal_jp/seal_n3_b2.mp4",
+    "frames": 78,
+    "skipF": 24
+   }
+  },
+  "4": {
+   "open": {
+    "file": "seal_jp/seal_n4_open.mp4",
+    "frames": 100
+   },
+   "s0": {
+    "file": "seal_jp/seal_n4_s0.mp4",
+    "frames": 90
+   },
+   "s1": {
+    "file": "seal_jp/seal_n4_s1.mp4",
+    "frames": 90
+   },
+   "s2": {
+    "file": "seal_jp/seal_n4_s2.mp4",
+    "frames": 90
+   },
+   "s3": {
+    "file": "seal_jp/seal_n4_s3.mp4",
+    "frames": 90
+   },
+   "b1": {
+    "file": "seal_jp/seal_n4_b1.mp4",
+    "frames": 86,
+    "skipF": 26
+   },
+   "b2": {
+    "file": "seal_jp/seal_n4_b2.mp4",
+    "frames": 78,
+    "skipF": 24
+   },
+   "b3": {
+    "file": "seal_jp/seal_n4_b3.mp4",
+    "frames": 78,
+    "skipF": 24
+   }
+  }
+ }
+}

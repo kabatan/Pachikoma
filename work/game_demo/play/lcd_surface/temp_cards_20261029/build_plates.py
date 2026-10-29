@@ -21,7 +21,8 @@ TELOPS = [('start_main','スタート！','rainbow',1500),('start_sub','ラン�
           ('count_main','計数中','rainbow',1300),('count_jp','ＪＰの合計','silver',1100),
           ('more_main','まだまだ！','rainbow',1500),('more_sub','続きを楽しもう！','rainbow',1400),
           ('guard_main','耐えた！','rainbow',1000),
-          ('dup_main','重複！','silver',1000),('dup_sub','ランプが消えた…','silver',1300)]
+          ('dup_main','重複！','silver',1000),('dup_sub','ランプが消えた…','silver',1300),
+          ('timeup_main','時間です！','rainbow',1500),('ballout_main','玉切れ！','rainbow',1300)]
 for n, t, p, w in TELOPS:
     im = plate(n, t, p, w); box = im.getbbox(); im = im.crop(box)
     im.save(here / f'{n}.png'); recv['plates'][n] = {'text': t, 'pal': p, 'size': im.size}

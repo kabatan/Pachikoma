@@ -90,6 +90,8 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   const trayA = trayAdapter(tray, () => clock, () => firedTotal); fx.setTray(trayA);   // 調整側の皿関数: { award(count,{eventId,duration,rate,origin}) -> {landed(),done()}?, collect({eventId,duration}) }。無ければ液晶と光だけ
   const adapter = new Stage2cLightAdapter({ geom, sources: Object.fromEntries(lightingSources.map((x) => [x.id, x])) });
   let seen = { shot: false, challenge: false }, clock = 0, bankPending = false;
+  const lcd30=new URLSearchParams(globalThis.location?.search??'').get('lcd30')!=='0';
+  let lcdElapsed=0,lcdDirty=true;
   const sync = () => {
     const s = getSnapshot().state;
     fx.setState({ n: s.lit, litPockets: s.pockets, canLaunch: s.canLaunch, declared: s.declared, sec: s.secondsLeft,
@@ -97,6 +99,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   };
   const paramsOf = (e) => playEventParams(e, RANKS);
   bus.on('*', (e) => {
+    lcdDirty=true;
     if (lcd?.onEvent) lcd.onEvent(e.id, paramsOf(e));   // 動画の液晶：ゲームの出来事で場面をつなぐ（JP の場面の切り替え、game_demo/play/lcd_surface/jp_seq.mjs）
     if (['jp_heat','jp_mouth'].includes(e.id)) return;
     if (e.id === 'launch') seen.shot = true;
@@ -198,7 +201,14 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
       const frameState = getSnapshot().state;
       { const b = frameState.balls; if (prevBalls !== null && b < prevBalls && digitsOn) firedTotal += prevBalls - b; prevBalls = b; }
       clock += dt; driveDigits(ownedFrameSnapshot === true && typeof dt === 'number' ? frameState : null); if (!lcd) window.LCD.setState({ ballsShown: digitsShown }); last = fx.frame(dt);
-      if (lcd) { lcd.frame(dt, last); lcd.applyLights?.(last); last.lcd = lcd.canvas; }
+      if (lcd) {
+        lcdElapsed+=dt;
+        // Effects/awards/lighting above still tick each frame. Only LCD painting
+        // and its GPU composition run at the source-video cadence (30fps).
+        if(lcd30&&dt>0&&!lcdDirty&&lcdElapsed<1/30-0.001){lcd.applyLights?.(last);last.lcd=lcd.canvas;return last;}
+        const lcdDt=lcdElapsed;lcdElapsed=0;lcdDirty=false;
+        lcd.frame(lcdDt,last);lcd.applyLights?.(last);last.lcd=lcd.canvas;
+      }
       if (last.lcd) {
         if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain });
         const choice=lcd?.choiceV20;

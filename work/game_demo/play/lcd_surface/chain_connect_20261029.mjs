@@ -25,7 +25,7 @@ export function attachChainConnect(lcd,{controller}) {
   // ready() が false のままになり、入力が全部拒否される(ソフトロック)。2秒続いたらその場面を終わらせる。
   const frame=lcd.frame.bind(lcd);let stale=0;
   lcd.frame=(dt,F)=>{
-    const m=lcd.jp?.model,legit=!m||m.payout>0||['chain_offer','chain_confirm'].includes(m.name);
+    const m=lcd.jp?.model,legit=!m||m.payout>0||['chain_offer','chain_confirm'].includes(m.name)||/^chain_announce_/.test(m.name??'');   // 継続告知 v09 の映像も正当
     if(game?.phase==='ChainChoice'&&lcd.jp?.claimed&&!lcd.choiceV20?.active&&!legit){
       stale+=dt;if(stale>2){stale=0;lcd.chainConnect.watchdogReleases++;m.stop('choice-watchdog');}
     }else stale=0;

@@ -1,6 +1,6 @@
 import boardSync from '../../effects/spec/board_sync.mjs';
 // 演出モジュール向けの通知専用バス。規則・物理を操作しない。
-export const EFFECT_IDS = Object.freeze(('attract title howto ticket start ambient launch lamp123 lamp4 lamp5 lamp6 dup_protect roulette ascend challenge_declare challenge_wait challenge_flight success_small success_big fail jp tray_overflow warn10 timeup add100 finish_count result challenge_cancel chain_choice chain_continue chain_stop jp_heat jp_mouth').split(' '));
+export const EFFECT_IDS = Object.freeze(('attract title howto ticket start ambient launch lamp123 lamp4 lamp5 lamp6 dup_protect roulette ascend challenge_declare challenge_wait challenge_flight success_small success_big fail jp tray_overflow warn10 timeup timeup_call offer_tick add100 finish_count result challenge_cancel chain_choice chain_continue chain_stop jp_heat jp_mouth').split(' '));
 const FIRST = ['shot', 'light', 'duplicate', 'challenge', 'success', 'failure'];
 const copy = value => structuredClone(value);
 const freeze = value => { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
@@ -36,6 +36,7 @@ export class EffectsBus {
 /** presenter/controller/physics の通知を演出idへ翻訳。tはruntimeの経過秒（規則の時計停止中も進む）。 */
 export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
   let clock = 0, game = ctrl.game, phase = game.phase, warned = false, started = false, resultSent = false;
+  let callSent = false, lastTick = null;   // 時間です！の一言(0秒の瞬間)・追加受付の残り10秒からの刻み(10/30 D6/D7)
   let seen = new Set(), levels = new Set(), shots = new Map(), pending = [], receiptSeen = -1, chainTry = 0, choiceSent = null;
   bus.context = () => ({ t: clock, state: { lit: ctrl.game.lampCount, pockets: ctrl.game.lamps,
     balls: ctrl.game.wallet, secondsLeft: ctrl.game.secondsLeft,
@@ -58,7 +59,7 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
     return bus.emit(id, { state: { first: { [category]: first } }, data: { ...data, first } });
   };
   let chainDeferred = false;
-  const reset = () => { chainDeferred = false; jpFlight = null; game = ctrl.game; seen = new Set(); levels = new Set(); shots = new Map(); pending = []; receiptSeen = -1; chainTry = 0; choiceSent = null; warned = false; started = false; resultSent = false; };
+  const reset = () => { chainDeferred = false; jpFlight = null; game = ctrl.game; seen = new Set(); levels = new Set(); shots = new Map(); pending = []; receiptSeen = -1; chainTry = 0; choiceSent = null; warned = false; started = false; resultSent = false; callSent = false; lastTick = null; };
   const offAction = ctrl.onAction(action => {
     const g = ctrl.game;
     if (action === 'howto') { reset(); send('howto', { seconds: ctrl.howtoSeconds }); }
@@ -121,6 +122,11 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
     // 継続の決着(やめる・計数)は操作の直後に出す。Presenterの次の通知を待つと finish_count より後になる
     if (g.receipt && (g.receipt.kind === 'ChainStop' || g.receipt.chainBanked)) receipt(g.receipt);
     if (g.secondsLeft > 10) warned = false;
+    // 0秒(または玉切れ)になって終了待ちに入った瞬間に一言。追加画面(Continue)の前の猶予の間だけ
+    if (g.endPending && !callSent && ['Ready', 'Flight', 'Effect'].includes(g.phase) && g.rules.EndGraceSeconds > 0) { callSent = true; send('timeup_call', { reasonCode: g.wallet === 0 ? 'balls' : 'time', duration: Math.max(.6, g.rules.EndGraceSeconds - .1) }); }
+    else if (!g.endPending) callSent = false;
+    // 追加受付の残り10秒から1秒ごとに刻む(残り3秒は強め)
+    if (g.phase === 'Continue') { const n = Math.ceil(g.offerLeft - 1e-9); if (n !== lastTick) { lastTick = n; if (n >= 1 && n <= 10) send('offer_tick', { left: n, strong: n <= 3 }); } } else lastTick = null;
     if (!warned && g.secondsLeft <= 10 && ['Ready', 'Flight', 'Effect'].includes(g.phase)) { warned = true; send('warn10'); }
     if (phase !== g.phase) {
       phase = g.phase;
@@ -131,7 +137,7 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
         send('chain_choice', { pending: c.pendingAward, chain: c.successes, lamps: c.nextLamps, base: c.baseAward, resumed: choiceSent === key, secondsLeft: g.secondsLeft });
         choiceSent = key;
       }
-      if (phase === 'Continue') send('timeup', { reason: g.endReason, reasonCode: g.wallet === 0 ? 'balls' : 'time', duration: g.rules.ContinueSeconds });
+      if (phase === 'Continue') send('timeup', { reason: g.endReason, reasonCode: g.wallet === 0 ? 'balls' : 'time', duration: g.rules.ContinueSeconds, seconds: g.rules.ExtraSeconds, balls: g.rules.ExtraLoanBalls });
       if (phase === 'Result') send('finish_count', { reason: g.endReason, reasonCode: g.wallet === 0 ? 'balls' : g.secondsLeft <= 0 ? 'time' : null, balls: g.wallet, total: g.wallet, ...nextRank(g) });
     }
     const readyAmbient = g.phase === 'Ready' && !presenter.reveal && !Object.values(presenter.fx).some(Boolean);

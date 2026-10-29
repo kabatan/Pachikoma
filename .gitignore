@@ -3,5 +3,6 @@ work/game_demo/ui/logs/
 # Large original files restored automatically from release parts
 /work/game_demo/play/lcd_surface/jp1029/production_20261028/ryugu_continuous_approved_color.mp4
 /work/effects/attract/prod_v4b/attract_wait_v4b_prod.mp4
+/work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4
 /work/effects/jp_teacher/09_timeup/prod/final/timeup_prod.mp4
 *.joining-*

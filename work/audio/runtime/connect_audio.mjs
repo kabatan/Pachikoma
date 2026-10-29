@@ -8,7 +8,7 @@ export async function connectAudio({pa,bus,master=.45,voiceProvider=new URLSearc
   const observer=observeContacts(pa,c=>engine.contact(c),{onError,onPayout:e=>engine.payout(e.count),nativeQueryProof});
   const unlock=()=>engine.unlock().catch(onError);
   window.addEventListener('pointerdown',unlock);window.addEventListener('keydown',unlock);
-  const visibility=()=>{if(document.hidden){engine.stopAll();engine.ctx.suspend();}};
+  const visibility=()=>{if(document.hidden){engine.stopAll();engine.ctx.suspend();}else engine.ctx.resume?.().catch?.(()=>{});};   // 戻ったら音を再開（QA10/30 E: 最初のボタンを押すまで無音だった）
   document.addEventListener('visibilitychange',visibility);
   return {engine,observer,dispose(){off();observer.dispose();engine.dispose();window.removeEventListener('pointerdown',unlock);window.removeEventListener('keydown',unlock);document.removeEventListener('visibilitychange',visibility);}};
 }

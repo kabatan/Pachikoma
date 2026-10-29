@@ -8953,6 +8953,65 @@
         }
       ],
       "note": "承認済み v4（30000/1001fps, 1152x1268）。継続成功の通過専用。「2連目」は映像に焼き込み。起動時に専用スロットへ先読み。"
+    },
+    "tutorial_jp_n2": {
+      "file": "tutorial_jp/tutorial_jp_nx.mp4",
+      "frames": 207,
+      "next": "tutorial_jp_fin",
+      "cues": [],
+      "tutorial": true,
+      "lights_key": "jp_aim_d4",
+      "note": "JPチャンスのチュートリアル（封印2本の穴）。映像の鎖は4本なので本数を言わない版（字・番号なし）。矢印・光柱・光の筋は実行時に重ねる"
+    },
+    "tutorial_jp_n3": {
+      "file": "tutorial_jp/tutorial_jp_nx.mp4",
+      "frames": 207,
+      "next": "tutorial_jp_fin",
+      "cues": [],
+      "tutorial": true,
+      "lights_key": "jp_aim_d4",
+      "note": "JPチャンスのチュートリアル（封印3本の穴）。映像の鎖は4本なので本数を言わない版（字・番号なし）。矢印・光柱・光の筋は実行時に重ねる"
+    },
+    "tutorial_jp_n4": {
+      "file": "tutorial_jp/tutorial_jp_n4.mp4",
+      "frames": 207,
+      "next": "tutorial_jp_fin",
+      "cues": [],
+      "tutorial": true,
+      "lights_key": "jp_aim_d4",
+      "note": "JPチャンスのチュートリアル（封印4本の穴）。鎖4本の映像に「封印は4つ！」と番号1〜4。矢印・光柱・光の筋は実行時に重ねる(tutorial_jp_overlay_1030.mjs)"
+    },
+    "tutorial_jp_n5": {
+      "file": "tutorial_jp/tutorial_jp_nx.mp4",
+      "frames": 207,
+      "next": "tutorial_jp_fin",
+      "cues": [],
+      "tutorial": true,
+      "lights_key": "jp_aim_d4",
+      "note": "JPチャンスのチュートリアル（封印5本の穴）。映像の鎖は4本なので本数を言わない版（字・番号なし）。矢印・光柱・光の筋は実行時に重ねる"
+    },
+    "tutorial_jp_fin": {
+      "file": "tutorial_jp/tutorial_jp_fin.mp4",
+      "frames": 54,
+      "next": "jp_aim_d4",
+      "cues": [],
+      "tutorial": true,
+      "lights_key": "jp_aim_d4",
+      "note": "チュートリアルの最後（本番のルーレット roulette_500 に字）。next は実行時に残った穴の jp_aim_dN に差し替える"
+    },
+    "chain_announce_first": {
+      "file": "../chain_announce_v09/announce_first_1152.mp4",
+      "frames": 303,
+      "loop": false,
+      "pinned": true,
+      "note": "継続告知 v09（10/30 監督承認、本番 1152x1268）。1回目（JackPot継続終了・選択なしで継続へ）。白飛びの後は白を保ち、規則の告知（9.5秒）が終われば次の場面へ。起動時に専用スロットへ先読み。"
+    },
+    "chain_announce_repeat": {
+      "file": "../chain_announce_v09/announce_repeat_1152.mp4",
+      "frames": 288,
+      "loop": false,
+      "pinned": true,
+      "note": "継続告知 v09（10/30 監督承認、本番 1152x1268）。2回目以降（○○玉没収の数は chain_announce_v09_1030.mjs が実行時に重ねる）。白飛びの後は白を保ち、規則の告知（9.0秒）が終われば次の場面へ。起動時に専用スロットへ先読み。"
     }
   },
   "fail_slots": null,

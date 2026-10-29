@@ -82,6 +82,7 @@ export function startRemoteClient() {
     s.wallet = g.wallet ?? null; s.earnings = g.jackpotEarnings ?? null;
     s.extraUsed = g.extraCreditsUsed ?? 0; s.extraMax = Number.isFinite(r.MaxExtraCredits) && r.MaxExtraCredits < 1e6 ? r.MaxExtraCredits : null;
     if (g.phase === 'StaffWait') s.staffWait = Math.floor(g.staffWaitSeconds ?? 0);
+    if (g.phase === 'StaffWait') { s.extraSeconds = r.ExtraSeconds ?? null; s.extraBalls = r.ExtraLoanBalls ?? null; s.addPending = !!g._autoChain; }   // 追加で再開するときに増える秒・玉（管理画面の確認文用）
     if (g.phase === 'Continue') s.offerLeft = Math.ceil(g.offerLeft ?? 0);
     if (g.phase === 'ChainChoice') s.choiceLeft = Math.ceil(g.choiceLeft ?? 0);
     s.serial = !!p.cabinet?.ready;
@@ -104,6 +105,14 @@ export function startRemoteClient() {
       let ok = false;
       try { ok = p.cabinet?.input ? p.cabinet.input('staffActivate') : ctrl.dispatch('staffActivate'); } finally { bypass = false; }   // 筐体の両ボタン長押し(1.5秒)と同じ入り口
       return ok ? { ok: true, msg: 'チケット追加OKを送りました' } : { ok: false, msg: '受け付けられませんでした。もう一度押してください' };
+    }
+    if (cmd === 'staffcancel') {   // 取消（客が追加をやめる・押し間違いの受領ではない）: 追加しないで終了へ。左ボタン単独と同じ入口
+      if (ctrl.game.phase !== 'StaffWait') return { ok: false, msg: 'スタッフ待ちではありません' };
+      wrapDispatch();
+      bypass = true;
+      let ok = false;
+      try { ok = ctrl.dispatch('cancelExtra'); } finally { bypass = false; }
+      return ok ? { ok: true, msg: '追加を取り消して終了にしました' } : { ok: false, msg: '受け付けられませんでした。もう一度押してください' };
     }
     return { ok: false, msg: '未対応の操作' };
   }

@@ -2,7 +2,17 @@
 import {MedalController as BaseController} from './controller.mjs';
 import {MedalGame,MedalPhase} from '../rules/medal_rules_g_20261028.mjs';
 export class MedalController extends BaseController {
- constructor(o={}){super(o);this.game=new MedalGame(this.rules,this.seed);}
+ constructor(o={}){
+  super(o);this.game=new MedalGame(this.rules,this.seed);
+  // 結果画面を放置したら、この秒数で次の客の待機画面へ戻す(10/30 D9)。?resultauto=0 で戻さない(従来)・?resultauto=秒 で変更
+  let q=null;try{q=new URLSearchParams(globalThis.location?.search??'').get('resultauto');}catch{}
+  this.resultAutoSeconds=o.resultAutoSeconds??(q===null||q===''?25:(Number(q)||0));this._resultAutoAt=null;
+ }
+ update(dt){
+  super.update(dt);
+  if(this.game.phase!==MedalPhase.Result){this._resultAutoAt=null;return;}
+  if(this.resultAutoSeconds>0&&(this.resultAge??0)>=this.resultAutoSeconds&&(this._resultAutoAt==null||this.resultAge-this._resultAutoAt>=1)){this._resultAutoAt=this.resultAge;this.dispatch('reset');}
+ }
  _dispatch(action){
   const g=this.game;
   if(action==='reset'&&g.phase===MedalPhase.Result){

@@ -7,10 +7,13 @@
 //
 // 既知の課題（記録のみ・10/29 統括：保留）：導入の映像（雷→JACKPOT CHANCE）は、機械が重い・初回の読み込みだと 3 秒以上遅れ、
 //   規則の時計とずれる／stuckWatch（jp_surface_confirm1029）に打ち切られる。本番の事前読み込み（prewarm）の課題として扱う。
+// JPチャンスのチュートリアル（10/30）：導入（雷→JACKPOT CHANCE）のあと、連打メーターが始まる前に「残った1つの穴に玉を入れろ」「封印はN個」の説明（tutorial_jp_n{N} → tutorial_jp_fin）を流す。
+//   規則側が説明の間は時計を止める（制限時間を食わない。規則 H の JpTutorialSeconds。meterStatus.tutorialPlanned/tutorialActive）。回数は既定でその試合の最初のJPチャンスだけ（?jptutorial=all で毎回、?jptutorial=0 で無し）。
+//   矢印・光柱・光の筋は映像に焼かず、残った穴(model.d)の真上に実行時に重ねる（tutorial_jp_overlay_1030.mjs）。封印の本数N＝その穴の連打のしきい値（穴1〜7で 3・4・4・2・4・3・5）。N ごとの映像は鎖がN本。
 // 継続の「追加で継続」：規則側（統括が統合）が game.chainNeedsAdd=true を立てるか、lcd.rulesH.setContinueAdd(true) を呼べば、選択画面の継続の札に出る。
 //
 // 流れ（H）
-//   6灯 → lamp6（G と同じ）→ 雷 1.0秒 → JACKPOT CHANCE 3.5秒（文字の 2.8秒は省く）→ 狙いのループ ＋ メーター（規則の導入 4.5秒と一致させる）
+//   6灯 → lamp6（G と同じ）→ 雷 1.0秒 → 黒背景＋字 1.8秒（dopamine/reach）→ JACKPOT CHANCE 3.5秒 → 狙いのループ ＋ メーター（規則の導入 6.3秒と一致させる。10/30 監督：黒背景と字は消さない）
 //   連打中：メーター部品（あと◯個＋時計／+n とゲージ）、残り3秒以下でまだ足りなければ赤い警報
 //   満タン(meterEnd 成功)：FULL CHARGE/MAX の叩きつけ 1.2秒 → jp_rush(2.0) → jp_bridge(2.6) → ルーレット(=規則の RouletteStartDelaySeconds 5.8)
 //   ルーレット：最高速のコマを繰り返し、押した瞬間(rouletteStopPress)に白いブレーキ光で隠して停止コマの手前 1.2秒から滑って止まる → 止まった所で reveal/tray
@@ -19,6 +22,7 @@
 //   継続の告知枠「継続できるよ!」を、画面いっぱいの銀の「2/3」の叩きつけに置き換え、選択画面の上端に常時の小さな 2/3
 import {createMeterH, alarmLevel, drawAlarm, ALARM, W, H} from './meter_h_20261029.mjs';
 import {createMashHint, HINT, telop} from './hint_h_20261029.mjs';
+import {loadTutorialOverlay} from './tutorial_jp_overlay_1030.mjs';
 
 const PX = 34, PY = 28;                    // 液晶の面(1240x1510)の中の見える範囲(1152x1268)の左上
 const LOOP = [26, 38];                     // ルーレットの回転ループ（全配当の映像で共通の最高速付近のコマ）
@@ -41,10 +45,32 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   try { const f = new FontFace('Kaisei Tokumin', `url(${new URL('../../../effects/jp_teacher/05_choice/r2/src/fonts_dl/KaiseiTokumin-ExtraBold.ttf', import.meta.url).href})`, { weight: '800' }); await f.load(); document.fonts.add(f); } catch (e) { console.warn('[rules-h] kaisei', e); }
   try { const f = new FontFace('Dela Gothic One', `url(${new URL('../../../effects/lcd/fonts/DelaGothicOne-Regular.ttf', import.meta.url).href})`); await f.load(); document.fonts.add(f); } catch (e) { console.warn('[rules-h] font', e); }
   const [slam, badge, upa] = await Promise.all([img(new URL('./rules_h_assets/odds_slam_576.png', import.meta.url).href), img(new URL('./rules_h_assets/odds_badge_card.png', import.meta.url).href), img(new URL('./rules_h_assets/upa_source.png', import.meta.url).href)]);
-  const mash = hint ? createMashHint({ img: upa, cfg: hint }) : null;
+  // 慎重すぎる客への助言（10/30）：?carefulhint=0 なら従来（重ね表示だけ）。判定が通ったら時計と発射を 3 秒止め、液晶・囲いの光・音を助言の場面にする
+  let carefulFx = null;
+  const useCareful = !!hint && new URLSearchParams(globalThis.location?.search ?? '').get('carefulhint') !== '0';
+  let mash;
+  if (useCareful) {
+    try {
+      const ch = await import('./careful_hint_1030.mjs'); carefulFx = await import('./careful_hint_fx_1030.mjs');
+      const sprites = await ch.loadSprites(new URL('./rules_h_assets/careful/', import.meta.url));
+      const gameProxy = { get lampCount() { return controller.game.lampCount; }, beginAdvice: (s) => controller.game.beginAdvice?.(s) ?? false, get adviceStatus() { return controller.game.adviceStatus ?? null; } };
+      mash = ch.createCarefulHint({ game: gameProxy, sprites, cfg: hint, onStart: (d) => { try { log('careful:start', d); carefulFx.playAdviceSfx(globalThis.__r2Audio?.engine); } catch {} }, onEnd: () => { try { lcd.cabinetLightScript?.cue?.(null); } catch {} } });
+    } catch (e) { console.warn('[rules-h] careful hint', e); mash = createMashHint({ img: upa, cfg: hint }); }
+  } else mash = hint ? createMashHint({ img: upa, cfg: hint }) : null;
   const gem = await Promise.all(['1', '2', '3', '4', '5', '6', '7', 'max'].map((k) => img(new URL(`./rules_h_assets/gem_${k}.png`, import.meta.url).href)));
   const meter = createMeterH({ style, sprites: { digits: gem.slice(0, 7), max: gem[7] } });
   const model = lcd.jp.model, man = lcd.jp.man;
+  // ---- JPチャンスのチュートリアル ----
+  const tq = new URLSearchParams(globalThis.location?.search ?? '').get('jptutorial');
+  const TUT = { on: tq !== '0' && tq !== 'off', every: tq === 'all', fin: 'tutorial_jp_fin', secs: 0 };
+  let tutOverlay = null;
+  if (TUT.on && [2, 3, 4, 5].every((n) => man.scenes[`tutorial_jp_n${n}`]) && man.scenes[TUT.fin]) {
+    try {
+      tutOverlay = await loadTutorialOverlay(new URL('./jp1029/', import.meta.url));
+      TUT.secs = Math.max(...[2, 3, 4, 5].map((n) => man.scenes[`tutorial_jp_n${n}`].frames)) / man.fps + man.scenes[TUT.fin].frames / man.fps;
+      const rr = controller.game.rules; rr.JpTutorialSeconds = TUT.secs; rr.JpTutorialEvery = TUT.every;
+    } catch (e) { console.warn('[rules-h] tutorial overlay', e); tutOverlay = null; }
+  }
   const S = { wall: 0, normalT: 0, presses: 0, addContinue: false, clock: 0, plan: null, press: null, flashAt: -9, jpVideo: null, roulette: null, events: [], loops: 0, absorbed: 0, introFixes: 0 };
   const note = (k, d = {}) => { S.events.push({ k, at: +S.clock.toFixed(2), ...d }); if (S.events.length > 200) S.events.shift(); log(k, d); };
 
@@ -80,12 +106,63 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   const isNormal = () => { const g = controller.game; return ['Ready', 'Flight', 'Effect'].includes(g.phase) && !g.meterStatus && !g.rouletteStatus && !model.active && !lcd.choiceV20?.active; };
   controller.dispatch = (action, ...r) => { if (action === 'fire' && isNormal()) { S.presses++; mash?.press(S.wall); } return dispatch0(action, ...r); };
 
+  // ---- チュートリアルの進行（毎フレーム jp.frame の頭で）----
+  const isTut = (n) => /^tutorial_jp/.test(n ?? '');
+  const tutRestore = () => {
+    const T = S.tut; if (!T?.patched) return;
+    man.scenes[T.patched.name].next = T.patched.next; man.scenes[TUT.fin].next = T.patched.finNext; man.scenes[T.scene].next = T.patched.sceneNext; T.patched = null;
+  };
+  const tutTick = () => {
+    if (!tutOverlay) return;
+    const g = controller.game, st = g.meterStatus, T = S.tut;
+    if (!st?.tutorialPlanned || st.kind !== 'jp') { if (T) { tutRestore(); S.tut = null; } return; }
+    const id = g.meter?.id;
+    if (!T || T.meterId !== id) {
+      tutRestore();
+      S.tut = { meterId: id, scene: `tutorial_jp_n${st.threshold}`, born: S.clock, patched: null, started: false, acked: false, skip: false };
+      if (!man.scenes[S.tut.scene]) { S.tut.skip = true; g.endJpTutorial?.(); note('tutorial:skip', { n: st.threshold }); }
+      return;
+    }
+    if (T.skip || T.acked) return;
+    const ack = (why) => { T.acked = true; g.endJpTutorial?.(); note('tutorial:end', { why }); };
+    // 導入（雷 → JACKPOT CHANCE）の間に、チャンス題字の次を説明の映像へ差し替える（読み込みも先に始まる）
+    if (!T.patched && !T.started && model.active && !model.chainMode && /^jp_(intro|chance)/.test(model.name ?? '')) {
+      const cn = `jp_chance_d${model.d}`, cs = man.scenes[cn];
+      if (cs) {
+        T.patched = { name: cn, next: cs.next, finNext: man.scenes[TUT.fin].next, sceneNext: man.scenes[T.scene].next };
+        cs.next = T.scene; man.scenes[T.scene].next = TUT.fin; man.scenes[TUT.fin].next = `jp_aim_d${model.d}`; note('tutorial:patched', { scene: T.scene, d: model.d });
+      }
+    }
+    if (isTut(model.name)) {
+      if (!T.started) { T.started = true; T.t0 = S.clock; note('tutorial:start', { scene: model.name }); tutRestore(); }
+      if (st.stage === 'firing') { model.start(`jp_aim_d${model.d}`); ack('firing'); return; }     // 規則が先に終えた（打ち切り）：説明を切って狙いへ
+      if (model.name === TUT.fin && (model.time ?? 0) >= man.scenes[TUT.fin].frames / man.fps - 0.12) ack('done');
+    } else if (T.started || (!model.active && S.clock - T.born > 2) || (st.tutorialActive && /^jp_aim/.test(model.name ?? ''))) { ack(T.started ? 'left' : 'unplayed'); tutRestore(); }
+  };
+
+  // 救済：説明の段なのに映像が止まっている（JPの映像が途中で終わり、jp.frame が呼ばれなくなった）ときは、説明の映像をここから直接始める。2回やっても流れなければ説明を打ち切る（時計は止めたままにしない）
+  const tutRescue = () => {
+    if (tutOverlay && !model.active) tutTick();   // 映像が止まっていると jp.frame が呼ばれないので、状態の読み取り（計画・確認）はここでも行う
+    const T = S.tut; if (!tutOverlay || !T || T.skip || T.acked) return;
+    const g = controller.game, st = g.meterStatus;
+    if (!st?.tutorialPlanned || st.kind !== 'jp' || st.stage !== 'tutorial') { T.idleAt = null; return; }
+    if (model.active) { T.idleAt = null; return; }
+    const nowMs = performance.now(); T.idleAt ??= nowMs;
+    if (nowMs - T.idleAt < 250) return;
+    T.idleAt = null; T.rescues = (T.rescues ?? 0) + 1;
+    if (T.rescues > 2 || !man.scenes[T.scene]) { T.acked = true; g.endJpTutorial?.(); tutRestore(); note('tutorial:end', { why: 'rescue-fail' }); return; }
+    const d = model.d || 4; tutRestore();
+    man.scenes[T.scene].next = TUT.fin; man.scenes[TUT.fin].next = `jp_aim_d${d}`; T.started = true; T.t0 = S.clock; T.patched = null;
+    model.delay = 0; model.pending = null; model.start(T.scene); note('tutorial:rescue', { scene: T.scene, d });
+  };
+
   // ---- 映像の流れ（lcd.jp.frame を包む：毎フレーム、描く映像を返す関数）----
   const jp = lcd.jp, jpFrame = jp.frame.bind(jp);
   const stopFrame = () => man.scenes[model.name]?.stop_frame ?? 121;
   jp.frame = (dt) => {
     S.clock += dt;
     const g = controller.game;
+    tutTick();
     // 満タンの叩きつけの後、つなぎの映像へ
     if (S.plan && !S.plan.done && S.clock >= S.plan.at && model.active) {
       S.plan.done = true; model.delay = 0; model.pending = null; model.start('jp_rush'); note('plan:jp_rush');
@@ -114,8 +191,8 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     if (id === 'start') { mash?.reset(); S.normalT = 0; S.presses = 0; }   // プレイの始まり：うぱの促しの判定を最初から
     if (id === 'lamp6') {
       const handled = baseOn(id, p);
-      // 導入は 雷 → JACKPOT CHANCE（文字を省く）。映像は 6灯目の瞬間から（規則の導入 4.5秒と同じ）
-      if (model.active && !model.chainMode) { model.introVariant = `jp_chance_d${model.d}`; model.delay = 0; S.introFixes++; }
+      // 導入は 雷 → 黒背景＋字 → JACKPOT CHANCE（字は G と同じく dopamine/reach を等確率。10/30 監督：消さない）。映像は 6灯目の瞬間から（規則の導入 6.3秒と同じ）
+      if (model.active && !model.chainMode) { model.delay = 0; S.introFixes++; }
       return handled;
     }
     if (id === 'jp') {
@@ -130,6 +207,7 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   const base = lcd.frame.bind(lcd);
   const ofs = { offerT: 0 };
   lcd.frame = (dt, F) => {
+    tutRescue();
     const r = base(dt, F);
     if (heldAnnounce && !lcd.jp.claimed) { const p0 = heldAnnounce; heldAnnounce = null; S.announceOn = true; note('chain_announce', p0); baseOnRef('chain_announce', p0); }
     if (S.announceOn && !controller.game.chainAnnouncing) { S.announceOn = false; heldAnnounce = null; }
@@ -144,11 +222,15 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     // メーター部品は、狙いの映像（jp_aim / chain_jp_aim、または JACKPOT CHANCE の終盤）が見えている間だけ出す。導入の雷・題字に重ねない
     const hudOk = !!name && (/^(jp_aim|chain_jp_aim)/.test(name) || (/^jp_chance/.test(name) && (model.time ?? 0) >= 2.4) || meter.finishing || (st?.stage === 'firing' && st.count > 0 && /^(jp_|chain_jp)/.test(name)));   // 1個でも入れば、映像が遅れていても HUD と入賞の演出は出す
     S.hudOk = hudOk;
-    meter.draw(ctx, dt, hudOk || meter.finishing ? st : null);
+    // チュートリアルが計画されている間は、導入〜説明の間ずっと「連打」の出番の前の状態にする（説明のあと、撃てるときに連打のカットインが出る）
+    const stD = st?.tutorialPlanned && (st.stage === 'intro' || st.stage === 'tutorial') ? { ...st, stage: 'intro', introLeft: 9 } : st;
+    if (tutOverlay && /^tutorial_jp_n\d$/.test(name ?? '')) tutOverlay.draw(ctx, model.time ?? 0, model.d);   // 残った穴の上に矢印・光柱・光の筋
+    meter.draw(ctx, dt, hudOk || meter.finishing ? stD : null);
     // 連打のカットイン（ガンダム逆シャア）：雷の導入の間は出さない。それ以外の場面なら、HUD の条件を待たずに出す
-    if (name && !/^jp_intro/.test(name) && /^(jp_|chain_jp)/.test(name)) meter.drawCut(ctx, st);
+    if (name && !/^jp_intro/.test(name) && /^(jp_|chain_jp)/.test(name)) meter.drawCut(ctx, stD);
     // 通常時、連打していなさそうな客へ、うぱの声かけ（字）。通常時だけ（JPチャンス中・継続中は出さない）
     if (mash) mash.draw(ctx, dt, { normal: isNormal(), elapsed: S.normalT }, S.wall);
+    if (mash?.state.active && mash.state.t !== undefined && carefulFx) lcd.cabinetLightScript?.cue?.('careful_hint', mash.state.t);   // 助言の間、囲いはやさしい光
     // 時計0：JPチャンス中に切れても連打は最後まで（規則側が進める）。液晶は途中で切らず、記録だけ残す
     if (g.secondsLeft <= 0 && (st || g.rouletteStatus) && !S.zeroNoted) { S.zeroNoted = true; note('clockZero', { meter: st?.stage ?? null, roulette: g.rouletteStatus?.stage ?? null }); }
     else if (g.secondsLeft > 0) S.zeroNoted = false;
@@ -199,7 +281,15 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   };
   // 毎フレーム変わる重ね描きがあるので、液晶面の「更新なし」判定を外す（他の attach と同じ作法）
   const rev = Object.getOwnPropertyDescriptor(lcd, 'uploadRevision')?.get;
-  if (rev) Object.defineProperty(lcd, 'uploadRevision', { configurable: true, enumerable: true, get: () => (controller.game.meterStatus || controller.game.rouletteStatus || mash?.state.active || meter.finishing || (S.clock - S.flashAt < BRAKE.hold + BRAKE.fade + 0.05) || model.name === 'chain_offer' || lcd.choiceV20?.active) ? undefined : rev.call(lcd) });
+  if (rev) Object.defineProperty(lcd, 'uploadRevision', { configurable: true, enumerable: true, get: () => (/^tutorial_jp/.test(model.name ?? '') || controller.game.meterStatus || controller.game.rouletteStatus || mash?.state.active || meter.finishing || (S.clock - S.flashAt < BRAKE.hold + BRAKE.fade + 0.05) || model.name === 'chain_offer' || lcd.choiceV20?.active) ? undefined : rev.call(lcd) });
   lcd.rulesH = { state: S, meter, hint: mash, setContinueAdd(on) { S.addContinue = !!on; }, alarmLevel: () => alarmLevel(controller.game.meterStatus), ALARM, dispose() { off?.(); controller.dispatch = dispatch0; jp.frame = jpFrame; lcd.onEvent = baseOn; lcd.frame = base; } };
+  // 継続告知 v09（10/30）：配当の後の告知を本番の映像に（失う玉数は実行時に重ねる）。?chainannounce=old で旧（仮カード・2.5秒）
+  if (new URLSearchParams(location.search).get('chainannounce') === 'old') {
+    const old = () => { const r = controller.game?.rules; if (r) { r.ChainAnnounceSeconds = 2.5; r.ChainAnnounceSecondsFirst = 2.5; } };
+    old(); controller.onAction((action) => { if (action === 'reset') old(); });
+  } else await (await import('./chain_announce_v09_1030.mjs')).attachChainAnnounceV09(lcd, { controller, log });
+  await (await import('./fx_trim_1030.mjs')).attachFxTrim(lcd, { controller, log });   // 10/30 演出の短縮（溜めと間）。?fxtrim=0 で無し
+  await (await import('./jp_seal_1030.mjs')).attachJpSeal(lcd, { controller, log });   // 10/30 JPチャンス中の映像を封印の扉に。?jpseal=0 で旧（jp_aim）
+  await (await import('./chain_seal_1030.mjs')).attachChainSeal(lcd, { controller, log });   // 10/30 継続チャレンジも封印の扉に（JPと同じ経路）。?chainseal=0 で旧（chain_jp_aim）
   return lcd;
 }

@@ -24,6 +24,12 @@ export class MedalRules extends GRules {
     this.JpMeterThreshold = o.JpMeterThreshold ?? 3;          // 残り1穴に入った球がこの数に届いたら成功
     this.JpMeterSeconds = o.JpMeterSeconds ?? 9;              // 撃てる時間（導入の後、タイマーが動く間）
     this.JpMeterIntroSeconds = o.JpMeterIntroSeconds ?? 2;    // 6灯が揃ってから撃てるまでの導入（時計は進む。この間の押しは1回だけ保持）
+    // JPチャンスのチュートリアル（10/30）。導入のあと、撃てるようになる前に液晶が説明の映像を流す間、時計を止める（制限時間を食わない）。0で無し（既定）。
+    //   液晶（lcd_surface/rules_h_20261029.mjs）が、映像があるときだけ秒数を入れる。JpTutorialEvery=false なら、その試合の最初のJPチャンスだけ。
+    //   液晶が endJpTutorial() で終わりを知らせる。知らせが無くても JpTutorialSeconds+JpTutorialGraceSeconds で打ち切る。
+    this.JpTutorialSeconds = o.JpTutorialSeconds ?? 0;
+    this.JpTutorialEvery = o.JpTutorialEvery ?? false;
+    this.JpTutorialGraceSeconds = o.JpTutorialGraceSeconds ?? 6;
     // --- 連打メーター（継続）。連数（0始まり）ごとの設定。足りない連数は最後の要素を使う ---
     this.ChainHitCount = o.ChainHitCount ?? 3;                // 当たりの穴の数（7穴のうち）。4も可
     this.ChainHitLaneMode = o.ChainHitLaneMode ?? 'random';   // 'random': 毎回乱数で選ぶ / 'order': JackpotChainLaneOrder の先頭から固定
@@ -69,6 +75,7 @@ export class MedalRules extends GRules {
     // --- JP後の継続の告知（10/30）。ChainAnnounceSeconds>0: 継続の選択に入る前に告知を出す（その間は選択も確定も受けず、時計は止めない。選択の制限時間は告知のあとから）
     //     ChainFirstAuto: その試合で最初の継続判断（JP直後）は選択を出さず、告知のあと自動で継続する。2回目以降は告知のあと選択画面
     this.ChainAnnounceSeconds = o.ChainAnnounceSeconds ?? 0;
+    this.ChainAnnounceSecondsFirst = o.ChainAnnounceSecondsFirst ?? null;   // 最初の継続（JP直後・ChainFirstAuto）の告知の秒数（10/30 告知 v09 は 9.5、2回目以降の ChainAnnounceSeconds は 9.0）。null で ChainAnnounceSeconds と同じ
     this.ChainFirstAuto = o.ChainFirstAuto ?? false;
     this.RuleVariant = 'H_20261029';
     this._hReady = true;
@@ -129,6 +136,7 @@ export class MedalRules extends GRules {
       !(r.DuplicateSixthLampTeaseMax === null || (Number.isInteger(r.DuplicateSixthLampTeaseMax) && r.DuplicateSixthLampTeaseMax >= 0)) ||
       !isNum(r.DuplicateRestartScaleAfterJp) || r.DuplicateRestartScaleAfterJp <= 0 || r.DuplicateRestartScaleAfterJp > 1 ||
       typeof r.ChainContinueNeedsAddAtZero !== 'boolean' || typeof r.ChainFirstAuto !== 'boolean' || !isNum(r.ChainAnnounceSeconds) || r.ChainAnnounceSeconds < 0 || r.ChainAnnounceSeconds > 10 ||
+      !(r.ChainAnnounceSecondsFirst === null || (isNum(r.ChainAnnounceSecondsFirst) && r.ChainAnnounceSecondsFirst >= 0 && r.ChainAnnounceSecondsFirst <= 12)) ||
       !posInt(r.JpMeterThreshold) || !isNum(r.JpMeterSeconds) || r.JpMeterSeconds <= 0 || !isNum(r.JpMeterIntroSeconds) || r.JpMeterIntroSeconds < 0 ||
       !posInt(r.ChainHitCount) || r.ChainHitCount > 6 || !['random', 'order'].includes(r.ChainHitLaneMode) ||
       !isNum(r.ChainIntroSeconds) || r.ChainIntroSeconds < 0 || typeof r.ChainDisplayProbability !== 'string' ||
@@ -152,7 +160,7 @@ export class MedalRules extends GRules {
 export class MedalGame extends GGame {
   constructor(rules, seed) {
     super(rules, seed);
-    this.meter = null; this.roulette = null;
+    this.meter = null; this.roulette = null; this.advice = null; this.adviceCount = 0;
     this._events = []; this._eventListeners = new Set();
     this._dupUsed = 0; this.teases = 0; this._dupIdx = 0; this._extensions = 0; this._epoch = { start: 0, length: rules.InitialSeconds };
     this.meterSuccesses = 0; this.meterFailures = 0; this.freeShots = 0; this.meterHits = 0;
@@ -173,7 +181,8 @@ export class MedalGame extends GGame {
     const m = this.meter; if (!m) return null;
     return { kind: m.kind, stage: m.stage, targets: [...m.targets], threshold: m.threshold, count: m.count, seconds: m.seconds,
       timeLeft: m.timeLeft, introLeft: m.introLeft, settleLeft: m.settleLeft, fired: m.fired, landed: m.landed, lastLane: m.lastLane,
-      inFlight: this._meterInFlight(), chainStage: m.chainStage, free: true };
+      inFlight: this._meterInFlight(), chainStage: m.chainStage, free: true,
+      tutorialPlanned: !!m.tutorial, tutorialActive: m.stage === 'tutorial' };
   }
   get rouletteStatus() {
     const r = this.roulette; if (!r) return null;
@@ -201,15 +210,19 @@ export class MedalGame extends GGame {
   // ---------- 発射 ----------
   _meterInFlight() { return this.shots.filter((s) => s.free && this.meter && s.meterId === this.meter.id).length; }
   get canFire() {
+    if (this.advice) return false;   // 慎重な客への助言の間は撃てない（時計も止まっている）
     const m = this.meter;
     if (m) return m.stage === 'firing' && this._meterInFlight() < this.rules.MeterMaxInFlight && this._sinceFire + 1e-9 >= this.rules.MeterFireInterval;
     if (this.phase === HPhase.Roulette) return false;
+    if (this.lampCount === 6 && !this.jackpotChain) return false;   // 6灯が時間切れで揃った後の追加入金: JPチャンスが始まるまで通常球を撃たせない（撃つと6灯が崩れてJPが消える。QA10/30 E）
     return super.canFire;
   }
   get canAim() {
+    if (this.advice) return false;
     const m = this.meter;
-    if (m) return m.stage === 'intro' || m.stage === 'firing';   // 導入中の押しも1回保持できる
+    if (m) return m.stage === 'intro' || m.stage === 'tutorial' || m.stage === 'firing';   // 導入中の押しも1回保持できる
     if (this.phase === HPhase.Roulette) return false;
+    if (this.lampCount === 6 && !this.jackpotChain) return false;   // 同上
     return super.canAim;
   }
   launch() {
@@ -361,8 +374,23 @@ export class MedalGame extends GGame {
     this.attempts++; this.firstProtection = false;
     if (kind === 'jp') this.jackpotChances++;
     else this.chainAttempts++;
-    this._emit('meterReady', { kind, targets: [...targets], threshold, seconds, introSeconds: intro, chainStage, display });
-    if (intro <= 1e-9) this._beginFiring();
+    this._jpMeters = (this._jpMeters ?? 0) + (kind === 'jp' ? 1 : 0);
+    const r = this.rules;
+    if (kind === 'jp' && r.JpTutorialSeconds > 0 && (r.JpTutorialEvery || this._jpMeters === 1))
+      this.meter.tutorial = { seconds: r.JpTutorialSeconds, left: r.JpTutorialSeconds + r.JpTutorialGraceSeconds, acked: false };
+    this._emit('meterReady', { kind, targets: [...targets], threshold, seconds, introSeconds: intro, chainStage, display, tutorialSeconds: this.meter.tutorial?.seconds ?? 0 });
+    if (intro <= 1e-9) this._endIntro();
+  }
+  /** 導入が終わった: チュートリアルがあれば時計を止めたまま液晶の説明を待ち、無ければ撃てるようにする。 */
+  _endIntro() {
+    const m = this.meter;
+    if (m.tutorial && !m.tutorial.acked) { m.stage = 'tutorial'; this._emit('meterTutorial', { kind: m.kind, seconds: m.tutorial.seconds }); return; }
+    this._beginFiring();
+  }
+  /** 液晶がチュートリアルの映像を流し終えた（早く終わってもよい）。導入の間に来ても覚えておき、導入が終わったらそのまま撃てるようにする。 */
+  endJpTutorial() {
+    const t = this.meter?.tutorial; if (!t || t.acked) return false;
+    t.acked = true; return true;
   }
   _beginFiring() {
     const m = this.meter; m.stage = 'firing'; this._sinceFire = Infinity;
@@ -370,7 +398,12 @@ export class MedalGame extends GGame {
   }
   _advanceMeter(dt) {
     const m = this.meter;
-    if (m.stage === 'intro') { m.introLeft = Math.max(0, m.introLeft - dt); if (m.introLeft <= 1e-9) this._beginFiring(); return; }
+    if (m.stage === 'intro') { m.introLeft = Math.max(0, m.introLeft - dt); if (m.introLeft <= 1e-9) this._endIntro(); return; }
+    if (m.stage === 'tutorial') {   // 時計は止まっている（advance）。液晶の終わりの知らせ、または打ち切りで撃てるようにする
+      m.tutorial.left = Math.max(0, m.tutorial.left - dt);
+      if (m.tutorial.acked || m.tutorial.left <= 1e-9) { m.tutorial.acked = true; this._beginFiring(); }
+      return;
+    }
     if (m.stage === 'firing') {
       m.timeLeft = Math.max(0, m.timeLeft - dt);
       if (m.timeLeft > 1e-9) return;
@@ -502,21 +535,26 @@ export class MedalGame extends GGame {
       if (this._announcedKey !== key) {
         this._announcedKey = key;
         const first = chain.stage === 0 && r.ChainFirstAuto;
-        this.announceLeft = r.ChainAnnounceSeconds; this._announceFirst = first;
-        this._emit('chainAnnounce', { first, atRisk: first ? 0 : chain.pendingAward, rate: '2/3', seconds: r.ChainAnnounceSeconds, stage: chain.stage });
+        const seconds = first && r.ChainAnnounceSecondsFirst !== null ? r.ChainAnnounceSecondsFirst : r.ChainAnnounceSeconds;
+        this.announceLeft = seconds; this._announceFirst = first;
+        this._emit('chainAnnounce', { first, atRisk: first ? 0 : chain.pendingAward, rate: '2/3', seconds, stage: chain.stage });   // atRisk: 失敗したとき没収される額（継続で得た配当の積み増し。最初のJPの配当は残る）
       }
-    } else if (r.ChainFirstAuto && this.phase === MedalPhase.ChainChoice && chain?.choicePending && chain.stage === 0) {
-      this.chooseChain(true);   // 告知なしでも最初は選択を出さない
+    } else if (r.ChainFirstAuto && this.phase === MedalPhase.ChainChoice && chain?.choicePending && chain.stage === 0 && !this._chainNeedsAddNow()) {
+      this.chooseChain(true);   // 告知なしでも最初は選択を出さない（追加が要るときは客が選ぶ）
     }
   }
+  /** 時計0で継続に追加（100円）が要る状態か。この選択は客が決める（自動で継続・スタッフ待ちへ進めない）。 */
+  _chainNeedsAddNow() { return !!this.rules.ChainContinueNeedsAddAtZero && this.secondsLeft <= 0; }
+  /** 追加が要る選択は財布を出す時間が要るので、追加の勧誘（ContinueSeconds）と同じ長さにする。 */
+  _chainChoiceSeconds() { const r = this.rules; return this._chainNeedsAddNow() ? Math.max(r.ChainChoiceSeconds, r.ContinueSeconds) : r.ChainChoiceSeconds; }
   /** 告知の間は選択の制限時間を減らさない。告知が終わったら、最初の継続は自動で継続、2回目以降は選択画面へ。 */
   _advanceChainChoice(seconds) {
     if (this.phase === MedalPhase.ChainChoice && (this.announceLeft ?? 0) > 0) {
       if (this.chainTooLate) { this.announceLeft = 0; return super._advanceChainChoice(seconds); }
       this.announceLeft = Math.max(0, this.announceLeft - seconds);
       if (this.announceLeft > 1e-9) return false;
-      this.announceLeft = 0; this.choiceLeft = this.rules.ChainChoiceSeconds;
-      if (this._announceFirst) return this.chooseChain(true);
+      this.announceLeft = 0; this.choiceLeft = this._chainChoiceSeconds();
+      if (this._announceFirst && !this._chainNeedsAddNow()) return this.chooseChain(true);   // 10/30 監督: 追加（100円）が要る選択は自動で決めない。時計0なら最初でも選択画面
       return false;
     }
     return super._advanceChainChoice(seconds);
@@ -532,19 +570,35 @@ export class MedalGame extends GGame {
   advance(dt) {
     if (this.phase === 'StaffWait') return super.advance(dt);
     if (!Number.isFinite(dt) || dt < 0) throw new RangeError('seconds');
+    if (this.advice) {   // 助言の中断：時計・点灯・飛行の規則時間を止める（止めた秒は持ち時間から引かない）。終わった分の残りの dt は普通に進める
+      const a = this.advice, s = Math.min(dt, a.left); a.left -= s; dt -= s; this.clockStoppedSeconds += s; this._sinceFire += s; this._displayClock += s;
+      if (a.left <= 1e-9) { this.advice = null; this._emit('adviceEnd', { stopped: +a.total.toFixed(3) }); }
+      if (dt <= 1e-12) return;
+    }
     let left = dt;
     while (left > 1e-12 && (this.meter || this.phase === HPhase.Roulette)) {
       const s = Math.min(left, 0.05); left -= s;
       this._displayClock += s; this._resetDisplays = this._resetDisplays.filter((d) => d.expiresAt > this._displayClock);
       this._sinceFire += s; this._settlementLeft = Math.max(0, this._settlementLeft - s); this._loanLeft = Math.max(0, this._loanLeft - s);
       this.endPending = false; this.endGraceLeft = 0;
-      if (this.meter ? this.rules.ClockStopOnMeter : this.rules.ClockStopOnRoulette) this.clockStoppedSeconds += s;
+      if (this.meter ? (this.rules.ClockStopOnMeter || this.meter.stage === 'tutorial') : this.rules.ClockStopOnRoulette) this.clockStoppedSeconds += s;
       else this.secondsLeft = Math.max(0, this.secondsLeft - s);
       if (this.meter) this._advanceMeter(s); else this._advanceRoulette(s);
     }
     if (left > 1e-12 || dt === 0) super.advance(left);
     this._resumeJpMeter();
   }
+  /** 慎重すぎる客への助言（10/30）：撃てる状態（Ready・空の盤・時間に余裕・JP/継続/メーター/ルーレットの外）のときだけ、seconds 秒の中断を始める。始めたら true。 */
+  canBeginAdvice() {
+    return !this.advice && !this.meter && !this.roulette && this.phase === MedalPhase.Ready && this.shots.length === 0 && !this.jackpotChain && !this.endPending &&
+      this.lampCount <= 4 && this.secondsLeft > 4 && !this.chainAnnouncing;
+  }
+  beginAdvice(seconds = 3) {
+    if (!this.canBeginAdvice()) return false;
+    this.advice = { left: seconds, total: seconds }; this.adviceCount = (this.adviceCount ?? 0) + 1;
+    this._emit('adviceStart', { seconds }); return true;
+  }
+  get adviceStatus() { return this.advice ? { left: this.advice.left, total: this.advice.total, t: this.advice.total - this.advice.left } : null; }
   /** 6灯が揃ったのに時間切れで始められなかった場合（追加入金で時間が戻った後）、払い出しが終わったらJPチャンスを始める。 */
   _resumeJpMeter() {
     if (this.meter || this.roulette || this.lampCount !== 6 || this.phase !== MedalPhase.Ready || this.secondsLeft <= 0 || this.jackpotChain) return;

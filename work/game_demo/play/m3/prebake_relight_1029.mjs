@@ -86,9 +86,18 @@ void main(){
   const linear=new THREE.DataArrayTexture(linearBytes,W,H,4);
   linear.type=THREE.UnsignedByteType;linear.format=THREE.RGBAFormat;linear.colorSpace=THREE.SRGBColorSpace;
   linear.minFilter=linear.magFilter=THREE.NearestFilter;linear.generateMipmaps=false;linear.needsUpdate=true;owned.push(linear);
-  const balls=hr.rtMain;
+  // Render the expensive sphere/composite passes at 720x1280, then present to
+  // the native canvas. Keep all artwork, layout and occlusion in native coords.
+  const renderLite=new URLSearchParams(globalThis.location?.search??'').get('renderlite')!=='0';
+  const renderScale=renderLite?2:1,RW=W/renderScale,RH=H/renderScale;
+  const balls=renderLite?new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples:2}):hr.rtMain;
+  if(renderLite)owned.push(balls);
+  const display=renderLite?rt(RW,RH):null;
+  if(display)display.texture.type=THREE.UnsignedByteType;
+  const present=display?make('uniform sampler2D uImage;void main(){gl_FragColor=texture2D(uImage,gl_FragCoord.xy/vec2(1440.,2560.));}',{uImage:{value:display.texture}}):null;
   const ballMaterial=new hr.ballMat.constructor().copy(Object.create(hr.ballMat,{uniforms:{value:{}}}));ballMaterial.uniforms={...hr.ballMat.uniforms,uAtlas:{value:compact.atlas.texture}};
   ballMaterial.fragmentShader=replace(ballMaterial.fragmentShader,'const float PS = 64.0, PT = 66.0;',`const float PS = ${compact.faceSize}.0, PT = ${compact.tileSize}.0;`);materials.push(ballMaterial);
+  if(renderLite)ballMaterial.fragmentShader=ballMaterial.fragmentShader.replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*2.0,gl_FragCoord.zw)');
   const extra={uPBBack:{value:back.texture},uPBFront:{value:front.texture},uPBFields:{value:fields.texture},uPBFrame:{value:linear},uPBTau:hr.composeMat.uniforms.uTau,
     uPBLCD:{value:null},uPBRect:{value:new THREE.Vector4()},uPBPanel:{value:new THREE.Vector4()},uPBGain:{value:1},uPBLCDOn:{value:0}};
   const load=`
@@ -114,6 +123,9 @@ vec4 prebakeC(ivec2 p){
   shader=replace(shader,'vec3 l0 = s2l(s0), b4 = s2l(texture(uMA, vec3(uv, 6.0)).rgb), w4 = s2l(texture(uMA, vec3(uv, 7.0)).rgb);','vec3 l0 = texture(uPBFrame,vec3(uv,0.)).rgb, b4 = texture(uPBFrame,vec3(uv,2.)).rgb, w4 = texture(uPBFrame,vec3(uv,3.)).rgb;');
   shader=replace(shader,'vec3 l4 = s2l(f4);','vec3 l4 = texture(uPBFrame,vec3(uvA,1.)).rgb;');
   shader=replace(shader,'vec3 dyed = l2s(mix(s2l(f0.rgb), pattern * hue * kk, 1.0));','vec3 dyed = l2s(pattern * hue * kk);');
+  if(renderLite){
+    shader=shader.replace('vec4 d=texelFetch(uD,p,0);','vec4 d=texture(uD,uv);').replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*2.0,gl_FragCoord.zw)');
+  }
   const final=make(shader,{...U,...extra,uD:{value:balls.texture}});
   const legacy=hr.render,dispose=hr.dispose,readLinear=hr.readLinear;
   let enabled=true,disposed=false,probeValid=false;
@@ -143,7 +155,7 @@ vec4 prebakeC(ivec2 p){
     if(validProof)fieldInitialized.add(key);else fieldInitialized.delete(key);
   }
   const restored=()=>{fieldInitialized.clear();invalidate();};
-  const api={setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',ballResolution:[W,H],ballSamples:4,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  const api={setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,compositeResolution:[RW,RH],ballResolution:[RW,RH],ballSamples:balls.samples,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
   hr.prebakeRelight=api;
   hr.render=function(){
     const plate=getPlate();
@@ -161,7 +173,8 @@ vec4 prebakeC(ivec2 p){
     const oldBallMaterial=hr.balls.material;hr.balls.material=ballMaterial;
     try{if(hr.balls.count||hr.trayVisual)r.render(hr.sBalls,hr.camera);}finally{hr.balls.material=oldBallMaterial;}
     U.uUseLut.value=hr.lutEnabled?1:0;
-    r.setRenderTarget(null);r.setViewport(0,0,W,H);r.render(final.scene,hr.fsCam);
+    r.setRenderTarget(display);r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);
+    if(present){r.setRenderTarget(null);r.setViewport(0,0,W,H);r.render(present.scene,hr.fsCam);}
   };
   hr.dispose=function(){api.dispose();return dispose.call(hr);};
   // Debug C/D readbacks materialize the reference HDR path on demand.

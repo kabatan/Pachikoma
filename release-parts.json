@@ -17,6 +17,21 @@
       ]
     },
     {
+      "path": "work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4",
+      "bytes": 178752759,
+      "sha256": "ae98ab2a00c443a70fe6907953d99a137cad92ddf230147d88c2876161c69407",
+      "parts": [
+        {
+          "path": "work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4.part00",
+          "bytes": 95000000
+        },
+        {
+          "path": "work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4.part01",
+          "bytes": 83752759
+        }
+      ]
+    },
+    {
       "path": "work/effects/jp_teacher/09_timeup/prod/final/timeup_prod.mp4",
       "bytes": 107049027,
       "sha256": "2d11ad4efd12596e2b48e601a70beb357c233eca974e9acb8103f24db93ee75e",

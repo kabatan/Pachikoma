@@ -26,6 +26,7 @@ export async function attachTimeupSurface(lcd,{controller,canvas,onInput,unlock,
   // Local runtime override: retain source configs and all other tuning.
   controller.rules.ContinueSeconds=30;controller.game.rules.ContinueSeconds=30;
   let active=false,manual=false,disposed=false,target=0,lastPhase=null,waiting=false;
+  const hudHandoff=new URLSearchParams(globalThis.location?.search??'').get('hudhandoff')!=='0';
   const base={frame:lcd.frame.bind(lcd),prepare:lcd.prepare.bind(lcd),setManual:lcd.setManual.bind(lcd),onEvent:lcd.onEvent.bind(lcd),dispose:lcd.dispose.bind(lcd)};
   const revision=Object.getOwnPropertyDescriptor(lcd,'uploadRevision')?.get;
   const record=(kind,data={})=>{events.push({kind,at:performance.now(),...data});if(events.length>200)events.shift();};
@@ -47,6 +48,8 @@ export async function attachTimeupSurface(lcd,{controller,canvas,onInput,unlock,
   };
   lcd.frame=(dt,F)=>{
     sync();base.frame(dt,F);if(!active)return;
+    // Retire the inner HUD background before the full-panel TimeUp overwrite.
+    if(hudHandoff)lcd.timerDisplay?.clear();
     ctx.fillStyle='#000';ctx.fillRect(0,0,lcd.canvas.width,lcd.canvas.height);
     if(!waiting&&v.readyState>=2&&!v.seeking){heldCtx.drawImage(v,0,0,W,H);plateIdx=Math.round(v.currentTime*30);}
     ctx.drawImage(held,PX,PY,W,H);
