@@ -39,14 +39,16 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
   let seen = new Set(), levels = new Set(), shots = new Map(), pending = [], receiptSeen = -1, chainTry = 0, choiceSent = null;
   bus.context = () => ({ t: clock, state: { lit: ctrl.game.lampCount, pockets: ctrl.game.lamps,
     balls: ctrl.game.wallet, secondsLeft: ctrl.game.secondsLeft,
+    // 筐体右上の7セグが今出している玉数(play_fx driveDigits と同じ式)。計数カードの大きな数字はこれに従う(10/29 監督指摘)
+    shownBalls: Math.max(0, Math.min(presenter.displayWallet(), ctrl.game.wallet - presenter.trayStatus().pending)),
     canLaunch: (ctrl.game.rules.R2Enabled || ctrl.game.rules.ResetWhileShooting ? ctrl.game.canFire : ctrl.game.overlap ? ctrl.game.canAim : ctrl.game.canFire) && !ctrl.confirmFinish && !ctrl.freezeRules,
     declared: ctrl.game.armed, ...(ctrl.game.rules.ResetWhileShooting ? { resetDisplays: ctrl.game.resetDisplays } : {}),
     ...(ctrl.game.rules.R2Enabled ? { challenge: ctrl.game.challengeStatus, end: ctrl.game.endStatus, aim: ctrl.aim } : {}) } });
   // 次の景品までの実数(結果画面・計数の「あと○玉でA賞」用)。景品は規則の判定(g.prize)に従う:
-  // R3 は持ち玉でなく JP の合計(継続の積み増しを含む)で決まり、S は 500 を当てた時だけ(合計では A まで)なので、A の次は出さない
+  // R3 は持ち玉でなく JP の合計(継続の積み増しを含む)で決まる。Gの規則(medal_rules_g)は合計500玉でS賞
   const nextRank = g => {
     const rules = g.rules, th = rules.PrizeThresholds, score = rules.R3Enabled ? g.jackpotEarnings : g.wallet;
-    const rank = Math.max(0, rules.PrizeNames.indexOf(g.prize)), last = rules.R3Enabled ? th.length - 2 : th.length - 1;
+    const rank = Math.max(0, rules.PrizeNames.indexOf(g.prize)), last = th.length - 1;   // Gの規則は合計500玉でS賞。リザルト画面(final_result_state)と同じ賞・次の賞にそろえる(10/29)
     return rank + 1 <= last ? { rankIndex: rank, score, next_rank: rank + 1, to_next: th[rank + 1] - score, next_threshold: th[rank + 1] } : { rankIndex: rank, score, next_rank: null, to_next: 0, next_threshold: null };
   };
   const send = (id, data = {}, category) => {

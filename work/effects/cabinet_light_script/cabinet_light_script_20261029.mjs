@@ -1,6 +1,7 @@
 // 30 Hz precomputed physical light script; the LCD's displayed media time is the clock.
 // R3 (10/29 night): flash_fx adds pachinko-style strobes on top of the table and derives the RGB strip colour (api.strip).
 import {createFx,evalFx,hsvTo,stripFrom} from './flash_fx_20261029.mjs';
+const cw=new Float32Array(8).fill(1);
 const triples=n=>Array.from({length:n},()=>[0,0,0]);
 const COPY=[['Kc',8,8],['wash',32,8],['zone',56,8],['ring',80,4]];
 const SPOTS=[[240,430],[1200,430],[720,300],[150,1100],[1290,1100],[230,1800],[1210,1800],[720,2120]];
@@ -36,16 +37,20 @@ export async function attachCabinetLightScript(lcd,{getLamps=()=>[],getState=()=
    else if(mode===2){hsvTo(sc,0,h);for(let j=0;j<3;j++)c[j]+=(sc[j]*m-c[j])*mix;}
    for(let j=0;j<3;j++)c[j]*=gain;};
  const modulate=()=>{
-   const g=Math.min(1.5,fx.gain),mode=fx.mode,mix=fx.mix;
+   const g0=Math.min(1.5,fx.gain),mode=fx.mode,mix=fx.mix,d=fx.cDepth;
+   // running light: a cosine crest travels around the frame (phase PH per region); dips by up to d, no allocation
+   for(let i=0;i<8;i++)cw[i]=d>0?1-d+d*Math.pow(.5+.5*Math.cos(6.283185307*(clock*fx.cHz-PH[i])),fx.cSharp):1;
+   cw[1]=cw[2]=cw[0]; // head, gills and logo (with the score board) are one lit group: they must dim and brighten together
    for(let i=0;i<8;i++){
-     row.K[i]=Math.min(1.55,Math.max(row.K[i]*fx.gain+fx.white*.45,fx.floor*1.1));
+     const g=g0*cw[i];
+     row.K[i]=Math.min(1.55,Math.max(row.K[i]*fx.gain+fx.white*.45,fx.floor*1.1))*cw[i];
      const c=row.Kc[i];
      if(mode===1){c[0]+=(fx.r-c[0])*mix;c[1]+=(fx.g-c[1])*mix;c[2]+=(fx.b-c[2])*mix;}
      else if(mode===2){hsvTo(sc,0,fx.hue+fx.spread*PH[i]);for(let j=0;j<3;j++)c[j]+=(sc[j]-c[j])*mix;}
      if(fx.white>0)for(let j=0;j<3;j++)c[j]+=(1-c[j])*fx.white*.35;
      shade(row.wash[i],g,mix,mode,fx.hue+fx.spread*PH[i]);shade(row.zone[i],g,mix,mode,fx.hue+fx.spread*i/8);
    }
-   for(let i=0;i<4;i++)shade(row.ring[i],g,mix,mode,fx.hue+fx.spread*i*.2);
+   for(let i=0;i<4;i++)shade(row.ring[i],g0*(1-d*(1-fx.cWave)*.6),mix,mode,fx.hue+fx.spread*i*.2);
  };
  const reflect=()=>{for(let s=0;s<8;s++){const [a,b]=ZONES[s];for(let j=0;j<3;j++)row.reflections[s].rgb[j]=(row.zone[a][j]+row.zone[b][j])*.35+(row.wash[a][j]+row.wash[b][j])*.45;}};
  const original={frame:lcd.frame.bind(lcd),onEvent:lcd.onEvent.bind(lcd),applyLights:lcd.applyLights?.bind(lcd)};

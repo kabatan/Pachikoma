@@ -178,7 +178,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       if (jp?.claimed) {
         const v=jp.frame(dt);
         if(!jp.active&&lastJpSerial>=0){bridge();lastJpSerial=-1;}
-        if (jp.active) {
+        // 映像の最初のコマがまだ読めていない間は、前の映像の最後(失敗の灰色＋扉など)を出さず、通常の画面のままにする。
+        if (jp.active && (jpOwns || v?.readyState>=2)) {
           if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered)fadeLeft=0;
           if(!jpOwns){clips.suspend();jpOwns=true;}
           // A result revision certifies only the compositor's completed immutable pixels.

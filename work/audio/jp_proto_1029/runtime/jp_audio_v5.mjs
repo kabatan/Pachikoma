@@ -6,14 +6,16 @@
 //  - 段のレシピと出来事の表は runtime_assets_v5/jp_events_v5.json(src/events_v5.py が唯一の定義。プレビュー動画も同じ表から作る)。
 //  - 土台は静か(v4と同じ): JP曲 + 控えめなキック/ハット。ずっと鳴る甲高い層なし。音圧の自動調整なし。
 //  - 場面の時刻は window.__lcdSurface.jp.model の場面名とserialの変化で検知(v4と同じ)。固定長で次へ進む場面は前の場面の検知時に先に予約して頂点を合わせる。実時間のずれは api.drift に残す。
-//  - 実ゲームの導入は「黒背景+文字(dopamine/reach 84コマ) → 雷(30コマ) → チャンス」の順。雷は「ぶーん」系のまま(v4と同じ素材)。
+//  - 実ゲームの導入(10/29 修正): manifest.intro_order==='lightning_first' なら「紫の雷(30コマ・通常BGMの上) → 黒背景+文字(dopamine/reach 84コマ・ここでJP曲が全開) → チャンス」。無ければ従来の「黒背景+文字 → 雷 → チャンス」。雷は「ぶーん」系のまま(v4と同じ素材)。
+import { hotBus } from '../../runtime/hot_bus.mjs';   // 10/29: JPの音は圧縮機の後(master入口)の専用出口へ。段ごとの大きさの差が潰れない
 const dB = x => 10 ** (x / 20);
 const FPS = 30;
-const SONG_DB = -2.0;          // JP曲+土台の音量(v4の土台較正値 -1.97 dB)
-const EV_COMP = { thr: -26, ratio: 3, makeup: 4 }, EV_DRIVE = 7, EV_TH = .75, EV_OUT = .85, SFX_LEVEL = .85, EV_THUNDER = 3.5;
-const G = { tame: -5, ticks: -10, ping: -22, whoosh: -6, end: -3 };
-const BASE = {   // 場面ごとの土台(キック, ハット, 裏拍キック) [dB, 小さいほど静か]。v4と同じ値
-  intro: [-16, null, null], chance: [-13, -24, null], aim: [-13, -24, null], fly_early: [-12, -23, null], fly_t2: [-11, -22, -18], fly_t3: [-10, -21, -16], after: [-11, -22, -17] };
+const SONG_DB = 0.0;          // JP曲+土台の音量(v4の土台較正値 -1.97 dB)
+// 10/29: 出来事バスの圧縮機(閾値-26dB・比3:1)とドライブ+tanh飽和は廃止(音の強弱を潰すため)。固定ゲインのみ。段の大きさは jp_events_v5.json の dB で決める。
+const EV_OUT = .82, SFX_LEVEL = .82, EV_THUNDER = -11.5;
+const G = { tame: -5, ticks: -20, ping: -27, whoosh: -6, end: -3 };   // 10/29: 常時鳴る層(ルーレットのティック・狙いの脈動)を下げた(ticks -10→-15, ping -22→-27)
+const BASE = {   // 場面ごとの土台(キック, ハット, 裏拍キック) [dB, 小さいほど静か]。10/29: 常に鳴る甲高い16分ハットをやめ(null)、キックも3dB下げた
+  intro: [-19, null, null], chance: [-16, null, null], aim: [-16, null, null], fly_early: [-15, null, null], fly_t2: [-14, null, -21], fly_t3: [-13, null, -19], after: [-14, null, -20] };
 // 組み込み時に追加で読む素材(出来事の表に出ない固定の音)
 const EXTRA = ['v3_pre_swell', 'v3_thunder', 'v3_thunder_flash', 'zap_flash', 'v3_jp_entry', 'v3_kick', 'v3_hat16_bar', 'tension_pulse', 'roulette_ticks_accel', 'roulette_ticks_steady', 'roulette_ticks_decel',
   'tame_miss', 'end_stinger', 'transition_whoosh', 'v4_riser_short', 'v5_s_drop', 'v5_l_impact_s'];
@@ -42,13 +44,12 @@ export async function installJpAudioV5(engine, opts = {}) {
   const BYSCENE = {}; for (const e of EV.events) (BYSCENE[e.scene] ??= []).push(e);
 
   // ---- 配線(v4と同じ) ----
-  const sfxOut = ctx.createGain(); sfxOut.gain.value = SFX_LEVEL; sfxOut.connect(engine.mix);                       // legacy(旧版の音)用
-  const evIn = ctx.createGain(), evComp = ctx.createDynamicsCompressor(); evComp.threshold.value = EV_COMP.thr; evComp.ratio.value = EV_COMP.ratio; evComp.knee.value = 6; evComp.attack.value = .003; evComp.release.value = .12;
-  const evDrive = ctx.createGain(); evDrive.gain.value = dB(EV_COMP.makeup + EV_DRIVE) / 4;                          // 1/4 は WaveShaper の入力範囲(±1)に収めるため
-  const shaper = ctx.createWaveShaper(); { const n = 4096, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = (i / (n - 1) * 2 - 1) * 4; c[i] = EV_TH * Math.tanh(x / EV_TH); } shaper.curve = c; shaper.oversample = '2x'; }
+  const hot = hotBus(engine);
+  const sfxOut = ctx.createGain(); sfxOut.gain.value = SFX_LEVEL; sfxOut.connect(hot);                               // legacy(旧版の音)用
+  const evIn = ctx.createGain();
   const chokeIn = ctx.createGain(); chokeIn.connect(evIn);                                                           // 出来事の音の入口。JP成功の前の無音(溜め)で止める用
-  const evOut = ctx.createGain(); evOut.gain.value = EV_OUT; evIn.connect(evComp).connect(evDrive).connect(shaper).connect(evOut).connect(engine.mix);
-  const bgmFade = ctx.createGain(); bgmFade.gain.value = 0; const bgmDuck = ctx.createGain(), extDuck = ctx.createGain(); bgmFade.connect(extDuck).connect(bgmDuck).connect(engine.mix);
+  const evOut = ctx.createGain(); evOut.gain.value = EV_OUT; evIn.connect(evOut).connect(hot);
+  const bgmFade = ctx.createGain(); bgmFade.gain.value = 0; const bgmDuck = ctx.createGain(), extDuck = ctx.createGain(); bgmFade.connect(extDuck).connect(bgmDuck).connect(hot);
   // JP後担当(window.__afterJp)の duck は bgm.userGain(通常BGM)を直接動かす。JPの間(st.inJp)に通常BGMが持ち上がらないよう、その呼び出しだけ JP曲側の extDuck へ振り替える。
   // v5自身の通常BGMの操作(startJp/endJp)は元のメソッド(UG)を使う。
   const ugp = bgm.userGain.gain, UG = { cancel: ugp.cancelScheduledValues.bind(ugp), target: ugp.setTargetAtTime.bind(ugp), set: ugp.setValueAtTime.bind(ugp), ramp: ugp.linearRampToValueAtTime.bind(ugp) };
@@ -84,13 +85,22 @@ export async function installJpAudioV5(engine, opts = {}) {
   // ---- 土台(JP曲)のダッキング: 重なっても最小(深い方)を取り、予約を作り直す(v4と同じ) ----
   const segs = [];
   const duckDb = x => { let m = 0; for (const s of segs) { if (x < s.a || x >= s.d) continue; const v = x < s.b ? -s.depth * (x - s.a) / (s.b - s.a || 1e-6) : x < s.c ? -s.depth : -s.depth * (1 - (x - s.c) / (s.d - s.c)); if (v < m) m = v; } return m; };
-  function duck(t, depth, hold = .2, release = .7, pre = .04) {
-    segs.push({ a: t - pre, b: t, c: t + hold, d: t + hold + release, depth });
+  function duck(t, depth, hold = .2, release = .7, pre = .04, tag = false) {
+    segs.push({ a: t - pre, b: t, c: t + hold, d: t + hold + release, depth, gap: tag });
     const n = now(); for (let i = segs.length - 1; i >= 0; i--) if (segs[i].d < n) segs.splice(i, 1);
     const t0 = n + .003, t1 = Math.max(...segs.map(s => s.d)) + .02; if (t1 <= t0 + .01) return;
     const steps = Math.min(1200, Math.ceil((t1 - t0) / .005)), dt = (t1 - t0) / steps, p = bgmDuck.gain;
     p.cancelScheduledValues(t0); p.setValueAtTime(dB(duckDb(t0)), t0);                       // 区分線形で予約し直す(曲線イベントは重なると例外になるため使わない)
-    for (let i = 1; i <= steps; i++) p.linearRampToValueAtTime(dB(i === steps ? duckDb(t1 + .01) : duckDb(t0 + dt * i)), t0 + dt * i);
+    // Keep both endpoints of exactly constant runs; incoming/outgoing ramps stay unchanged.
+    let lastValue, lastTime, pending = false;
+    for (let i = 1; i <= steps; i++) {
+      const value = dB(i === steps ? duckDb(t1 + .01) : duckDb(t0 + dt * i)), time = t0 + dt * i;
+      if (i > 1 && value === lastValue) { lastTime = time; pending = true; continue; }
+      if (pending) p.linearRampToValueAtTime(lastValue, lastTime);
+      p.linearRampToValueAtTime(value, time);
+      lastValue = value; lastTime = time; pending = false;
+    }
+    if (pending) p.linearRampToValueAtTime(lastValue, lastTime);
   }
 
   // ---- 段のレシピ(jp_events_v5.json)を鳴らす。src/build_previews_v5.py の run_do と同じ ----
@@ -118,7 +128,8 @@ export async function installJpAudioV5(engine, opts = {}) {
   // ---- 最大 XL: JP成功(着地)専用。溜めの無音は直前の tame_hit で用意してある(prepareGap) ----
   function prepareGap(tLand) {          // tLand: 着地の見込み時刻。その GAP.len 秒前から土台(JP曲・キック)をほぼ無音にして、着地(確定音)で破る
     const G_ = EV.gap, gs = tLand - G_.len; if (gs < now() - .02) return;
-    duck(gs + G_.ramp, G_.depth, Math.max(.02, tLand - gs - G_.ramp + .06), .05, G_.ramp);
+    for (let i = segs.length - 1; i >= 0; i--) if (segs[i].gap) segs.splice(i, 1);   // 金の演出(jp_gold)が間に入ったときは、着地の見込みが後ろへずれるので溜めの無音を取り直す
+    duck(gs + G_.ramp, G_.depth, Math.max(.02, tLand - gs - G_.ramp + .06), .05, G_.ramp, true);
     const c = chokeIn.gain; c.cancelScheduledValues(0); c.setValueAtTime(1, Math.max(now(), gs - .02)); c.linearRampToValueAtTime(0, Math.max(now() + .005, gs)); c.setValueAtTime(1, tLand + .3);   // 着地が来なくても(失敗など)0.3秒後には戻す   // それまでに鳴らした音も無音の頭で止める
     st.gapAt = gs; log(gs, 'JP成功の前の溜め(無音)', 0);
   }
@@ -126,6 +137,7 @@ export async function installJpAudioV5(engine, opts = {}) {
     if (!/^jp_land_d\d$/.test(st.scene.name)) { log(t, 'REFUSED v5_jp_win(jp_land以外)', 0); st.missing.push('jp_win_outside_land:' + st.scene.name); return; }   // 保険: 着地以外では絶対に鳴らさない
     if (st.jpWin) return; st.jpWin = t;          // JP成功の音は1回のJPにつき1回だけ
     const P = EV.post;
+    for (let i = segs.length - 1; i >= 0; i--) if (segs[i].gap && segs[i].a >= t - .01) segs.splice(i, 1);   // 着地が見込みより早く来た(溜めの時間がない)ときは、これから始まる無音の予約を捨てる
     duck(t, P.depth, P.hold, P.release, 0);
     for (const s of st.nodes.slice()) { try { s.stop(now()); } catch { } }            // 無音の間に止めた音の余韻は戻さない
     const c = chokeIn.gain; c.cancelScheduledValues(0); c.setValueAtTime(1, Math.max(now(), t - .001));
@@ -145,15 +157,22 @@ export async function installJpAudioV5(engine, opts = {}) {
     // 150: 黒背景+文字の最初のコマ(JP曲全開)。JP曲の入りの一撃(ブラス)+低音の衝撃
     A('v3_jp_entry', tS, -2); A('v5_l_impact_s', tS, -4); duck(tS, 4, .2, .6, 0);
     tier('S', frT(tS, 12), { blip: 3, g: -3 });
-    // 雷の前触れ(風のうなり・頂点まで1.4秒)だけは公称84コマ後に合わせて先に鳴らす。雷本体は雷の場面の検知時に鳴らす
-    st.scheduledL = frT(tS, 84); A('v3_pre_swell', st.scheduledL, -9 + EV_THUNDER);
+    if (lightningFirst()) {
+      // 雷は既に鳴らした(導入の最初)。チャンス題字の溜め(ライザー)だけ、公称84コマ後+5コマの頂点に合わせて先に鳴らす。一撃はチャンスの場面の検知時
+      st.scheduledC = frT(tS, 84); A('v4_riser_short', frT(st.scheduledC, 5), -13); st.done.add('chancePre');
+    } else {
+      // 従来の順: 雷の前触れ(風のうなり・頂点まで1.4秒)だけは公称84コマ後に合わせて先に鳴らす。雷本体は雷の場面の検知時に鳴らす
+      st.scheduledL = frT(tS, 84); A('v3_pre_swell', st.scheduledL, -9 + EV_THUNDER);
+    }
   }
+  const lightningFirst = () => window.__lcdSurface?.jp?.man?.intro_order === 'lightning_first';
   function thunder(tL) {     // 雷 4コマ: 閃光(0)、ネガ反転(+6)、2発目(+8)、再点灯(+10)。「ぶーん」系の非音楽(v4と同じ)
     once('thunder', () => {
-      duck(tL, 8, .75, .6, .12);
+      if (!lightningFirst()) duck(tL, 8, .75, .6, .12);   // 従来の順ではJP曲が鳴っているので沈める。雷が先ならまだ通常BGM(JP曲は後から入る)なので沈めない
       A('v3_thunder', tL, 0 + EV_THUNDER);
       A('zap_flash', frT(tL, 6), -8 + EV_THUNDER); A('v3_thunder_flash', frT(tL, 8), -3 + EV_THUNDER); A('zap_flash', frT(tL, 10), -10 + EV_THUNDER);
-      // チャンス題字(公称30コマ後+5コマ)の溜め(ライザー)だけ先に鳴らして頂点を合わせる。一撃はチャンスの場面の検知時
+      if (lightningFirst()) return;
+      // 従来の順: チャンス題字(公称30コマ後+5コマ)の溜め(ライザー)だけ先に鳴らして頂点を合わせる。一撃はチャンスの場面の検知時
       st.scheduledC = frT(tL, 30); const tt = frT(st.scheduledC, 5);
       A('v4_riser_short', tt, -13); st.done.add('chancePre');
     });
@@ -171,6 +190,11 @@ export async function installJpAudioV5(engine, opts = {}) {
     st.nextPing = Infinity;
     if (st.tension) { try { st.tension.stop(t + .05); } catch { } st.tension = null; }
     if (/^jp_intro_(dopamine|reach)$/.test(name)) return startJp(t);
+    if (name === 'jp_intro_lightning' && !st.inJp && lightningFirst()) {   // 新しい導入: 雷が先。JP曲はまだ始めない(次の黒背景+文字で入る)
+      st.done.delete('thunder');
+      if (st.scheduledL != null) st.drift.push({ scene: name, expected: +st.scheduledL.toFixed(3), actual: +t.toFixed(3), ms: Math.round((t - st.scheduledL) * 1000) });
+      thunder(t); return;
+    }
     if (!st.inJp && !/^fail_/.test(name)) return;
     // JP後(継続 chain_* と失敗 fail_*)の音は window.__afterJp(JP後担当、?afterjp=0 で無効)が鳴らす。有効なときは二重発音を避けて鳴らさない(失敗ではJP曲の終わりだけ行う)
     if (window.__afterJp?.enabled && (chain || /^fail_/.test(name))) { if (/^fail_/.test(name) && st.inJp) endJp(t, 'E3', true); return; }
@@ -178,11 +202,12 @@ export async function installJpAudioV5(engine, opts = {}) {
     if (name === 'jp_intro_lightning') { if (st.scheduledL != null) st.drift.push({ scene: name, expected: +st.scheduledL.toFixed(3), actual: +t.toFixed(3), ms: Math.round((t - st.scheduledL) * 1000) }); thunder(t); }
     else if (/^jp_chance_d\d$/.test(name)) { if (st.scheduledC != null) st.drift.push({ scene: name, expected: +st.scheduledC.toFixed(3), actual: +t.toFixed(3), ms: Math.round((t - st.scheduledC) * 1000) }); once('chance', () => fireScene(key, t)); }
     else if (/^(chain_)?jp_aim_d\d$/.test(name)) { fireScene(key, t); st.nextPing = t + .15; }
-    else if (/^(chain_)?fly_t3_d\d$/.test(name)) { fireScene(key, t); st.tension = A('tension_pulse', t, -12, { stopAt: t + 4, fade: .1 }); }
+    else if (/^(chain_)?fly_t3_d\d$/.test(name)) { fireScene(key, t); st.tension = A('tension_pulse', t, -18, { stopAt: t + 4, fade: .1 }); }
     else if (/^tame_hit_d\d$/.test(name)) { fireScene(key, t); prepareGap(frT(t, 8)); }      // 着地は公称8コマ後。その直前を無音にする(溜め)
     else if (/^tame_miss_d\d$|^chain_tame_miss_d\d$/.test(name)) L1('tame_miss', t, G.tame);
     else if (/^jp_land_d\d$/.test(name)) { if (st.gapAt != null) st.drift.push({ scene: name, expected: +(st.gapAt + EV.gap.len).toFixed(3), actual: +t.toFixed(3), ms: Math.round((t - st.gapAt - EV.gap.len) * 1000) }); fireScene(key, t); }
-    else if (/^(chain_)?jp_gold_d\d$/.test(name)) tier('M', t, { clang: 'Fs' });
+    else if (/^jp_gold_d\d$/.test(name)) { tier('M', t, { clang: 'Fs' }); if (st.gapAt != null) prepareGap(frT(t, 18)); }   // 金は18コマ。そのあと着地
+    else if (/^chain_jp_gold_d\d$/.test(name)) tier('M', t, { clang: 'Fs' });
     else if (name === 'jp_rush') once('rush', () => fireScene(key, t));
     else if (/^roulette_\d+$/.test(name)) roulette(name, t);
     else if (/^(chain_offer|chain_offer2|chain_success|chain_confirm)$/.test(name) || /^reward_\d+$/.test(name) || BYSCENE[key]) fireScene(key, t);
@@ -255,6 +280,10 @@ export async function installJpAudioV5(engine, opts = {}) {
     jp = window.__lcdSurface?.jp ?? jp; const model = jp?.model; if (!model || ctx.state !== 'running') return;
     const t = now();
     const shown = model.active && model.delay <= 0;
+    // 雷が先の導入: 6灯の直後の待ち(model.delay)の間に、雷の前触れ(風のうなり・頂点=雷の最初のコマ)を鳴らす。頂点は雷の場面の始まりに合わせ、途中からでも頂点は合う
+    if (model.active && model.delay > 0 && model.name === 'jp_intro_lightning' && model.serial !== st.preSerial && lightningFirst()) {
+      st.preSerial = model.serial; st.scheduledL = t + model.delay + .01; A('v3_pre_swell', st.scheduledL, -9 + EV_THUNDER);
+    }
     if (shown && (model.serial !== st.lastSerial)) {
       st.lastSerial = model.serial; st.scene = { name: model.name, t0: t + .01 }; st.scenes.push({ scene: model.name, serial: model.serial, t: +(t + .01).toFixed(3) });
       onScene(model.name, t + .01);

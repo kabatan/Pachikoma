@@ -271,7 +271,7 @@ void main() {
       if (uScriptTint > 0.0) {
         vec3 l4 = s2l(f4); float pattern = max(l4.r, max(l4.g, l4.b));
         vec3 hue = mix(col, vec3(1.0), pow(pattern, 16.0) * 0.12);
-        vec3 dyed = l2s(mix(s2l(f0.rgb), pattern * hue * kk, min(1.0, kk * 4.0)));
+        vec3 dyed = l2s(mix(s2l(f0.rgb), pattern * hue * kk, 1.0));
         lit = mix(lit, dyed, (ra.x + ra.y) / wsum);
       }
       o = mix(o, lit, f0.a);

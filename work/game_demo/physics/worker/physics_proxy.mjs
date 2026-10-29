@@ -124,6 +124,7 @@ export class PhysicsWorkerProxy {
   }
   setAim(aim, dir) { this.aim = aim; this.dir = dir; this._cmd(['A', aim, dir]); }
   launch(shotId) { this._cmd(['L', shotId], 'L'); }
+  recall(ids) { this._cmd(['D', [...ids]]); }   // 規則側で取り消した通常球を物理側から外す(adapter.recall と同じ。台帳の予測はWorkerの記録で上書きされる)
   payout(n, earned = true, rate = null) { this._cmd(['P', n, earned, rate], 'P', n); }
   startCount() { this._cmd(['C']); }
   reserveForLoan(n) { this._cmd(['V', n], 'V', n); const c = this.pending[this.pending.length - 1]; this._predict(); return c.k ?? 0; }   // 戻り値は予測(本物の数は Worker が決める)

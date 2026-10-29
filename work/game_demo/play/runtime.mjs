@@ -4,7 +4,7 @@ const DT = 1 / 480;
 export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
   presenter.externalTray = true;
   const effectsBridge = connectEffects({ ctrl, presenter, bus: effects });
-  const stats = { cups: Array(8).fill(0), lost: 0, trayLost: 0, nudge: 0, peg: 0, overflow: 0, valve: 0, reserve: 0, countDone: null, maxLedgerDrift: 0 };
+  const stats = { cups: Array(8).fill(0), lost: 0, trayLost: 0, nudge: 0, peg: 0, overflow: 0, valve: 0, reserve: 0, countDone: null, maxLedgerDrift: 0, recalled: 0 };
   let acc = 0, countStarted = false, jpHold = false, shownPrize = ctrl.game.prize;
   ctrl.onAction((action) => {
     if (action === 'start') {
@@ -16,6 +16,8 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
     if (action === 'add') pa.reserveForLoan(ctrl.game.receipt.award);   // 追加100円: 最初の1球を待たせない(貸しの予備球を直ちに用意)
     log?.write('input', { tick: pa.tick + 1, action, aim: ctrl.aim, dir: ctrl.aimDir }, ctrl.game);
   });
+  // 規則側が取り消した通常球(JPチャンス・継続の挑戦に入る瞬間に回収。手持ちへ戻し済み)を、物理側の盤から外す。
+  const flushRecall = () => { const ids = ctrl.game.takeRecalled?.(); if (ids?.length) { pa.recall?.(ids); stats.recalled += ids.length; log?.write('recall', { tick: pa.tick, ids }, ctrl.game); } };
   function advance(dt) {
     if (!Number.isFinite(dt) || dt < 0) throw new Error('invalid frame duration');
     acc += dt;
@@ -23,7 +25,7 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
     while (acc + 1e-12 >= DT) {
       acc = Math.max(0, acc - DT);
       effectsBridge.advance(DT);
-      ctrl.update(DT); presenter.update(DT); pa.setAim(ctrl.aim, ctrl.aimDir);
+      ctrl.update(DT); flushRecall(); presenter.update(DT); pa.setAim(ctrl.aim, ctrl.aimDir);
       effectsBridge.sync();
       // The JP film may hold the visible payout while its wallet is spendable.
       // Move one credited ball into the same loan reserve when the lift is dry;
@@ -57,7 +59,7 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects }) {
         effectsBridge.physics(e);
         // Publish each receipt before another same-tick landing can replace it.
         // physics() first supplies the actual approach/crossing for near-miss cues.
-        if (e.type === 'cup' || e.type === 'lost') {presenter.update(0);effectsBridge.sync();}
+        if (e.type === 'cup' || e.type === 'lost') {presenter.update(0);effectsBridge.sync();flushRecall();}
         if (['cup', 'lost', 'stuck_nudge', 'overflow', 'reserve_return', 'tray_lost', 'count_done', 'launch', 'returned'].includes(e.type)) log?.write('physics', e, ctrl.game);
       }
       if (!jpHold) shownPrize = ctrl.game.prize;

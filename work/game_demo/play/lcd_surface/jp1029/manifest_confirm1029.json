@@ -8317,11 +8317,12 @@
         14,
         22
       ],
-      "next": "jp_chance_d4",
+      "next": "@intro",
       "cues": [],
       "layered": true,
       "lights_key": "jp_intro",
-      "lights_from": 84
+      "lights_from": 84,
+      "black_bg": true
     },
     "jp_intro_dopamine": {
       "file": "production_20261028/jp_intro_dopamine.mp4",
@@ -8333,7 +8334,7 @@
         60,
         72
       ],
-      "next": "jp_intro_lightning",
+      "next": "jp_chance_d4",
       "layered": false,
       "lights_key": "jp_intro",
       "lights_from": 0,
@@ -8359,7 +8360,7 @@
         60,
         72
       ],
-      "next": "jp_intro_lightning",
+      "next": "jp_chance_d4",
       "layered": false,
       "lights_key": "jp_intro",
       "lights_from": 0,
@@ -9000,7 +9001,7 @@
     "jp_intro_dopamine",
     "jp_intro_reach"
   ],
-  "intro_note": "Equal probability on each lamp6; 84 title frames then unchanged 30-frame lightning. Original title is not referenced.",
+  "intro_note": "10/29 修正: 紫の雷(30コマ・黒の上に加算層だけ) → 黒の背景+文字(84コマ、dopamine/reach を等確率) → JPチャンス。雷の映像・文字の映像は従来のまま、順序と雷の背景(黒)だけ変えた。manifest.intro_order を消すと従来(文字 → 雷)。",
   "gold_frames": 18,
   "quality": {
     "output_size": [
@@ -9036,5 +9037,6 @@
     "delta_bases": "confirm_failure_rgbcrop_xor_20261029_084408_v1",
     "shuffled_bases": "confirm_failure_rgbcrop_shuffle_20261029_091655_v1"
   },
-  "chain_success_note": "継続成功: chain_jp_land_dN -> chain_success(v4) -> reward_<配当>(bright_midtones) -> chain_offer -> 選択v20"
+  "chain_success_note": "継続成功: chain_jp_land_dN -> chain_success(v4) -> reward_<配当>(bright_midtones) -> chain_offer -> 選択v20",
+  "intro_order": "lightning_first"
 }

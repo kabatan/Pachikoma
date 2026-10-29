@@ -16,9 +16,9 @@ export function resultMeterSteps(thresholds){
 export function finalResultState(game,daily){
  const rules=game.rules,thresholds=rules.PrizeThresholds.slice(),names=rules.PrizeNames.slice(),value=finiteInt(game.jackpotEarnings);
  let rankIndex=Math.max(0,names.indexOf(game.prize));
- // A cumulative total cannot manufacture a 500-JP receipt.
- if(!game.jackpotDreamHit)rankIndex=Math.min(rankIndex,3);
- const nextIndex=rankIndex<4?rankIndex+1:null,dreamRequired=nextIndex===4&&!game.jackpotDreamHit;
+ // 賞はゲーム側(game.prize)が決めた値をそのまま使う。Gの規則では合計が500玉でS賞(計数カード・resultイベントと同じ)。
+ // 以前はここで「夢JP(500玉のJP確定)なしはAまで」に抑えていたため、計数カードのS賞とリザルトのA賞が食い違った(10/29 監督指摘)。
+ const nextIndex=rankIndex<4?rankIndex+1:null,dreamRequired=false;
  const best=daily.record(value);
  const need=nextIndex==null?0:Math.max(0,thresholds[nextIndex]-value),nextMessage=rankIndex===4?'最高賞！':dreamRequired?`${thresholds[4]}玉のJP確定でS賞！`:`次の${names[nextIndex]}まであと${need}玉！`;
  return Object.freeze({value,totalText:String(Math.min(99999,value)).padStart(5,'0'),rankIndex,prize:names[rankIndex],thresholds,meterSteps:resultMeterSteps(thresholds),jp:finiteInt(game.jackpotSuccesses),jackpotDreamHit:!!game.jackpotDreamHit,nextIndex,need,dreamRequired,nextMessage,...best});

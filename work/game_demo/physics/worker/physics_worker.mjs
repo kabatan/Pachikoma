@@ -76,6 +76,7 @@ function runBatch(cmds) {
       }
       case 'A': pa.setAim(c[1], c[2]); break;
       case 'L': pa.launch(c[1]); break;
+      case 'D': pa.recall(c[1]); break;
       case 'P': pa.payout(c[1], c[2], c[3]); break;
       case 'C': pa.startCount(); break;
       case 'V': pa.reserveForLoan(c[1]); break;

@@ -15,7 +15,7 @@ export async function createSharedPalace({base,config,onError=()=>{},center=null
  const shader=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;};
  const program=gl.createProgram();gl.attachShader(program,shader(gl.VERTEX_SHADER,'attribute vec2 p;varying vec2 uv;void main(){uv=(p+1.)*.5;gl_Position=vec4(p,0.,1.);}'));
  gl.attachShader(program,shader(gl.FRAGMENT_SHADER,`precision highp float;varying vec2 uv;uniform sampler2D bg;uniform sampler2D fg;uniform sampler2D old;uniform sampler2D cF;uniform sampler2D cT;uniform float mixOld;
- uniform float cOn;uniform vec2 cDst;uniform float cScale;uniform float cGain;uniform vec4 cCell;uniform float cSmear;uniform vec2 cAtlas;uniform vec2 cSize;uniform float cResid;uniform float cLevelStride;
+ uniform float cOn;uniform vec2 cDst;uniform float cScale;uniform float cGain;uniform vec4 cCell;uniform float cSmear;uniform vec2 cAtlas;uniform vec2 cSize;uniform float cResid;uniform float cLevelStride;uniform float bgOn;
  vec3 linear(vec3 c){return mix(c/12.92,pow((c+.055)/1.055,vec3(2.4)),step(vec3(.04045),c));}
  vec3 srgb(vec3 c){return mix(c*12.92,1.055*pow(max(c,vec3(0.)),vec3(1./2.4))-.055,step(vec3(.0031308),c));}
  void centerLayer(vec2 px,vec4 cell,out vec3 F,out float T){
@@ -26,11 +26,11 @@ export async function createSharedPalace({base,config,onError=()=>{},center=null
   F=mix(f0,f1,cSmear)*cGain;T=mix(t0,t1,cSmear);}
  void main(){vec2 c=vec2(uv.x*.5,uv.y),m=vec2(.5+uv.x*.5,uv.y);vec3 a=linear(texture2D(fg,c).rgb),t=texture2D(fg,m).rgb;
  if(mixOld>0.){a=mix(a,linear(texture2D(old,c).rgb),mixOld);t=mix(t,texture2D(old,m).rgb,mixOld);}
- vec3 b=linear(texture2D(bg,uv).rgb);
+ vec3 b=linear(texture2D(bg,uv).rgb)*bgOn;
  if(cOn>0.){vec3 F;float T;centerLayer(vec2(uv.x*1152.,(1.-uv.y)*1268.),cCell,F,T);b=F+T*b;}
  gl_FragColor=vec4(clamp(srgb(a+t*b),0.,1.),1.);}`));
  gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));gl.useProgram(program);
- const locations=Object.fromEntries(['bg','fg','old','cF','cT','mixOld','cOn','cDst','cScale','cGain','cCell','cSmear','cAtlas','cSize','cResid'].map(n=>[n,gl.getUniformLocation(program,n)])),U=n=>locations[n];
+ const locations=Object.fromEntries(['bg','fg','old','cF','cT','mixOld','bgOn','cOn','cDst','cScale','cGain','cCell','cSmear','cAtlas','cSize','cResid'].map(n=>[n,gl.getUniformLocation(program,n)])),U=n=>locations[n];
  const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
  const at=gl.getAttribLocation(program,'p');gl.enableVertexAttribArray(at);gl.vertexAttribPointer(at,2,gl.FLOAT,false,0,0);
  const textures=['bg','fg','old','cF','cT'].map((name,i)=>{gl.activeTexture(gl.TEXTURE0+i);const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);for(const k of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,k,gl.CLAMP_TO_EDGE);for(const k of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,k,gl.LINEAR);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array(3));gl.uniform1i(U(name),i);return t;});
@@ -75,7 +75,7 @@ export async function createSharedPalace({base,config,onError=()=>{},center=null
   },
   advance(dt){startupWarmMute=false;clock+=dt;if(!manual&&video.paused)video.play().catch(e=>{onError(e.message);});},
   hidden(){visible=false;},
-  render(current,previous,alpha,scene,frame,centerState=null){setCenter(centerState);if(!visible){segment++;visible=true;}upload(0,video);upload(1,current);if(previous)upload(2,previous);gl.uniform1f(U('mixOld'),previous?alpha:0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);sample(scene,frame);return canvas;},
+  render(current,previous,alpha,scene,frame,centerState=null,blackBg=false){gl.uniform1f(U('bgOn'),blackBg?0:1);setCenter(centerState);if(!visible){segment++;visible=true;}upload(0,video);upload(1,current);if(previous)upload(2,previous);gl.uniform1f(U('mixOld'),previous?alpha:0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);sample(scene,frame);return canvas;},
   setManual(on){manual=!!on;if(manual)video.pause();},
   async prepare(dt){if(!manual)return;const target=(clock+dt)%12;if(Math.abs(video.currentTime-target)<1e-4)return;await new Promise(resolve=>{video.addEventListener('seeked',resolve,{once:true});video.currentTime=target;});},
   diagnostics(){return {uploads,uploadSkips,presentedTime,videoQuality:(()=>{const q=video.getVideoPlaybackQuality?.();return q?{totalVideoFrames:q.totalVideoFrames,droppedVideoFrames:q.droppedVideoFrames}:null;})(),kind:'continuous_palace',time:video.currentTime,clock,loops,visible,segment,ready:video.readyState,src:video.currentSrc,errors:[...errors]};},

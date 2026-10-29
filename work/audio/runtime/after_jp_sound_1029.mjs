@@ -2,16 +2,17 @@
 // 映像の出来事のコマ(30fps)で一撃を鳴らし、常時鳴る層は作らない。対応表は game_sfx_1029/after_jp/cues_after_jp_1029.json。
 // 状態は lcd.jp.model.where()・lcd.choiceV20・controller.game.phase・lcd.finalResultSurface を読むだけ(液晶/規則は変更しない)。
 // 通常時の音(launch/lamp/ticket/start/attract/warn10/tray)と JP 本編の音(jp_audio)には触らない。
+import { hotBus } from './hot_bus.mjs';
 const dB = x => 10 ** (x / 20);
-export async function installAfterJpSound(engine, { lcd, controller, cuesUrl = new URL('../game_sfx_1029/after_jp/cues_after_jp_1029.json', import.meta.url), level = .9 } = {}) {
+export async function installAfterJpSound(engine, { lcd, controller, cuesUrl = new URL('../game_sfx_1029/after_jp/cues_after_jp_1029.json', import.meta.url), level = .38 } = {}) {
   const cues = await (await fetch(cuesUrl)).json();
   const ctx = engine.ctx, base = cuesUrl;
-  const out = ctx.createGain(); out.gain.value = level; out.connect(engine.mix);
+  const out = ctx.createGain(); out.gain.value = level; out.connect(hotBus(engine));   // 圧縮機の後の専用出口(hot_bus.mjs)
   const buffers = {}, log = [];
   const decode = async u => ctx.decodeAudioData(await (await fetch(u)).arrayBuffer());
   const used = new Set(); const scan = o => { if (Array.isArray(o)) { if (typeof o[0] === 'string') used.add(o[0]); o.forEach(scan); } else if (o && typeof o === 'object') { if (typeof o.s === 'string') used.add(o.s); Object.values(o).forEach(scan); } };
   scan(cues.macros); scan(cues.scenes); scan(cues.choice); scan(cues.timeup); scan(cues.result);
-  const files = new Map(); for (const [k, v] of Object.entries(cues.bank)) files.set(k, new URL(v, base).href); for (const n of cues.new) files.set(n, new URL(`sfx/${n}.wav`, base).href);
+  const files = new Map(); for (const [k, v] of Object.entries(cues.bank)) files.set(k, new URL(v, base).href); for (const [k, v] of Object.entries(cues.ext ?? {})) files.set(k, new URL(v, base).href); for (const n of cues.new) files.set(n, new URL(`sfx/${n}.wav`, base).href);   // ext = JP第5版の部品(bankTrimなし)
   const need = [...files.keys()].filter(k => cues.macros[k] === undefined);
   await Promise.all(need.map(async n => { try { buffers[n] = await decode(files.get(n)); } catch (e) { console.warn('[after-jp] missing', n, e.message); } }));
 

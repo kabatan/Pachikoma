@@ -59,11 +59,14 @@ class OriginalJpTimeline {
     for(const c of s.cues??[])if(c.f>this.lastF&&c.f<=f){if(c.kind==='reveal')this.revealedAt=this.clock;this.cue({...c,payout:this.payout});}
     const crossed=(s.cut??[]).some(k=>k>this.lastF&&k<=f);
     const held=this.pending&&/fly_t3_/.test(this.pending)&&this.holdUntil>this.clock;   // 「入れ!!」は玉が口に届く予測時刻の少し前に出す
-    if(this.pending && !held && (crossed||f===s.frames-1)) {const n=this.pending;this.pending=null;this.start(n);return;}
+    // 導入・チャンス題字(jp_intro_*, jp_chance_*)は最後まで見せる。玉の発射・熱さの通知が早く来ても、狙いの場面へ着くまで飛ばさない(10/29 監督指摘: 連打で倍速になる)。
+    const protectedIntro=/^jp_(intro|chance)/.test(this.name);
+    if(this.pending && !held && !protectedIntro && (crossed||f===s.frames-1)) {const n=this.pending;this.pending=null;this.start(n);return;}
     if(f===s.frames-1 && this.time>=(s.frames-.1)/this.man.fps) {
       let n=s.next;
       if(n==='@roulette')n=this.man.roulette[String(this.payout)];
       if(n==='@reward')n=`reward_${this.payout}`;
+      if(n==='@intro')n=this.introVariant??'jp_intro_dopamine';
       if(this.name.startsWith('fly_in'))n=`fly_t${this.heat}_d${this.d}`;
       if(n){this.start(n);return;}
       if(s.loop){this.time=(s.loop_from??0)/this.man.fps;this.lastF=(s.loop_from??0)-1;return;}
@@ -83,8 +86,9 @@ export class JpTimeline extends OriginalJpTimeline {
   start(name) {
     if(name==='jp_intro'&&this.man.intro_variants?.length) {
       const names=this.man.intro_variants;
-      name=names[Math.floor(this.random()*names.length)];
-      this.introVariant=name;
+      this.introVariant=names[Math.floor(this.random()*names.length)];
+      // 10/29 最新の流れ: 紫の雷(黒の上) → 黒の背景+文字 → JPチャンス。雷が先。manifest.intro_order が無ければ従来(文字 → 雷)。
+      name=this.man.intro_order==='lightning_first'&&this.man.scenes.jp_intro_lightning?'jp_intro_lightning':this.introVariant;
     }
     super.start(name?.replace(/_d[1-7]$/, '_d'+(this.d??4)));
   }
@@ -184,6 +188,16 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   const offer=await createChainOffer();
   const compositor=man.result_compositor?await createResultCompositor(base,man.result_compositor):null;
   const model=new JpTimeline(man,onCue,getState);let manual=false,current=null,serial=-1,errors=[],hole=null,visible=null,previous=null,fade=1,blockedResult=null;
+  let blockedFor=0,wdSerial=-1,wdT=0;
+  // 場面が終わらないまま居座る不具合の保険(10/29 監督指摘: 失敗後の灰色＋閉じた扉が残る)。待つ場面(狙い・飛行・ため・ループ・継続の選択)以外が、長さ+4秒を過ぎても進まなければ打ち切って通常に戻す。
+  const WAITS=/^(tame_|fly_|jp_aim|chain_jp_aim|chain_fly|chain_tame|chain_offer)/;
+  const stuckWatch=dt=>{
+    const sc=man.scenes[model.name];
+    if(!model.active||model.delay>0||!sc||sc.loop||sc.offer||WAITS.test(model.name)){wdSerial=-1;wdT=0;return;}
+    if(wdSerial!==model.serial){wdSerial=model.serial;wdT=0;}
+    wdT+=Math.min(dt,.1);
+    if(wdT>sc.frames/man.fps+4){record('watchdog',{name:model.name,wdT});model.stop('watchdog');}
+  };
   const lifecycle=[];const record=(kind,data={})=>{lifecycle.push({kind,wall:performance.now(),...data});if(lifecycle.length>1000)lifecycle.shift();};
   let startupWarmPromise=null;
   const load=(slot,name,recordLoad=true)=>{
@@ -220,8 +234,24 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     else if(model.name.startsWith('reward_'))reserve(`chain_jp_aim_d${chainTarget()}`);
   }
   const cue=model.cue;model.cue=c=>{if(c.kind==='hole')hole=c;return cue(c);};
-  const stop=model.stop.bind(model);model.stop=reason=>{record('end',{name:model.name,reason:reason??'end',time:model.time});return stop(reason);};
-  return {man,model,get center(){return center;},get active(){return model.active&&model.delay<=0;},get claimed(){return model.active;},
+  const stop=model.stop.bind(model);model.stop=reason=>{
+    const failed=man.scenes[model.name]?.result_kind==='fail';
+    record('end',{name:model.name,reason:reason??'end',time:model.time});
+    const r=stop(reason);
+    // 失敗の映像の最後のコマ(灰色＋閉じた扉)を次の映像の読み込み中に出し直さない
+    if(failed){visible=null;previous=null;current=null;serial=-1;blockedResult=null;blockedFor=0;fade=1;}
+    return r;
+  };
+  // 勝負球(JPチャレンジの玉)の発射を待たせる間: 最初のJPの導入・チャンス題字(狙いの場面へ着くまで)と、配当の演出の最中。
+  // この間に押された発射は規則側で保持され、解けた瞬間に出る。押しっぱなし・連打でも、導入が飛ばされたり、配当中に次のJPの結果が割り込んだりしない。
+  let gateSince=null;
+  const blocksChallengeLaunch=()=>{
+    const hold=model.active&&!model.chainMode&&(model.payout>0||/^jp_(intro|chance)/.test(model.name??''));
+    if(!hold){gateSince=null;return false;}
+    gateSince??=model.clock;if(model.clock-gateSince>30)return false;   // 万一の保険: 30秒で必ず解く
+    return true;
+  };
+  return {man,model,get center(){return center;},get active(){return model.active&&model.delay<=0;},get claimed(){return model.active;},get blocksChallengeLaunch(){return blocksChallengeLaunch();},
     warmResults:()=>compositor?.warmup?.()??{skipped:true,reason:'no-result-compositor'},
     warmStartupRush(ctx,w=1152,h=1268,{afterDraw=()=>{}}={}){
       if(model.active||model.clock!==0||model.serial!==0||current||visible||previous||serial!==-1)throw Error('JP rush warm is boot-only');
@@ -268,9 +298,9 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
       }if(id==='fail')digits?.prepare(p.jackpotEarnings??0);if(id==='lamp6'&&handled&&!sustaining){reserve(`fly_in_d${model.d}`);}sync();return handled&&(id!=='lamp6'||sustaining);},
     setManual(on){manual=!!on;palace.setManual(on);for(const s of slots)s.v.pause();},
     async prepare(dt){await palace.prepare(dt);sync();if(!manual||!current||model.delay>0||man.scenes[model.name]?.offer)return;await current.promise;if(!current.ready)return;const t=Math.min(model.time+dt,(man.scenes[model.name].frames-.1)/man.fps);if(Math.abs(current.v.currentTime-t)<1e-5)return;await new Promise(resolve=>{const done=()=>{clearTimeout(timer);current?.v.removeEventListener('seeked',done);resolve();};const timer=setTimeout(done,2000);current.v.addEventListener('seeked',done,{once:true});current.v.currentTime=t;});},
-    frame(dt){palace.advance(dt);sync();if(man.scenes[model.name]?.offer){const waiting=getState().phase!=='ChainChoice';const v=offer.frame(palace.video,model.time,waiting);model.update(waiting?0:dt);sync();return v;}const kind=sResult();if(kind&&compositor){const first=kind==='confirm'?84:64;const f=Math.min(man.scenes[model.name].frames-1,Math.floor((current?.v.currentTime??model.time)*man.fps+1e-6));compositor.prefetch(kind,Math.max(first,f));if(f>=first&&!compositor.ready(kind,f)){blockedResult=current;if(current&&!current.v.paused)current.v.pause();return visible?.ready&&Math.floor((visible.v.currentTime??0)*man.fps)<first?visible.v:compositor.canvas;}}
-      if(blockedResult){blockedResult=null;if(model.active&&!manual&&current?.ready&&model.delay<=0&&current.v.paused&&!current.v.ended)current.v.play().catch(()=>{});}
-      const oldTime=model.time;model.update(current?.ready||model.delay>0?dt:0,manual||model.delay>0?null:current?.ready?current.v.currentTime:model.time);if(current&&model.active&&model.serial===serial&&model.time<oldTime){current.v.currentTime=model.time;if(!manual)current.v.play().catch(()=>{});}sync();if(previous){fade=Math.min(1,fade+Math.min(dt,1/30)/.12);if(fade>=1){previous.v.pause();record('end',{name:previous.name,reason:'crossfade',time:previous.v.currentTime});previous=null;}}if(model.active&&visible?.ready&&man.scenes[visible.name]?.layered){const prior=previous&&man.scenes[previous.name]?.layered?previous.v:null;const vs=man.scenes[visible.name],lf=visible.name===model.name?model.lastF:Math.floor(visible.v.currentTime*man.fps);return palace.render(visible.v,prior,1-fade,visible.name,lf,center&&vs.center?center.stateFor(vs.source_frames[Math.max(0,Math.min(vs.frames-1,lf))],vs,dt):null);}palace.hidden();if(sResult()&&compositor){const f=Math.min(man.scenes[model.name].frames-1,Math.floor((visible?.v.currentTime??model.time)*man.fps+1e-6));const result=compositor.render(sResult(),f,Math.max(0,Math.round(model.earnings??0)),model.resultChain??1);if(result){result.readyState=4;return result;}}return visible?.ready?visible.v:null;},
+    frame(dt){palace.advance(dt);sync();if(man.scenes[model.name]?.offer){const waiting=getState().phase!=='ChainChoice';const v=offer.frame(palace.video,model.time,waiting);model.update(waiting?0:dt);sync();return v;}stuckWatch(dt);const kind=sResult();if(!kind)blockedFor=0;if(kind&&compositor){const first=kind==='confirm'?84:64;const f=Math.min(man.scenes[model.name].frames-1,Math.floor((current?.v.currentTime??model.time)*man.fps+1e-6));compositor.prefetch(kind,Math.max(first,f));if(f>=first&&!compositor.ready(kind,f)&&(blockedFor+=dt)<1.5){blockedResult=current;if(current&&!current.v.paused)current.v.pause();return visible?.ready&&Math.floor((visible.v.currentTime??0)*man.fps)<first?visible.v:compositor.canvas;}}
+      blockedFor=compositor&&kind&&!compositor.ready(kind,Math.max(0,Math.floor((current?.v.currentTime??model.time)*man.fps)))?blockedFor:0;if(blockedResult){blockedResult=null;if(model.active&&!manual&&current?.ready&&model.delay<=0&&current.v.paused&&!current.v.ended)current.v.play().catch(()=>{});}
+      const oldTime=model.time;model.update(current?.ready||model.delay>0?dt:0,manual||model.delay>0?null:current?.ready?current.v.currentTime:model.time);if(current&&model.active&&model.serial===serial&&model.time<oldTime){current.v.currentTime=model.time;if(!manual)current.v.play().catch(()=>{});}sync();if(previous){fade=Math.min(1,fade+Math.min(dt,1/30)/.12);if(fade>=1){previous.v.pause();record('end',{name:previous.name,reason:'crossfade',time:previous.v.currentTime});previous=null;}}if(model.active&&visible?.ready&&man.scenes[visible.name]?.layered){const prior=previous&&man.scenes[previous.name]?.layered?previous.v:null;const vs=man.scenes[visible.name],lf=visible.name===model.name?model.lastF:Math.floor(visible.v.currentTime*man.fps);return palace.render(visible.v,prior,1-fade,visible.name,lf,center&&vs.center?center.stateFor(vs.source_frames[Math.max(0,Math.min(vs.frames-1,lf))],vs,dt):null,!!vs.black_bg);}palace.hidden();if(sResult()&&compositor){const f=Math.min(man.scenes[model.name].frames-1,Math.floor((visible?.v.currentTime??model.time)*man.fps+1e-6));const result=compositor.render(sResult(),f,Math.max(0,Math.round(model.earnings??0)),model.resultChain??1);if(result){result.readyState=4;return result;}}return visible?.ready?visible.v:null;},
     get layered(){return !!man.scenes[model.name]?.layered;},get palace(){return palace;},
     // Light script follows the decoded image actually being presented, even while the next clip loads.
     get lightingCurrent(){return model.active&&model.delay<=0&&visible?.ready?{name:visible.name,time:visible.v.currentTime}:null;},

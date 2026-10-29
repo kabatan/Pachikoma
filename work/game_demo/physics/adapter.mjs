@@ -17,7 +17,7 @@ import { Stage1Tray } from './stage1_tray.mjs';
 import { loadStageTransforms } from './stage_transforms.mjs';
 
 export const KIND = { board: 0, ret: 1, tray: 2, lift: 3, shuttle: 4 };
-const HZ = 480, DT = 1 / HZ;
+const HZ = 480, DT = 1 / HZ, RECALL_SUCK = 0.28;   // 回収する玉が戻り管の入口へ吸い込まれる秒数
 export const TRAY_HZ = 240; const TRAY_STRIDE = HZ / TRAY_HZ;
 export const STOCK0 = 5, STOCK_MAX = 4;
 /** 同時発射(MaxInFlight>1)用の補給: 装填・取込を0.45秒、昇降管を0.4m/s、予備球は開始時4個(シャトル含む)・以後最大3個で、皿に玉が11個ほど見える。0.6秒間隔の連射でも射出待ちが出ない(physics/rapid_supply_test.mjs)。 */
@@ -109,6 +109,23 @@ export class PhysicsAdapter {
     const delta = this.board.launchDelta;
     const event = { type: 'launch', tick: this.tick + (this._stepping ? 0 : 1), shotId, part_id: 'SOCKET_MUZZLE', x: this.transforms.point('stage2', [this.board.shuttle(this.aim, this.dir).x + delta.x, this.muzzle[1], this.muzzle[2]])[0], launchDelta: { ...delta } }; this._stamp(event); this.events.push(event);
   }
+  /** 規則側で取り消した(手持ちに戻した)通常球を物理側から外す(JPチャンス・継続の挑戦に入る瞬間、盤上の通常球を片付ける)。
+   *  盤上の玉: 盤から外して最寄りの口の戻り管へ吸い込まれる見え方(0.28秒)で片付け、予備球に戻す。発射待ちの玉: 待ちから外すだけ(まだ物理側に出ていない)。
+   *  同じ刻みで既に着地していた玉: 戻り管に入っているので予備球に戻すだけ。 */
+  recall(ids) {
+    for (const id of ids) {
+      const qi = this.pendingLaunch.indexOf(id);
+      if (qi >= 0) { this.pendingLaunch.splice(qi, 1); this.pendingAim?.delete(id); continue; }
+      const b = this.board.balls.get(id);
+      if (!b) { this.stock++; continue; }
+      const p = this.board.pos(b.body, { x: 0, y: 0, z: 0 });
+      let best = null, bd = Infinity;
+      for (const poly of this.returns.values()) { const d = Math.abs(poly.pts[0][0] - p.x); if (d < bd) { bd = d; best = poly; } }
+      this.board._remove(id); this.stock++;
+      if (best) this.transit.push({ shotId: id, poly: best, s: 0, v: 0.5, from: [p.x, p.y, p.z], pre: RECALL_SUCK, recalled: true });
+      const event = { type: 'recalled', tick: this.tick + (this._stepping ? 0 : 1), shotId: id }; this._stamp(event); this.events.push(event);
+    }
+  }
   payout(n, earned = true, rate = null) { n = Math.max(0, n | 0); if (n > 0) this.payRate = rate > 0 ? Math.min(40, rate) : (this.payQueue > 0 ? this.payRate : null); const k = Math.min(n, this.skipPayout); this.skipPayout -= k; n -= k; this.payQueue += n; this.payEarned = earned; }
   startCount() { if (this.counting) return; this.counting = { t0: this.t, emptyFor: 0, counted: 0, drainedAt: null }; this.tray.countOpen = true; this.tray.setMech('MECH_SEP_NEEDLE', .004); if (this.tray.rr) this.tray.rr.scale = 0; }
 
@@ -145,7 +162,8 @@ export class PhysicsAdapter {
     }
     // 戻り管: PATH_RETURN をなぞって落ちる(1次元。回転して転がる球の加速 = 5/7 g sinθ)
     for (let i = this.transit.length - 1; i >= 0; i--) {
-      const q = this.transit[i]; const a = at(q.poly, q.s, this._transitPointA), b = at(q.poly, q.s + 0.002, this._transitPointB); const ds = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1; const slope = Math.max(0, -(b[1] - a[1]) / ds);
+      const q = this.transit[i]; if (q.pre > 0) { q.pre -= DT; continue; }   // 回収された玉は、戻り管の入口へ吸い込まれてから降りる
+      const a = at(q.poly, q.s, this._transitPointA), b = at(q.poly, q.s + 0.002, this._transitPointB); const ds = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1; const slope = Math.max(0, -(b[1] - a[1]) / ds);
       q.v = Math.min(2.5, Math.max(0.15, q.v + (5 / 7) * 9.81 * slope * DT)); q.s += q.v * DT;
       if (q.s >= q.poly.len) { this.transit.splice(i, 1); this.stored.returned++; this.events.push({ type: 'returned', shotId: q.shotId }); }
     }
@@ -221,7 +239,8 @@ export class PhysicsAdapter {
     let n = 0; const put = (x, y, z, k, id) => { if (n >= this.maxBalls) return; pos[3 * n] = x; pos[3 * n + 1] = y; pos[3 * n + 2] = z; kind[n] = k; ids.push(id); n++; };
     const stagePoint = this._snapshotStagePoint ??= [0, 0, 0], assemblyPoint = this._snapshotAssemblyPoint ??= [0, 0, 0];
     for (const b of this.board.balls.values()) { const p = this.board.pos(b.body, b._p), a = this.transforms.pointInto('stage3', p.x, p.y, p.z, assemblyPoint); put(a[0], a[1], a[2], KIND.board, b.id); }
-    for (const q of this.transit) { const p = at(q.poly, q.s, stagePoint), a = this.transforms.pointInto('stage3', p[0], p[1], p[2], assemblyPoint); put(a[0], a[1], a[2], KIND.ret, q.shotId); }
+    for (const q of this.transit) { const p = at(q.poly, q.s, stagePoint); if (q.pre > 0) { const e = 1 - q.pre / RECALL_SUCK, k = e * e * (3 - 2 * e); for (let j = 0; j < 3; j++) p[j] = q.from[j] + (p[j] - q.from[j]) * k; }
+      const a = this.transforms.pointInto('stage3', p[0], p[1], p[2], assemblyPoint); put(a[0], a[1], a[2], KIND.ret, q.shotId); }
     for (const [id, b] of this.tray.activeBalls) { if (b.stored) continue; const p = b.prev, T = this.tray.T, a = this.transforms.pointInto('stage1', p.x - T[0], p.y - T[1], p.z - T[2], assemblyPoint); put(a[0], a[1], a[2], KIND.tray, id); }
     for (const q of this.travel) { const p = at(this.liftPath, q.s, stagePoint), a = this.transforms.pointInto('stage2', p[0], p[1], p[2], assemblyPoint); put(a[0], a[1], a[2], KIND.lift, q.id); }
     const sh = this.board.shuttle(this.aim, this.dir); const shuttleAssembly = this.transforms.point('stage2', [sh.x, this.muzzle[1], this.muzzle[2]]);

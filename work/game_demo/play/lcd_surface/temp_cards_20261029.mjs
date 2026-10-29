@@ -2,6 +2,7 @@
 // 背景は通常のryugu1028動画（normal_surface側が描く）。ここは題字・光・数字だけを重ねる。
 // 題字は jp_teacher/08_chain の字の部品（極太明朝×虹×白銀縁＋黒縁）で焼いたPNG。AI画像・立体うぱ・くっきりした図形は使わない。
 // 光はにじむ円形グラデーション（スプライト）のみ。ライセンスが要る外部素材は無し。
+import {withRestored2D} from './startup_warm.mjs';
 const DIR = new URL('./temp_cards_20261029/', import.meta.url);
 const CX = 576;
 const ease = k => 1 - (1 - Math.min(1, Math.max(0, k))) ** 3;
@@ -10,7 +11,7 @@ const clamp01 = v => Math.min(1, Math.max(0, v));
 
 export const CARD_DURATIONS = { ticket: 1.9, add100: 1.8, reset_fallback: 1.6, guard: 1.1 };
 
-export async function createTempCards() {
+export async function createTempCards({warmContext = null} = {}) {
   const load = n => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(Error('temp card asset ' + n)); i.src = new URL(n, DIR).href; });
   const names = ['start_main', 'start_sub', 'count_main', 'count_jp', 'more_main', 'more_sub', 'guard_main', 'dup_main', 'dup_sub'];
   const P = {}; await Promise.all(names.map(async n => { P[n] = await load(n + '.png'); }));
@@ -86,7 +87,9 @@ export async function createTempCards() {
       glow(ctx, CX, 640, 620 + 120 * rise, 'gold', (.28 + .3 * rise) * e * (.85 + .15 * Math.sin(t * 3.2)));
       glow(ctx, CX, 640, 880, 'aqua', .14 * e);
       telop(ctx, P.count_main, CX, 450, 700, { t, pop: true, alpha: 1, dy: 6 * Math.sin(t * 2.4), sheen: ((t * (.45 + .25 * rise)) % 1.6) / 1.4 });
-      const shown = Math.round(total * ease(k)), rolling = k < 1;
+      // 大きな数字は筐体右上の7セグ(s.shownBalls)を超えない。払い出しが終わるまで7セグと同じ値で上がり、最後は同じ値で止まる。
+      const live = Number.isFinite(s.shownBalls) ? Math.min(total, s.shownBalls) : total;
+      const shown = Math.min(Math.round(total * ease(k)), live), rolling = k < 1 || live < total;
       number(ctx, `${shown}玉`, CX, 700, 230, { alpha: e, maxW: 980, scale: rolling ? 1 : 1 + .03 * Math.max(0, Math.sin(t * 5)) });
       if (!rolling) glow(ctx, CX, 640, 440, 'white', .16 * (.5 + .5 * Math.sin(t * 5)));
       telop(ctx, P.count_jp, CX - 170, 900, 440, { t: t - .5, pop: false, alpha: e });
@@ -103,6 +106,33 @@ export async function createTempCards() {
     },
   };
 
+  // Factory-only: no card/model/event clock exists yet. Keep no extra resource.
+  if (warmContext) {
+    try {
+      for (const image of [P.start_main, P.start_sub, P.count_main, P.count_jp, atlas]) await image.decode?.();
+      await withRestored2D(warmContext, async () => {
+        sx.save();
+        try {
+          const samples = [
+            {id: 'ticket', times: [.05, .8, 1.25], params: {balls: 18}, state: {rules: {LoanBalls: 18}}},
+            {id: 'finish_count', times: [1 / 60, .75, 1.8], params: {total: 38, score: 70}, state: {balls: 38, score: 70}},
+          ];
+          for (const sample of samples) for (const t of sample.times) {
+            warmContext.save();
+            try { warmContext.translate(34, 28); scenes[sample.id](warmContext, sample.params, t, sample.state); }
+            finally { warmContext.restore(); }
+            // Materialize before another sample/restore can discard queued draws.
+            const painted = await createImageBitmap(warmContext.canvas, 34, 28, 1152, 1268,
+              {premultiplyAlpha: 'none', colorSpaceConversion: 'none'});
+            painted.close();
+          }
+        } finally {
+          sx.restore(); sx.clearRect(0, 0, scratch.width, scratch.height);
+        }
+      });
+    } catch (error) { console.warn('[temp-cards] startup warm', error.message); }
+  }
+
   return {
     ttl: (id, p) => CARD_DURATIONS[id],
     draw(ctx, id, p, t, s) { const f = scenes[id]; if (!f) return false; f(ctx, p, t, s); return true; },
@@ -118,5 +148,5 @@ export async function createTempCards() {
 
 export async function attachTempCards(lcd) {
   if (!lcd?.production || lcd.tempCards || !lcd.setCards) return lcd;
-  const cards = await createTempCards(); lcd.setCards(cards); lcd.tempCards = cards; return lcd;
+  const cards = await createTempCards({warmContext: lcd.canvas.getContext('2d')}); lcd.setCards(cards); lcd.tempCards = cards; return lcd;
 }

@@ -80,72 +80,14 @@
   "res_info2"
  ],
  "macros": {
-  "XL": [
-   [
-    "mega_A",
-    6.5,
-    0,
-    2.4,
-    0.4
-   ],
-   [
-    "fanfare_A",
-    5.5,
-    0,
-    2.0,
-    0.4
-   ],
-   [
-    "chime_cascade",
-    -2
-   ],
-   [
-    "ping_high",
-    3
-   ],
-   [
-    "kyuin_b",
-    1
-   ],
-   [
-    "bell_big",
-    -2
-   ],
-   [
-    "sub_hit",
-    5
-   ]
-  ],
   "L": [
    [
-    "mega_small",
-    1,
-    0,
-    1.3,
-    0.3
+    "v5_l_stab_A",
+    -3
    ],
    [
-    "stab_A",
+    "v5_l_impact_s",
     -2
-   ],
-   [
-    "kyuin_b",
-    -4
-   ],
-   [
-    "ping_high",
-    -2
-   ],
-   [
-    "sub_hit",
-    -1
-   ],
-   [
-    "bell_big",
-    -11,
-    0,
-    1.0,
-    0.5
    ]
   ],
   "M": [
@@ -222,10 +164,6 @@
     -3
    ],
    [
-    "bell_big",
-    -12
-   ],
-   [
     "ping_high",
     -6
    ],
@@ -236,23 +174,24 @@
   ],
   "offer1": [
    [
-    "chain_continue_fanfare",
-    -2,
-    0,
-    3.2,
-    0.5
+    "v5_l_chord_A",
+    -4.5
+   ],
+   [
+    "v5_l_impact",
+    -4.5
+   ],
+   [
+    "success_arp",
+    -7.5
    ],
    [
     "offer_burst",
-    -3
+    -6.5
    ],
    [
     "chain_offer_ping",
-    -4
-   ],
-   [
-    "XL",
-    0
+    -7.5
    ]
   ],
   "offer2": [
@@ -265,8 +204,8 @@
     -3
    ],
    [
-    "L",
-    0
+    "T2",
+    -4
    ]
   ],
   "land": [
@@ -279,7 +218,7 @@
     -6
    ],
    [
-    "XL",
+    "T2",
     0
    ]
   ],
@@ -293,25 +232,21 @@
     -6
    ],
    [
-    "XL",
+    "T2",
     0
    ]
   ],
   "total_final": [
    [
     "total_slam",
-    -2
-   ],
-   [
-    "total_final_ring",
-    -2
+    -4
    ],
    [
     "coin_burst",
     -5
    ],
    [
-    "XL",
+    "T2",
     0
    ]
   ],
@@ -324,14 +259,33 @@
     "fail_gray",
     -2
    ]
+  ],
+  "T2": [
+   [
+    "v5_l_stab_A",
+    0
+   ],
+   [
+    "v5_l_chord_A",
+    -1,
+    0.18
+   ],
+   [
+    "v5_l_impact",
+    1
+   ],
+   [
+    "v5_l_impact_s",
+    0,
+    0.18
+   ],
+   [
+    "sub_hit",
+    4
+   ]
   ]
  },
  "duck": {
-  "XL": [
-   6,
-   0.25,
-   0.8
-  ],
   "L": [
    3.5,
    0.15,
@@ -351,6 +305,11 @@
    5,
    0.3,
    0.9
+  ],
+  "T2": [
+   6,
+   0.25,
+   0.8
   ]
  },
  "scenes": {
@@ -422,7 +381,7 @@
    {
     "f": 0,
     "s": "tension_pulse",
-    "db": -12,
+    "db": -18,
     "dur": 4.0,
     "fade": 0.3,
     "stopOnScene": true
@@ -459,7 +418,7 @@
   "chain_jp_gold": [
    {
     "f": 0,
-    "m": "land"
+    "m": "M"
    }
   ],
   "chain_confirm": [
@@ -709,7 +668,7 @@
    "items": [
     [
      "chime_run",
-     -15
+     -21
     ]
    ]
   },
@@ -720,7 +679,7 @@
    "items": [
     [
      "chime_run",
-     -15
+     -21
     ]
    ]
   },
@@ -731,11 +690,11 @@
    "items": [
     [
      "res_info1",
-     -9
+     -15
     ],
     [
      "res_info2",
-     -9,
+     -15,
      0.14
     ]
    ]
@@ -747,15 +706,29 @@
    "items": [
     [
      "res_info1",
-     -13
+     -17
     ],
     [
      "res_info2",
-     -13,
+     -17,
      0.14
     ]
    ]
   }
  },
- "bankTrim": -12
+ "bankTrim": -12,
+ "ext": {
+  "v5_l_stab_A": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_l_stab_A.ogg",
+  "v5_l_chord_A": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_l_chord_A.ogg",
+  "v5_l_impact": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_l_impact.ogg",
+  "v5_l_impact_s": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_l_impact_s.ogg",
+  "v5_m_clang_A": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_m_clang_A.ogg",
+  "v5_m_clang_A3": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_m_clang_A3.ogg",
+  "v5_m_clang_hi": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_m_clang_hi.ogg",
+  "v5_m_clang_lo": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_m_clang_lo.ogg",
+  "v5_s_blip_4": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_s_blip_4.ogg",
+  "v5_s_blip_5": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_s_blip_5.ogg",
+  "v5_s_coin": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_s_coin.ogg",
+  "v5_s_tick": "../../jp_proto_1029/runtime_assets_v5/sfx/v5_s_tick.ogg"
+ }
 }

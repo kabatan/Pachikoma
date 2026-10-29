@@ -1,7 +1,7 @@
 // 通常時の音(BGM録音・演出SE・玉の音)をr2音響エンジンへ差し込む。?pachi=0で無効。JP(大当たり)の音・曲だけr2のまま。
 // SE: pachi_synth.mjs の合成音でr2の同名キューを置き換える(点灯・重複・ルーレット・昇格・発射・開始・勝負・成功・時間切れ・計数・結果・タイトル・遊び方ほか)。
 // 玉の音: modalSynthとpayoutCacheを差し替える。
-// BGM: 録音曲(bgm/user/normal_loop.ogg)を通常・4灯以降・勝負中(高域を絞る)・成功の間も流す。r2の旧BGM(normal/pink/focus/成功)は同じ長さの無音に差し替えて時計と切替をそのまま使う。JPの曲だけ旧のまま。
+// BGM: 録音曲(bgm/user/normal_loop.ogg)を待機(タイトル)・通常・4灯以降・勝負中(高域を絞る)・成功の間も流す。r2の旧BGM(normal/pink/focus/成功)は同じ長さの無音に差し替えて時計と切替をそのまま使う。JPの曲だけ旧のまま。
 // バランス: SEは録音BGMの+4〜6dBに収め、r2のduck(灯4以降 -5dB / 成功 -11dB)を -2.5dB / -7dB に和らげる。
 import { CUE_MAKERS, pachiContact, payoutBuffer, preparePachiContact } from './pachi_synth.mjs';
 import { createPocket, pocketCue } from './bgm_pocket.mjs';
@@ -85,7 +85,8 @@ export async function installPachiSound(engine, { bgmUrl = new URL('../bgm/user/
   const focusGain = ctx.createGain();
   out.connect(focusLP).connect(focusGain).connect(pocket.node).connect(tilt).connect(bgm.userGain);   // BGM音量・ミュート・SEのduckに従う
   // r2の旧BGM(normal/pink/focus/成功)は同じ長さの無音に差し替え、時計・切替・復帰の予定はそのまま使う。JPの曲(jp_*)は新しい曲ができるまで旧のまま
-  const OLD = ['normal', 'pink', 'focus', 'success', 'success_short'];
+  // 10/29: 旧JP曲(10/18版 jp_intro / jp_body_loop / jp_outro)も無音に差し替える。JPの曲は jp_audio_v5(現行の曲 bgm/user/jp_src 由来 jp_bgm_loop)が鳴らす。旧曲は音は出ないが、JP中の局面の時計(復帰の予定)だけ従来どおり使う
+  const OLD = ['normal', 'pink', 'focus', 'success', 'success_short', 'jp_intro', 'jp_body_loop', 'jp_outro'];
   const silence = () => { for (const name of OLD) { const b = bgm.buffers.get(name); if (b && !b.__silent) { const s = ctx.createBuffer(b.numberOfChannels, b.length, b.sampleRate); s.__silent = true; bgm.buffers.set(name, s); } } };
   await bgm.ready.catch(() => {});contactBank.assertCurrent();silence();
 
@@ -104,9 +105,15 @@ export async function installPachiSound(engine, { bgmUrl = new URL('../bgm/user/
   for (const key of [...engine.winCache.keys()]) if (key.startsWith('success_')) engine.winCache.delete(key);
   for (const id of ['success_small', 'success_big']) { const plan = winPlan({ id }, engine.winTiming); if (plan) engine.winCache.set(plan.id + ':' + plan.duration, createWinSound(ctx, engine.buffers, engine.winTiming, plan)); }
 
+  // 旧JPの勝ち音(10/17版 sfx/win_jp_head・loop・tail・win_number の合成)も無音に差し替える。現行のJPの音は jp_audio_v5 が鳴らす(旧音は jp_audio_v5 の「門」で止めていたが、門が開く時間帯に漏れないよう元から無音に)。
+  // 同じ長さの無音にするので、JP中の沈み(SE/玉/通常BGMのduck)の計算は変わらない。
+  for (const n of ['win_jp_head', 'win_jp_loop', 'win_jp_tail', 'win_number']) { const b = engine.buffers.get(n); if (b) engine.buffers.set(n, ctx.createBuffer(b.numberOfChannels, b.length, b.sampleRate)); }
+  for (const [k, b] of [...engine.winCache]) if (k.startsWith('jp:')) engine.winCache.set(k, ctx.createBuffer(b.numberOfChannels, b.length, b.sampleRate));
   let src = null, on = false, headNext = true, hot = false, focused = false;
   // 通常・4灯以降に加えて、勝負中(focus)と成功の間も録音曲を続ける。JP(大当たり)の間だけ旧のJPの曲に任せる
-  const wanted = () => bgm.enabled && (['normal', 'pink', 'focus', 'success'].includes(bgm.mode) || bgm.mode === 'tutorial' && !bgm.manifest?.files.tutorial) && !bgm.jpPlan && ctx.state === 'running';
+  // 待機(タイトル・attract)も同じ曲(10/29 監督指示)。r2のBGMには待機の曲が無く、起動直後は最初のattractイベントを取りこぼすため、モードが silent でも局面が Attract なら待機として扱う
+  const attractNow = () => { if (bgm.mode === 'attract') return true; if (bgm.mode !== 'silent') return false; let p = null; try { p = engine.getPhase(); } catch {} return p == null || p === 'Attract'; };
+  const wanted = () => bgm.enabled && (['normal', 'pink', 'focus', 'success'].includes(bgm.mode) || bgm.mode === 'tutorial' && !bgm.manifest?.files.tutorial || attractNow()) && !bgm.jpPlan && ctx.state === 'running';
   const play = () => {
     src = ctx.createBufferSource(); src.buffer = buffer; src.loop = true; src.loopStart = loopStart; src.loopEnd = loopEnd; src.connect(out);
     src.start(ctx.currentTime + .01, headNext ? 0 : loopStart); headNext = false;   // 通常に戻ったときは導入を飛ばして本編から

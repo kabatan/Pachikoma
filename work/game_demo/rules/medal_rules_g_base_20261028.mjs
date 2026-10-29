@@ -140,7 +140,7 @@ export class MedalGame {
     this.challengeIntent = null; this.endPending = false; this.endGraceLeft = 0;
     this._displayClock = 0; this._resetDisplays = [];
     this._lamps = new Set(); this._sequence = 0;
-    this.shots = []; this._pendingLandings = []; this._now = 0; this._sinceFire = Infinity; this._receiptAt = -1;   // 同時発射(MaxInFlight>1)用
+    this.shots = []; this._pendingLandings = []; this.recalled = []; this._now = 0; this._sinceFire = Infinity; this._receiptAt = -1;   // 同時発射(MaxInFlight>1)用
     this._settlementLeft = 0; this._loanLeft = 0;
   }
   get lamps() { return [...this._lamps].sort((a, b) => a - b); }
@@ -193,9 +193,16 @@ export class MedalGame {
     return this.phase === MedalPhase.Effect && !!this.receipt && this.receipt.duration <= 0.6 &&
       [MedalEvent.Fresh, MedalEvent.Protected, MedalEvent.Reset].includes(this.receipt.kind);
   }
+  /** 勝負球(6灯の最終球)の発射を、JPの映像が待たせているか。rules.launchGate は液晶側が付ける関数(無ければ待たせない)。
+   *  待つ間も押しは保持され(canAim は真)、解けた瞬間に出る。通常球はこの時点では撃てない(6灯なら次の1球が必ず勝負球)ので、実質この1球だけを待たせる。 */
+  _challengeLaunchHeld() {
+    const gate = this.rules.launchGate; if (typeof gate !== 'function') return false;
+    if (!((this.armed || this.lampCount === 6) && !this.shots.some((s) => s.challenge) && !this.jackpotChain?.choicePending)) return false;
+    try { return !!gate(this); } catch { return false; }
+  }
   get canFire() {
     if (this.rules.ContinuousFire) return this._acceptingPhase() && !this.endPending && this.wallet > 0 && this.secondsLeft > 0 &&
-      this.shots.length < this.rules.MaxInFlight && this._sinceFire + 1e-9 >= this.rules.FireInterval;
+      this.shots.length < this.rules.MaxInFlight && this._sinceFire + 1e-9 >= this.rules.FireInterval && !this._challengeLaunchHeld();
     if (this.rules.R2Enabled && (this.endPending || (this.challengeIntent && this.challengeIntent.stage !== 'ready'))) return false;
     if (this.overlap) {
       if (!this._acceptingPhase() || this.wallet <= 0 || this.secondsLeft <= 0) return false;
@@ -295,6 +302,7 @@ export class MedalGame {
     this.choiceLeft = 0;
     chain.choicePending = false; chain.inChallenge = true;
     this.armed = true; this.phase = MedalPhase.Ready;
+    if (this.rules.ContinuousFire) this._recallOrdinary();   // 継続の挑戦に入る瞬間も、盤上の通常球は回収する
     const prepare = this.rules.R2Enabled && this.rules.PrepareForcedChallenge ? this.rules.ChallengePrepareSeconds : 0;
     this.challengeIntent = { stage: prepare > 0 ? 'preparing' : 'ready', forced: true, chain: true, left: prepare };
     return true;
@@ -426,6 +434,9 @@ export class MedalGame {
       duration = this.rules.ResetEffectSecondsByLamps?.[before.length] ??
         (before.length === 1 ? this.rules.ResetEffectSecondsSingle : this.rules.ResetEffectSeconds);
     }
+    // JPチャンスに入る瞬間(6灯目)、盤上に残っている通常球は回収して手持ちに戻す。
+    // 残すと、導入・狙いの映像の最中に着地して演出が前倒し・重複する(10/29 監督指摘)。
+    if (this.rules.ContinuousFire && kind === MedalEvent.Fresh && this.lampCount === 6) this._recallOrdinary(shot);
     const resetVisualDuration = kind === MedalEvent.Reset && this.rules.ResetWhileShooting
       ? this.rules.ResetVisualSecondsByLamps?.[before.length] ?? duration : null;
     if (resetVisualDuration !== null) duration = 0;
@@ -446,6 +457,18 @@ export class MedalGame {
     intent.left = !intent.forced || this.rules.PrepareForcedChallenge ? this.rules.ChallengePrepareSeconds : 0;
     intent.stage = intent.left > 0 ? 'preparing' : 'ready';
   }
+  /** 盤上・発射待ちの通常球(勝負球以外、keep 以外)を全て取り消して手持ちに戻す。取り消した shotId は this.recalled に積む(物理側が takeRecalled で受け取って盤から外す)。 */
+  _recallOrdinary(keep = null) {
+    const ids = [];
+    for (const s of this.shots) { if (s === keep || s.challenge) continue; ids.push(s.id); this.wallet++; this.spent--; this.cycleSpent--; }
+    if (!ids.length) return 0;
+    this.shots = this.shots.filter((s) => s === keep || s.challenge);
+    this.shot = this.shots[this.shots.length - 1] ?? null;
+    this._pendingLandings = this._pendingLandings.filter((q) => !ids.includes(q.shotId));
+    this.recalled.push(...ids);
+    return ids.length;
+  }
+  takeRecalled() { const r = this.recalled; this.recalled = []; return r; }
   _pick(weights) {
     let roll = this._rng() * sum(weights), index = 0;
     while (roll >= weights[index]) roll -= weights[index++];
