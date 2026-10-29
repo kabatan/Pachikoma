@@ -88,7 +88,7 @@ void main(){
   linear.minFilter=linear.magFilter=THREE.NearestFilter;linear.generateMipmaps=false;linear.needsUpdate=true;owned.push(linear);
   // Render the expensive sphere/composite passes at 720x1280, then present to
   // the native canvas. Keep all artwork, layout and occlusion in native coords.
-  const renderLite=new URLSearchParams(globalThis.location?.search??'').get('renderlite')!=='0';
+  const renderLite=new URLSearchParams(globalThis.location?.search??'').get('renderlite')==='1';
   const renderScale=renderLite?2:1,RW=W/renderScale,RH=H/renderScale;
   const balls=renderLite?new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples:2}):hr.rtMain;
   if(renderLite)owned.push(balls);

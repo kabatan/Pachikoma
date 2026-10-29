@@ -290,6 +290,6 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   } else await (await import('./chain_announce_v09_1030.mjs')).attachChainAnnounceV09(lcd, { controller, log });
   await (await import('./fx_trim_1030.mjs')).attachFxTrim(lcd, { controller, log });   // 10/30 演出の短縮（溜めと間）。?fxtrim=0 で無し
   await (await import('./jp_seal_1030.mjs')).attachJpSeal(lcd, { controller, log });   // 10/30 JPチャンス中の映像を封印の扉に。?jpseal=0 で旧（jp_aim）
-  await (await import('./chain_seal_1030.mjs')).attachChainSeal(lcd, { controller, log });   // 10/30 継続チャレンジも封印の扉に（JPと同じ経路）。?chainseal=0 で旧（chain_jp_aim）
+  if (new URLSearchParams(globalThis.location?.search ?? '').get('chainseal') === 'v02') await (await import('./chain_seal_1030.mjs')).attachChainSeal(lcd, { controller, log });   // 10/30 継続チャレンジも封印の扉に（JPと同じ経路）。?chainseal=v02 で旧の独自実装、?chainseal=0 で旧（chain_jp_aim）。既定は jp_seal_1030 が継続も担当
   return lcd;
 }

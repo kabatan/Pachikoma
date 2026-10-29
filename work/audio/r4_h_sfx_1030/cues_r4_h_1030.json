@@ -1171,7 +1171,7 @@
   ],
   "hit": [
    "hole_flash",
-   0
+   -4
   ],
   "miss": [
    "idle_spark",

@@ -1,3 +1,4 @@
+import {createVideoDrawCache} from './video_draw_cache_1030.mjs';
 import {createVideoBoundaryReplay} from './video_boundary_replay_1029.mjs';
 // Result history: borrowed videos and owner-produced snapshots. No timeline,
 // playback, decoder allocation, fetch, rules/audio, or production routing.
@@ -17,6 +18,7 @@ export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visib
  if(width!==PW||height!==PH||visible.x!==PX||visible.y!==PY||visible.w!==W||visible.h!==H)throw Error('Video candidate requires original native panel/visible dimensions');
  if(r.getPixelRatio&&r.getPixelRatio()!==1)throw Error('Video candidate requires native renderer pixelRatio1');
  let replay=createVideoBoundaryReplay();
+ const drawCache=createVideoDrawCache();let bodyReuses=0,panelReuses=0;
  const context=r.getContext(),owned=new Set(),videos=new Map(),identities=new WeakMap();let identitySequence=0;
  const own=x=>(owned.add(x),x),release=x=>{if(x&&owned.delete(x))x.dispose();};
  let disposed=false,enabled=true,failed=false,status='initial',reason='no-completed-body',bodyRevision=0,compositeRevision=0,rawValid=false,outputValid=false;
@@ -120,22 +122,26 @@ export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visib
    if(layers.length===2&&layers[0].video===layers[1].video&&(layers[0].generation??snapshot.generation)!==(layers[1].generation??snapshot.generation))return unsupported('one-video-two-generations');
    const wasWaiting=status==='waiting';
    let pendingReplay=null;
-   try{pendingReplay=replay.stage({...snapshot,layers});assertBoundary();withRendererState(T,r,()=>{
+   try{assertBoundary();const renderTextures=layers.map(l=>videoTexture(l,snapshot));
+    if(rawValid&&drawCache.sameBody(snapshot,layers,renderTextures,bodyRevision)){
+     bodyReuses++;completed=copyStamp(lastRequest);if(wasWaiting)stats.recoveries++;status='ready';reason=null;return surface;
+    }
+    pendingReplay=replay.stage({...snapshot,layers});withRendererState(T,r,()=>{
      const required=new Set(layers.map(l=>l.video));for(const [video,entry]of videos)if(!required.has(video)){release(entry.texture);videos.delete(video);stats.videoTexturesDisposed++;}
-     bodyUniforms.current.value=videoTexture(layers[0],snapshot);bodyUniforms.next.value=layers[1]?videoTexture(layers[1],snapshot):bodyUniforms.current.value;bodyUniforms.mixNext.value=layers[1]?.alpha??0;
+     bodyUniforms.current.value=renderTextures[0];bodyUniforms.next.value=renderTextures[1]??renderTextures[0];bodyUniforms.mixNext.value=layers[1]?.alpha??0;
      // A thrown GL operation invalidates, rather than relabels, a possibly partial target.
      rawValid=false;draw(bodyScene,raw);commitOverlay(overlay);
     });
-    pendingReplay.commit();pendingReplay=null;rawValid=true;bodyRevision++;stats.bodyDraws++;stats.videoTexturesMax=Math.max(stats.videoTexturesMax,videos.size);completed=copyStamp(lastRequest);if(wasWaiting)stats.recoveries++;status='ready';reason=null;return surface;
+    pendingReplay.commit();pendingReplay=null;rawValid=true;bodyRevision++;drawCache.commitBody(snapshot,layers,renderTextures,bodyRevision);stats.bodyDraws++;stats.videoTexturesMax=Math.max(stats.videoTexturesMax,videos.size);completed=copyStamp(lastRequest);if(wasWaiting)stats.recoveries++;status='ready';reason=null;return surface;
    }catch(error){pendingReplay?.discard();return fail(error,'render');}
   },
   setFlash(alpha=0,color='miss'){assertLive();const next={alpha:Math.max(0,Math.min(1,alpha||0)),color:color==='hit'?'hit':'miss'};if(next.alpha!==flash.alpha||next.color!==flash.color)flashRevision++;flash=next;},
   setHudCanvas(canvas,revision){assertLive();hud=canvas;if(canvas){if(hudSource!==canvas){release(hudTexture);hudTexture=configure(own(new T.CanvasTexture(canvas)),true);hudSource=canvas;hudCanvasRevision=undefined;}if(!Number.isSafeInteger(revision)||revision<0||hudCanvasRevision!==revision){hudTexture.needsUpdate=true;hudRevision++;stats.hudUpdates++;}hudCanvasRevision=revision;}},
-  compose(){if(history.owned)return composeHistory();assertLive();if(!rawValid||failed)return null;try{assertBoundary();withRendererState(T,r,()=>{panelValues(true);outputValid=false;draw(panelScene,output);});outputValid=true;compositeRevision++;stats.composites++;return output.texture;}catch(error){return fail(error,'compose');}},
+  compose(){if(history.owned)return composeHistory();assertLive();if(!rawValid||failed)return null;try{assertBoundary();const panelKey=()=>[bodyRevision,overlayRevision,hudRevision,hud,flashRevision,compositeRevision];if(outputValid&&drawCache.samePanel(panelKey())){panelReuses++;return output.texture;}withRendererState(T,r,()=>{panelValues(true);outputValid=false;draw(panelScene,output);});outputValid=true;compositeRevision++;drawCache.commitPanel(panelKey());stats.composites++;return output.texture;}catch(error){return fail(error,'compose');}},
   rawCanvas(reasonValue='raw-capture'){assertLive();return history.owned?historyRawCanvas():rawCanvas(reasonValue);},
   materializeTo({panelCtx=null,heldCtx=null,reason:reasonValue='boundary'}={}){assertLive();if(history.owned)return materializeHistoryTo({panelCtx,heldCtx,includeBridge:true,reason:reasonValue});return replay.materializeTo({panelCtx,heldCtx,flash});
   },
-  diagnostics(){return {...stats,failures:stats.failures.map(f=>({...f})),boundary:{...stats.boundary,replayCount:replay.diagnostics().materializations,replayMs:replay.diagnostics().replayMs,replayMaxMs:replay.diagnostics().replayMaxMs,rawReplays:replay.diagnostics().rawReplays,panelReplays:replay.diagnostics().panelReplays},sourceFrames:replay.diagnostics(),status,reason,enabled,failed,disposed,bodyRevision,compositeRevision,rawValid,outputValid,completed:copyStamp(completed),request:copyStamp(lastRequest),flash:{...flash,revision:flashRevision},overlay:{active:!!overlayTexture,revision:overlayRevision},hud:{active:!!hud,revision:hudRevision},videoTextures:videos.size,videoKeys:[...videos.values()].map(e=>({identity:e.identity,key:e.key,sourceKey:e.sourceKey})),history:historyDiagnostics(),targetBytes:2*W*H*4+PW*PH*4,contextsCreated:0,videoElementsCreated:0};},
+  diagnostics(){return {...stats,drawReuse:{enabled:drawCache.enabled,bodyReuses,panelReuses},failures:stats.failures.map(f=>({...f})),boundary:{...stats.boundary,replayCount:replay.diagnostics().materializations,replayMs:replay.diagnostics().replayMs,replayMaxMs:replay.diagnostics().replayMaxMs,rawReplays:replay.diagnostics().rawReplays,panelReplays:replay.diagnostics().panelReplays},sourceFrames:replay.diagnostics(),status,reason,enabled,failed,disposed,bodyRevision,compositeRevision,rawValid,outputValid,completed:copyStamp(completed),request:copyStamp(lastRequest),flash:{...flash,revision:flashRevision},overlay:{active:!!overlayTexture,revision:overlayRevision},hud:{active:!!hud,revision:hudRevision},videoTextures:videos.size,videoKeys:[...videos.values()].map(e=>({identity:e.identity,key:e.key,sourceKey:e.sourceKey})),history:historyDiagnostics(),targetBytes:2*W*H*4+PW*PH*4,contextsCreated:0,videoElementsCreated:0};},
   dispose(){if(disposed)return;releaseHistoryCompletion();history.bridge=null;disposed=true;status='disposed';for(const resource of [...owned])release(resource);videos.clear();replay.dispose();rawValid=outputValid=false;}
  };return api;
 }

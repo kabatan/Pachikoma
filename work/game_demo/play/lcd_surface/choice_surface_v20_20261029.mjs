@@ -51,7 +51,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
       // confirm_v30 itself begins with a near-black two-frame fade-in.
       const next=handoff.event==='chain_stop'
         ?w.name==='chain_confirm'&&w.time>=2/30
-        :w.name.startsWith('chain_jp_aim_')&&w.time>=1/30&&drawable(jp.palace?.video);
+        :/^(chain_jp_aim_|jp_aim_seal_)/.test(w.name)&&w.time>=1/30&&drawable(jp.palace?.video);
       if(start&&next)presented=w.name;
     }
     return v;

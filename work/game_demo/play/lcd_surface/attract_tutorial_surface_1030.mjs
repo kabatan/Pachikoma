@@ -24,7 +24,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   const ctx=lcd.canvas.getContext('2d'),errors=[];
   const query=new URLSearchParams(globalThis.location?.search??'');
   const gpuEnabled=query.get('attractgpu')!=='0',skipEnabled=query.get('attractskip')!=='0';
-  const liteMedia=m=>query.get('videolite')!=='0'&&m.liteSource===m.file&&m.liteFile?m.liteFile:m.file;
+  const liteMedia=m=>query.get('videolite')==='1'&&m.liteSource===m.file&&m.liteFile?m.liteFile:m.file;
   const attractLoaded=await loadVideo(new URL(liteMedia(man),base).href,{loop:true,label:'attract',errors});
   // チュートリアル動画。読めなくても待機は動かす(その場合 howto は従来の説明に戻る)
   let tman=null,tloaded=null;

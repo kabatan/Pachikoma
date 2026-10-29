@@ -10,13 +10,19 @@
 //   N（封印の数）＝その穴の連打のしきい値（穴1〜7で 3・4・4・2・4・3・5）。映像が揃っていない穴は旧のまま。
 //   場面名を jp_aim_ で始めているのは、本体の「狙いの映像が見えている間だけメーター部品を出す」判定にそのまま乗せるため。
 // 連打の入賞（meterStatus.count）が増えるたびに次の b を流す。続けて入ったときは、b の鎖が切れる所のあと（skipF）から次へ進む。
-// 失敗（時間切れ）は規則・本体の既存の失敗（ガラスが割れる）。ここでは何もしない。継続（chainMode）は旧のまま。
+// 失敗（時間切れ）は規則・本体の既存の失敗（ガラスが割れる）。ここでは何もしない。
+// 継続チャレンジ（chainMode, 10/30）も同じ流れ・字・映像（in → s{k} → b{k} → open）。違いは設定だけ：
+//   鎖の本数＝継続の規定数（meterStatus.threshold）。素材が無い本数はいちばん近い本数の素材（同じ穴 d にあればそれ）を使い、段は入賞数に比例して進める。
+//   ?chainseal=v02 で旧の独自実装（chain_seal_1030.mjs）、?chainseal=0 でさらに旧（chain_jp_aim）。
 const RE = /^jp_aim_seal_d(\d)_(in|s(\d+)|b(\d+)|open)$/;
 const FINISH_SECONDS = 1.2;   // rules_h の「満タンの叩きつけ」。封印では open の長さに置き換わる
 
 export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
-  const q = new URLSearchParams(globalThis.location?.search ?? '').get('jpseal');
+  const qs = new URLSearchParams(globalThis.location?.search ?? '');
+  const q = qs.get('jpseal');
   if (q === '0' || q === 'off') return lcd;
+  const cq = qs.get('chainseal');
+  const chainOn = !(cq === '0' || cq === 'off' || cq === 'v02');   // 継続でも封印（JPと同じ）を使うか
   const rh = lcd?.rulesH, jp = lcd?.jp;
   if (!rh || !jp || lcd.jpSeal) return lcd;
   const man = jp.man, model = jp.model;
@@ -29,9 +35,21 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
   const ds = Object.keys(ms.byD ?? {}).filter((d) => ms.byD[d]?.N && man.scenes[`jp_aim_seal_d${d}_s0`] === undefined);
   if (!ds.length) return lcd;
   for (const [k, v] of Object.entries(ms.scenes)) man.scenes[k] = v;
-  const S = { final: false, lastCount: 0, started: 0, swaps: 0, reserved: null, events: [] };
+  const S = { T: 0, final: false, lastCount: 0, started: 0, swaps: 0, reserved: null, events: [] };
   const note = (k, d = {}) => { S.events.push({ k, at: +(rh.state?.clock ?? 0).toFixed(2), ...d }); if (S.events.length > 100) S.events.shift(); log('jpseal:' + k, d); };
   const N = (d) => ms.byD[d]?.N ?? 0;
+  // 継続：規定数 T に近い N の素材を持つ穴 d' を選ぶ（同じ d が持っていればそれ。近さが同じなら多い方）
+  const pickD = (d, T) => {
+    let best = null, bd = 1e9;
+    for (const x of Object.keys(ms.byD)) {
+      if (!man.scenes[`jp_aim_seal_d${x}_in`]) continue;
+      const diff = Math.abs(N(x) - T) * 10 + (x === String(d) ? 0 : 1) - (N(x) > T ? 0.5 : 0);
+      if (diff < bd) { bd = diff; best = x; }
+    }
+    return best;
+  };
+  // 入賞数 → 段（0..n-1 が待機 s{k}、n が open）。n==T は 1 対 1、n<T は比例（最後の1本は規定数に届いたときだけ）
+  const stageOf = (count, T, n) => (count >= T ? n : count <= 0 ? 0 : T === n ? count : Math.min(n - 1, Math.max(1, Math.round((count * n) / T))));
   const nm = (d, p) => `jp_aim_seal_d${d}_${p}`;
   // JACKPOT CHANCE の次を封印の「in」に（チュートリアルの有無にかかわらず。チュートリアルの最後の次は毎フレーム下で直す）
   for (const d of Object.keys(ms.byD)) { const cs = man.scenes[`jp_chance_d${d}`]; if (cs && man.scenes[nm(d, 'in')]) cs.next = nm(d, 'in'); }
@@ -71,18 +89,31 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
         name = c <= 0 ? nm(d, 'in') : c >= N(d) ? nm(d, 'open') : nm(d, `s${c}`); S.swaps++; note('redirect', { to: name });
       }
     }
+    const cm = /^chain_jp_aim_d(\d)$/.exec(name ?? '');
+    if (cm && model.chainMode && chainOn) {
+      const st = controller.game?.meterStatus;
+      if (st?.kind === 'chain' && st.threshold > 0) {
+        const T = st.threshold, d = pickD(cm[1], T);
+        if (d) {
+          const n = N(d), c = stageOf(S.final ? T : st.count | 0, T, n);
+          S.T = T;
+          name = c <= 0 ? nm(d, 'in') : c >= n ? nm(d, 'open') : nm(d, `s${c}`); S.swaps++; note('redirect:chain', { to: name, T, n });
+        }
+      }
+    }
     return start0(name);
   };
 
   const tick = () => {
-    if (!model.active || model.chainMode) return;
+    if (!model.active) return;
     const g = controller.game, st = g.meterStatus, name = model.name ?? '';
-    if (st?.kind === 'jp') S.lastCount = st.count | 0;
+    if (st?.kind === 'jp' || st?.kind === 'chain') S.lastCount = st.count | 0;
     const m = RE.exec(name);
     if (!m) return;
     const d = m[1], kind = m[2][0] === 'i' ? 'in' : m[2][0] === 'o' ? 'open' : m[2][0], n = N(d);
     if (kind === 'open') return;
-    const count = S.final ? n : Math.min(n, S.lastCount);
+    const T = st?.kind === 'chain' && st.threshold > 0 ? st.threshold : n;
+    const count = S.final ? n : stageOf(S.lastCount, T, n);
     const sc = man.scenes[name], f = (model.time ?? 0) * (man.fps ?? 30);
     const k = kind === 'in' ? -1 : +(m[3] ?? m[4]);
     const canAdvance = kind === 's' || ((kind === 'b' || kind === 'in') && f >= (sc.seal?.skipF ?? 30));

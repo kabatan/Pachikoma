@@ -205,9 +205,11 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     const sc=man.scenes[model.name];
     if(!model.active||model.delay>0||!sc||sc.loop||sc.offer||WAITS.test(model.name)){wdSerial=-1;wdT=0;return;}
     if(wdSerial!==model.serial){wdSerial=model.serial;wdT=0;}
+    if(JPREADY&&current&&!current.ready)return;   // 10/30 jpready: 次の映像を読み込み中は看守の時計を進めない（実時間で未準備のまま stop→通常背景に落ちるのを防ぐ）。?jpready=0で戻す
     wdT+=Math.min(dt,.1);
     if(wdT>sc.frames/man.fps+4){record('watchdog',{name:model.name,wdT});model.stop('watchdog');}
   };
+  const JPREADY=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jpready')!=='0';
   const lifecycle=[];const record=(kind,data={})=>{lifecycle.push({kind,wall:performance.now(),...data});if(lifecycle.length>1000)lifecycle.shift();};
   let startupWarmPromise=null;
   const load=(slot,name,recordLoad=true)=>{
@@ -241,7 +243,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
       // A result image wait owns this pause until ready; do not repeatedly restart the decoder.
       if(!manual&&current!==blockedResult&&current.v.paused&&!current.v.ended)current.v.play().catch(()=>{});
     }
-    const next=model.pending??(model.name.startsWith('fly_t')?`fly_t${Math.min(3,model.heat+1)}_d${model.d}`:s.next==='@roulette'?man.roulette[String(model.payout)]:s.next==='@reward'?`reward_${model.payout}`:s.next);
+    const next=model.pending??(model.name.startsWith('fly_t')?`fly_t${Math.min(3,model.heat+1)}_d${model.d}`:s.next==='@roulette'?man.roulette[String(model.payout)]:s.next==='@reward'?`reward_${model.payout}`:(s.next==='@intro'&&JPREADY?(model.introVariant??'jp_intro_dopamine'):s.next));
     if(next)reserve(next);
     else if(model.name.startsWith('reward_'))reserve(`chain_jp_aim_d${chainTarget()}`);
   }
