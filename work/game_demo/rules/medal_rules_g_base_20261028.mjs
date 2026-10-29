@@ -115,6 +115,7 @@ export function makeRng(seed) {
 }
 
 export const JACKPOT_SECONDS = 2.8;
+export const LAUNCH_GATE_RELEASE_SECONDS = 3;   // 勝負球の発射を映像が待たせるのは、残り時間がこれ以上ある間だけ
 export const loanSeconds = (balls) => 0.7 + balls * 0.065;
 export const winSeconds = (award) => 0.22 + (award <= 3 ? 1.1 : award <= 12 ? 1.9 : award <= 30 ? 2.6 : 3.6);
 
@@ -198,6 +199,8 @@ export class MedalGame {
   _challengeLaunchHeld() {
     const gate = this.rules.launchGate; if (typeof gate !== 'function') return false;
     if (!((this.armed || this.lampCount === 6) && !this.shots.some((s) => s.challenge) && !this.jackpotChain?.choicePending)) return false;
+    // 待たせている間も時計は進む。残りがわずかなら待たせない(導入の途中で時間切れになり、JPチャンスを撃てないまま終わるのを防ぐ)。
+    if (this.secondsLeft < LAUNCH_GATE_RELEASE_SECONDS) return false;
     try { return !!gate(this); } catch { return false; }
   }
   get canFire() {
@@ -293,6 +296,7 @@ export class MedalGame {
       } else {
         this.receipt = this._receipt(MedalEvent.ChainStop, 0, 0, 0, this.lamps, this.lamps, this.wallet, 0);
         this.receipt.chainBase = chain.baseAward; this.phase = MedalPhase.Ready;
+        if (this.rules.ContinuousFire) this._settlementLeft = Math.max(this._settlementLeft, this.rules.ChainConfirmSeconds ?? 0);   // 積み増しなしの確定でも、確定の映像の間は終了へ進めない
       }
       return true;
     }
@@ -362,6 +366,7 @@ export class MedalGame {
       this.challengeIntent = null;
       for (const o of this.shots) if (o !== shot) { this.wallet++; this.spent--; this.cycleSpent--; }   // 盤上のほかの玉も返す
       this.shots = []; this._pendingLandings = [];
+      this._settlementLeft = 0; this._loanLeft = 0; this.effectLeft = 0;   // 故障は演出の待ちを残さない(残すと、Faultは時計が進まず settleFault が永久に通らない)
       return true;
     }
     let kind, award = 0, removed = 0, cost = 0, resetChoice = -1, jackpot = -1, duration;
@@ -434,6 +439,12 @@ export class MedalGame {
       duration = this.rules.ResetEffectSecondsByLamps?.[before.length] ??
         (before.length === 1 ? this.rules.ResetEffectSecondsSingle : this.rules.ResetEffectSeconds);
     }
+    // 静かな着地: 勝負球の判定待ち(6灯で勝負球が飛んでいる)・JPの配当〜継続の選択・確定の映像の間に着地した通常球は、
+    // 灯や玉数の扱いは従来どおりのまま、光・音・液晶の演出を出さない(JP/継続の映像に重ならない)。receipt.quiet=true。
+    // 6灯で勝負球が飛んでいる間の通常球は灯にならない(receipt.uncounted=true。発射口のレンズが青で知らせる)。
+    const quiet = this.rules.ContinuousFire && !shot.challenge && (!!this.jackpotChain?.choicePending ||
+      (before.length === 6 && this.shots.some((x) => x !== shot && x.challenge)) ||
+      (typeof this.rules.quietGate === 'function' && !!this.rules.quietGate(this)));
     // JPチャンスに入る瞬間(6灯目)、盤上に残っている通常球は回収して手持ちに戻す。
     // 残すと、導入・狙いの映像の最中に着地して演出が前倒し・重複する(10/29 監督指摘)。
     if (this.rules.ContinuousFire && kind === MedalEvent.Fresh && this.lampCount === 6) this._recallOrdinary(shot);
@@ -445,7 +456,8 @@ export class MedalGame {
       this.receipt.chain = true; this.receipt.chainStage = chainStage; this.receipt.chainBase = chainBase;
       this.receipt.chainPending = this.jackpotChain?.pendingAward ?? 0; this.receipt.chainLost = chainLost;
     }
-    if (resetVisualDuration !== null) this._startResetDisplay(this.receipt, resetVisualDuration);
+    if (quiet) { this.receipt.quiet = true; if (kind === MedalEvent.Protected) this.receipt.uncounted = true; }
+    if (resetVisualDuration !== null && !quiet) this._startResetDisplay(this.receipt, resetVisualDuration);
     this.shots = this.shots.filter((x) => x !== shot); this.shot = this.shots[this.shots.length - 1] ?? null;
     this._beginEffect();
     this._prepareChallenge();
@@ -477,7 +489,9 @@ export class MedalGame {
   _beginEffect() {
     this.phase = MedalPhase.Effect; this.effectLeft = this.receipt.duration;
     if (this.rules.ContinuousFire) {
-      if ([MedalEvent.Win,MedalEvent.Miss,MedalEvent.Loan].includes(this.receipt.kind)) this._settlementLeft = Math.max(this._settlementLeft,this.receipt.duration);
+      if ([MedalEvent.Win,MedalEvent.Miss,MedalEvent.Loan].includes(this.receipt.kind)) this._settlementLeft = Math.max(this._settlementLeft,this.receipt.duration,
+        // 外れ・確定の映像(5秒・7秒)の最中に時間切れの画面が割り込んで切らない。映像の長さまでは終了へ進めない(長さは液晶側が rules へ渡す)
+        this.receipt.kind === MedalEvent.Miss ? (this.rules.FailFilmSeconds ?? 0) : this.receipt.chainBanked ? (this.rules.ChainConfirmSeconds ?? 0) : 0);
       if (this.receipt.kind === MedalEvent.Loan) this._loanLeft = this.receipt.duration;
     }
   }
@@ -592,7 +606,7 @@ export class MedalGame {
     else {this.phase=MedalPhase.Continue;this.offerLeft=this.rules.ContinueSeconds;}
   }
   finish() {
-    if(this.rules.ContinuousFire&&this._settlementLeft>1e-9)return false;
+    if(this.rules.ContinuousFire&&this.phase!==MedalPhase.Fault&&this._settlementLeft>1e-9)return false;   // 故障は演出の待ちに関わらず精算できる
     if (this.shots.length) return false;
     if (![MedalPhase.Ready, MedalPhase.ChainChoice, MedalPhase.Continue, MedalPhase.Fault].includes(this.phase) && !this.canFire) return false;
     if (!this.endReason) this.endReason = 'ここで計数';

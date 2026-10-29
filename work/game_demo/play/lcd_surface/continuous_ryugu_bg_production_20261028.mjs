@@ -2,13 +2,28 @@ import {warmPausedVideo} from './startup_warm.mjs';
 // v2: v1 + 中図柄の別部品(center_atlas)を、背景と前面の間に重ねる。final = F + T*(Fc + Tc*B)
 // One palace decoder/clock shared by first-JP and continuation foregrounds.
 // Scene changes and foreground loop seeks never seek/reload this video.
-export async function createSharedPalace({base,config,onError=()=>{},center=null}){
+export async function createSharedPalace({base,config,onError=()=>{},center=null,imageFactory=null}){
  const video=document.createElement('video');video.muted=true;video.playsInline=true;video.loop=true;video.preload='auto';
  let startupWarmMute=false,warmBusy=false;const errors=[],events=[],audit=[];let clock=0,loops=0,lastAudit=-1,manual=false,presentedTime=0,lastPresented=0,visible=false,segment=0;
  const presented=(wall,m)=>{if(!startupWarmMute){if(!manual&&m.mediaTime<lastPresented-.2)loops++;lastPresented=m.mediaTime;presentedTime=m.mediaTime;}video.requestVideoFrameCallback(presented);};video.requestVideoFrameCallback(presented);
  for(const kind of ['waiting','stalled','error','playing','ended'])video.addEventListener(kind,()=>{if(startupWarmMute)return;events.push({kind,wall:performance.now(),time:video.currentTime});if(kind==='error'){errors.push('palace video');onError('palace video');}});
  const ready=new Promise((resolve,reject)=>{video.addEventListener('loadeddata',resolve,{once:true});video.addEventListener('error',()=>reject(Error('palace decode')),{once:true});});
  video.src=new URL(config.file,base).href;video.load();await ready;
+ // Optional candidate image producer; original video/time/event owner remains here.
+ if(imageFactory&&!new URLSearchParams(location.search).has('jpaudit')){
+  let image;try{image=await imageFactory({background:video,base,center});}catch(error){console.warn('[palace-injection] original image path fallback',error);}
+  if(image)return {video,audit,events,errors,
+   get canvas(){return image.rawCanvas('palace-canvas-consumer');},get imageBackend(){return image;},
+   warm(){return image.warm();},
+   advance(dt){startupWarmMute=false;clock+=dt;if(!manual&&video.paused)video.play().catch(e=>{onError(e.message);});},
+   hidden(){visible=false;},
+   render(current,previous,alpha,scene,frame,centerState=null,blackBg=false){if(!visible){segment++;visible=true;}return image.render({current,previous,mixOld:previous?alpha:0,center:centerState,blackBg});},
+   setManual(on){manual=!!on;image.setManual(on);if(manual)video.pause();},
+   async prepare(dt){if(!manual)return;const target=(clock+dt)%12;if(Math.abs(video.currentTime-target)<1e-4)return;await new Promise(resolve=>{video.addEventListener('seeked',resolve,{once:true});video.currentTime=target;});},
+   diagnostics(){return {kind:'continuous_palace_injected',time:video.currentTime,clock,loops,visible,segment,presentedTime,ready:video.readyState,src:video.currentSrc,errors:[...errors],image:image.diagnostics()};},
+   dispose(){image.dispose();video.pause();video.removeAttribute('src');video.load();}
+  };
+ }
  const cameras=await(await fetch(new URL(config.camera,base))).json();
  const canvas=document.createElement('canvas');canvas.width=1152;canvas.height=1268;canvas.readyState=4;
  const gl=canvas.getContext('webgl',{alpha:false,antialias:false,preserveDrawingBuffer:true});if(!gl)throw Error('palace compositor WebGL unavailable');

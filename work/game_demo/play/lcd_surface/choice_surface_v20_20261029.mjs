@@ -18,6 +18,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
   const drawable=v=>v?.readyState>=2&&!v.seeking;
   // One capture only when interrupted by a third state or leaving the choice.
   const capture=(keepDigit=false)=>{
+    lcd.materializeGpuLcd?.('choice-capture');
     lcd.timerDisplay?.clear();if(!keepDigit){countdown?.clearDigit();total?.clear();}
     heldCtx.drawImage(lcd.canvas,PX,PY,W,H,0,0,W,H);
     if(!keepDigit)countdown?.snapshot(heldChoice);

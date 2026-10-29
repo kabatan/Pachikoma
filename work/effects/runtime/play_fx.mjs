@@ -201,6 +201,14 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
       if (last.lcd) {
         if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain });
         const choice=lcd?.choiceV20;
+        const gpu=lcd?.gpuPanelSource,covered=choice?.active||choice?.holding||lcd?.attractSurface?.active||lcd?.finalResultSurface?.active||lcd?.timeupSurface?.active;
+        if(gpu&&!covered){
+          const texture=gpu.backend.compose();
+          if(texture){plate.mat.uniforms.uT.value=texture;gpu.published=true;uploadRevision=undefined;return last;}
+          lcd.materializeGpuLcd?.('compose-failed',true);
+        }
+        plate.mat.uniforms.uT.value=plate.tex;
+
         const revision=ownedFrameSnapshot===true&&lcd?.canvas===last.lcd&&!choice?.active&&!choice?.holding?lcd.uploadRevision:undefined;
         const stable=Number.isSafeInteger(revision)&&revision>=0&&plate.tex.image===last.lcd;
         if(!stable||uploadCanvas!==last.lcd||uploadTexture!==plate.tex||plate.tex.image!==last.lcd||uploadRevision!==revision)plate.tex.needsUpdate=true;

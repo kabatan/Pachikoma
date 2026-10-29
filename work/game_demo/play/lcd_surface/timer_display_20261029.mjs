@@ -14,6 +14,7 @@ export function attachTimerDisplay(lcd,{getState}){
   const ctx=lcd.canvas.getContext('2d'),sprites=new Map();
   const rects=[{x:832,y:128,w:304,h:150},{x:832,y:286,w:304,h:150}];
   const saved=rects.map(r=>{const c=document.createElement('canvas');c.width=r.w;c.height=r.h;return {canvas:c,ctx:c.getContext('2d',{alpha:false}),dirty:false};});
+  const gpuHud=document.createElement('canvas');gpuHud.width=304;gpuHud.height=308;const gpuHudCtx=gpuHud.getContext('2d');
   let shown=null,uploadKey=null,revision=0,frameRevision;
   const sourceRevision=Object.getOwnPropertyDescriptor(lcd,'uploadRevision')?.get;
   const updateRevision=()=>{
@@ -53,6 +54,7 @@ export function attachTimerDisplay(lcd,{getState}){
     return {warmed:sprites.size,rgbaBytes:sprites.size*304*150*4};
   };
   const clear=()=>{
+    lcd.gpuPanelSource?.backend.setHudCanvas(null);
     for(let i=0;i<rects.length;i++){const r=rects[i],s=saved[i];if(s.dirty){ctx.drawImage(s.canvas,PX+r.x,PY+r.y);s.dirty=false;}}
   };
   const paint=(i,label,n,warning,pulse)=>{
@@ -60,10 +62,15 @@ export function attachTimerDisplay(lcd,{getState}){
     ctx.drawImage(sprite(label,n,warning),PX+r.x,PY+r.y);
     if(warning){ctx.save();ctx.strokeStyle=`rgba(255,70,45,${.25+.7*pulse})`;ctx.lineWidth=3;ctx.beginPath();ctx.roundRect(PX+r.x+8,PY+r.y+8,288,134,16);ctx.stroke();ctx.restore();}
   };
+  const paintGpu=(i,label,n,warning,pulse)=>{const y=i*158;gpuHudCtx.drawImage(sprite(label,n,warning),0,y);if(warning){gpuHudCtx.save();gpuHudCtx.strokeStyle=`rgba(255,70,45,${.25+.7*pulse})`;gpuHudCtx.lineWidth=3;gpuHudCtx.beginPath();gpuHudCtx.roundRect(8,y+8,288,134,16);gpuHudCtx.stroke();gpuHudCtx.restore();}};
   const base={frame:lcd.frame.bind(lcd),onEvent:lcd.onEvent.bind(lcd),dispose:lcd.dispose.bind(lcd)};
   lcd.frame=(dt,F)=>{
     clear();base.frame(dt,F);shown=timerValues(getState());
-    if(shown){
+    if(lcd.gpuPanelSource){
+      gpuHudCtx.clearRect(0,0,304,308);
+      if(shown){paintGpu(0,'残り時間',shown.seconds,shown.warning,shown.pulse);if(shown.offer!==null)paintGpu(1,'追加受付',shown.offer,shown.offer<=10,shown.offerPulse);}
+      lcd.gpuPanelSource.backend.setHudCanvas(shown?gpuHud:null);
+    }else if(shown){
       paint(0,'残り時間',shown.seconds,shown.warning,shown.pulse);
       if(shown.offer!==null)paint(1,'追加受付',shown.offer,shown.offer<=10,shown.offerPulse);
     }

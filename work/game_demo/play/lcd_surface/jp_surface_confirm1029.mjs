@@ -175,11 +175,11 @@ export class JpTimeline extends OriginalJpTimeline {
   }
   where(){const w=super.where();return w?{...w,d:this.d,heat:this.heat,isChain:!!this.chainMode,chainStage:this.chainStage,cutin:this.cutin,clock:this.clock,introVariant:this.introVariant}:null;}
 }
-export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getState=()=>({})}) {
+export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getState=()=>({}),palaceImageFactory=null}) {
   const res=await fetch(manifestUrl);if(!res.ok)throw new Error('JP manifest HTTP '+res.status);
   const man=await res.json(),base=new URL('.',manifestUrl);if(!man.background_layer)return createLegacyJpSurface({manifestUrl,onCue,log});
   const lightRes=await fetch(new URL(man.lights,base));if(!lightRes.ok)throw new Error('JP lights HTTP '+lightRes.status);
-  const lights=await lightRes.json();const cmeta=man.center?await(await fetch(new URL(man.center.meta,base))).json():null;const center=cmeta?createCenterReel(cmeta):null;const palace=await createSharedPalace({base,config:man.background_layer,onError:e=>console.error('[palace]',e),center:cmeta?{F:man.center.F,T:man.center.T,meta:cmeta}:null});const digits=man.fail_slots?await createJpDigits(base,man.fail_slots):null;
+  const lights=await lightRes.json();const cmeta=man.center?await(await fetch(new URL(man.center.meta,base))).json():null;const center=cmeta?createCenterReel(cmeta):null;const palace=await createSharedPalace({base,imageFactory:palaceImageFactory,config:man.background_layer,onError:e=>console.error('[palace]',e),center:cmeta?{F:man.center.F,T:man.center.T,meta:cmeta}:null});const digits=man.fail_slots?await createJpDigits(base,man.fail_slots):null;
   const slots=Array.from({length:3},()=>{const v=document.createElement('video');v.muted=true;v.playsInline=true;v.preload='auto';return{v,name:null,ready:false,promise:null};});
   // 継続成功v4は専用スロットに常駐(起動時に読み込み済み)。再生中の遅延読み込みと追い出しを避ける。
   const pinned=man.scenes.chain_success?.pinned?{v:Object.assign(document.createElement('video'),{muted:true,playsInline:true,preload:'auto'}),name:null,ready:false,promise:null,pinned:true}:null;
@@ -248,7 +248,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   const blocksChallengeLaunch=()=>{
     const hold=model.active&&!model.chainMode&&(model.payout>0||/^jp_(intro|chance)/.test(model.name??''));
     if(!hold){gateSince=null;return false;}
-    gateSince??=model.clock;if(model.clock-gateSince>30)return false;   // 万一の保険: 30秒で必ず解く
+    gateSince??=model.clock;if(model.clock-gateSince>12)return false;   // 万一の保険: 12秒で必ず解く(導入〜狙いの場面までは約8.3秒。10/29 30秒→12秒)
     return true;
   };
   return {man,model,get center(){return center;},get active(){return model.active&&model.delay<=0;},get claimed(){return model.active;},get blocksChallengeLaunch(){return blocksChallengeLaunch();},

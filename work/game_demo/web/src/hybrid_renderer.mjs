@@ -554,8 +554,10 @@ export class HybridRenderer {
       if (this.balls.count > 0 || this.trayVisual) { this.probes.compose(this.frame); r.setRenderTarget(this.rtMain); r.setViewport(0, 0, W, H); r.render(this.sBalls, this.camera); }
     }
     // 2) 手前: τ⊙D + F（線形HDR）
-    r.setRenderTarget(this.rtC); r.setViewport(0, 0, W, H);
-    r.render(this.sFront, this.fsCam);
+    if (this.mainPassFusion?.prepareFrame() !== true) {
+      r.setRenderTarget(this.rtC); r.setViewport(0, 0, W, H);
+      r.render(this.sFront, this.fsCam);
+    }
     // 3) LUT（最後に 1 回）→ canvas
     r.setRenderTarget(null); r.setViewport(0, 0, W, H);
     this.finalMat.uniforms.uView.value = this.viewMode;
@@ -565,6 +567,7 @@ export class HybridRenderer {
 
   /** デバッグ/試験用: 線形HDRの中間結果を float で読む。which='C'(手前合成後, LUT前) | 'D'(奥+玉)。戻りは行0=画像の上の Float32Array RGBA (w*h*4)。 */
   readLinear(which = 'C', x = 0, y = 0, w = W, h = H) {
+    this.mainPassFusion?.materializeForRead(which);
     const r = this.renderer;
     if (!this._rtF) {
       this._rtF = new THREE.WebGLRenderTarget(W, H, { type: THREE.FloatType, format: THREE.RGBAFormat, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
@@ -583,6 +586,7 @@ export class HybridRenderer {
   }
 
   dispose() {
+    this.mainPassFusion?.dispose();
     disposeNativeMergedMain(this);
     for (const side of ['back', 'front']) for (const b of this.layerBuckets[side]) {
       b.geo.dispose(); b.mat.dispose(); b.rt.dispose(); b.sumGeo.dispose(); b.sumMat.dispose(); b.sumRT.dispose();

@@ -19,7 +19,7 @@ export function normalClipFor(id, p, variant = 0) {
   return null;
 }
 
-export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue }) {
+export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory = null }) {
   const base = new URL('.', manifestUrl);
   const canvas = document.createElement('canvas'); canvas.width = 1240; canvas.height = 1510;
   const ctx = canvas.getContext('2d', { alpha: false });
@@ -28,7 +28,9 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   let paintedResult=null,resultUploadRevision=0,stableResult=false;
   const invalidateResult=()=>{paintedResult=null;stableResult=false;};
   const choiceWrites=lcd=>!!(lcd?.choiceV20?.active||lcd?.choiceV20?.holding);
-  const bridge=()=>{invalidateResult();previous.drawImage(canvas,0,0);fadeLeft=.12;};
+  let gpuFrame=null;
+  const materializeGpu=(reason,force=false)=>{if(!gpuFrame)return false;gpuFrame.backend.materializeTo({panelCtx:gpuFrame.published||force?ctx:null,heldCtx:hold,reason});gpuFrame=null;return true;};
+  const bridge=()=>{materializeGpu('bridge');invalidateResult();previous.drawImage(canvas,0,0);fadeLeft=.12;};
   const blend=dt=>{if(fadeLeft<=0)return;fadeLeft=Math.max(0,fadeLeft-dt);ctx.globalAlpha=fadeLeft/.12;ctx.drawImage(transition,0,0);ctx.globalAlpha=1;};
   const held = document.createElement('canvas'); held.width = W; held.height = H;
   const hold = held.getContext('2d', { alpha: false });
@@ -37,7 +39,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const fail = (message) => { stats.errors.push(message); console.error('[normal1026]', message); };
   const clips = createClipPlayer({base, files:man.files, onError:fail, record:e=>{stats.lifecycle.push(e);if(stats.lifecycle.length>2000)stats.lifecycle.shift();}});
   const shown = {get name(){return clips.name;},get time(){return clips.time;}};
-  const jp = jpManifestUrl ? await createJpSurface({manifestUrl:jpManifestUrl,onCue:onJpCue,getState,log:n=>stats.played.push([+clock.toFixed(3),n])}).catch(e=>{stats.errors.push('JP: '+e.message);console.warn('[jp1029]',e.message);return null;}) : null;
+  const jp = jpManifestUrl ? await createJpSurface({manifestUrl:jpManifestUrl,palaceImageFactory,onCue:onJpCue,getState,log:n=>stats.played.push([+clock.toFixed(3),n])}).catch(e=>{stats.errors.push('JP: '+e.message);console.warn('[jp1029]',e.message);return null;}) : null;
   if(jp){const r=getState().rules;r.FirstJackpotEffectSeconds=Object.fromEntries(jp.man.digits.map(d=>[d,r.JackpotAwards.map(p=>jpEffectSeconds(jp.man,p))]));
     // 継続成功の演出時間: 着地+継続成功v4+配当の通しの長さ(初回JPと同様に映像へ合わせる)。映像が無い場合は規則の既定のまま。
     const chainSeconds=r.JackpotAwards.map(p=>chainEffectSeconds(jp.man,p));if(chainSeconds.every(Number.isFinite))r.JackpotEffectSeconds=chainSeconds;}
@@ -168,6 +170,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       return chain?{...rush,chain}:rush;
     },
     onEvent, setCards(c) { cards = c; },
+    get gpuPanelSource(){return gpuFrame;},
+    materializeGpuLcd(reason='consumer',force=false){return materializeGpu(reason,force);},
     async warm(){if(clock!==0||jpOwns)throw Error('normal warm is boot-only');return clips.warm(hold,W,H);},
     setManual(on) { manual = !!on; clips.setManual(on); jp?.setManual(on); },
     async prepare(dt) { if(jp?.active){await jp.prepare(dt);return;} await clips.prepare(dt); },
@@ -176,12 +180,19 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       if(choiceWrites(this))paintedResult=null;
       const s = getState();
       if (jp?.claimed) {
-        const v=jp.frame(dt);
+        jp.palace?.imageBackend?.setLegacyMode(choiceWrites(this));
+        let v=jp.frame(dt);
         if(!jp.active&&lastJpSerial>=0){bridge();lastJpSerial=-1;}
         // 映像の最初のコマがまだ読めていない間は、前の映像の最後(失敗の灰色＋扉など)を出さず、通常の画面のままにする。
         if (jp.active && (jpOwns || v?.readyState>=2)) {
           if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered)fadeLeft=0;
           if(!jpOwns){clips.suspend();jpOwns=true;}
+          if(v?.gpuPalaceImage&&jp.layered&&!choiceWrites(this)){
+            const w=jp.where(),backend=v.gpuPalaceImage;backend.setFlash(w?.flash,w?.flashColor);
+            gpuFrame={backend,published:false};stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
+          }
+          if(v?.gpuPalaceImage)v=v.gpuPalaceImage.rawCanvas('legacy-owner-frame');
+          gpuFrame=null;
           // A result revision certifies only the compositor's completed immutable pixels.
           // Video/timeline/light processing above still runs on every frame.
           const w=jp.where(),revision=v?.resultRevision;
@@ -197,7 +208,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
           ctx.restore();blend(dt);if(cacheable){paintedResult={canvas:v,key};resultUploadRevision++;stableResult=true;}stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
         }
       }
-      invalidateResult();jpOwns=false;
+      materializeGpu('normal-return');invalidateResult();jpOwns=false;
       normalN = clamp(s.lit ?? normalN, 0, 6);
       if (mode && clock >= mode.until) {bridge();mode = null;}
       // 液晶のcueが無いchain_*もonEventで確実に届く。cueはここでは映像を二重起動しない。

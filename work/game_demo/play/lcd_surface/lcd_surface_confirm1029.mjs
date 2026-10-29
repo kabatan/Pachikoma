@@ -13,9 +13,9 @@ const W0 = 1240, H0 = 1510;   // m3 の液晶の面（lcd_window.json の panel�
 import { createJpSeq } from './jp_seq.mjs';
 import { createEndDigits } from './end_digits.mjs';
 
-export async function createLcdSurface({ manifestUrl, jpManifestUrl = null, onJpCue = () => {}, getState = () => ({}), width = W0, height = H0 } = {}) {
+export async function createLcdSurface({ manifestUrl, jpManifestUrl = null, onJpCue = () => {}, getState = () => ({}), width = W0, height = H0, palaceImageFactory = null } = {}) {
   const man = await (await fetch(manifestUrl)).json();
-  if (man.version === 1026) return createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue });   // jp_filmは接続しない
+  if (man.version === 1026) return createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory });   // jp_filmは接続しない
   const base = new URL('.', manifestUrl);
   const urls = {};
   for (const [name, file] of Object.entries(man.files)) {   // 1 本ずつ（同時に読むと起動時の他の読み込みと合わせて ERR_INSUFFICIENT_RESOURCES になった）

@@ -15,6 +15,7 @@ import { prewarm } from './prewarm.mjs';
 import { createLauncherBody } from './launcher_body.mjs';
 import { CabinetSerial } from './cabinet_serial_r3_20261029.mjs';
 import { createLedStrip } from './led_strip_20261029.mjs';
+import { createLaunchLamp } from './launch_lamp_20261029.mjs';
 import { winSeconds, JACKPOT_SECONDS } from '../rules/medal_rules.mjs';
 
 async function main() {
@@ -129,14 +130,25 @@ if (q.get('audio') !== 'legacy') {
     document.getElementById('audio-master').addEventListener('input', e => r2Audio.engine.setMaster(e.target.value));
   } catch (error) { console.error('[r2-audio]', error); }
 }
-const runtime = createRuntime({ ctrl, presenter, pa, log: app.log, effects });
+let m3Clock = 0;
+// 発射口の「打てる/打てない」表示と音(射出器のレンズの色・小さな音。液晶に字は出さない)。?launchlamp=0 で無効
+const launchLamp = q.get('launchlamp') === '0' ? null : createLaunchLamp({ ctrl, getEngine: () => r2Audio?.engine, getExtraHold: () => !!(ctrl.game.chainStatus?.inChallenge && window.__lcdSurface?.choiceV20?.holding), now: () => m3Clock }); window.__launchLamp = launchLamp;
+const runtime = createRuntime({ ctrl, presenter, pa, log: app.log, effects, onRecall: n => launchLamp?.noteRecall(n) });
 // 演出側(work/effects)の液晶・光の接続。?nofx で無効。演出側の1ファイルだけを読む。
 const lightState = { secondsLeft: Infinity, playing: false };   // R3: 囲いの電飾・LED帯の閃き用(残り秒数と遊技中か)
 let fxApi = null;
 if (!q.has('nofx')) {
   const { connectPlayEffects } = await import('../../effects/runtime/play_fx.mjs');
   // 動画液晶が既定。?lcd=legacyで旧Canvas液晶。m3ではpanelいっぱいに貼る
-  const lcd = q.get('lcd') !== 'legacy' ? await (await import('./lcd_surface/lcd_surface_confirm1029.mjs')).createLcdSurface({ manifestUrl: new URL(q.get('lcdclips') ?? './lcd_surface/ryugu1028/manifest.json', import.meta.url).href, jpManifestUrl: q.get('jpclips') === 'off' ? null : new URL(q.get('jpclips') ?? './lcd_surface/jp1029/manifest_confirm1029.json', import.meta.url).href, onJpCue: c => { if(c.kind==='hold'){const rank=app.rules.PrizeNames.indexOf(runtime.getPrize());runtime.setJpHold(true);return rank;} if(c.kind==='reveal'){runtime.setJpHold(false);} if(c.kind==='tray')runtime.awardToTray(c.count==='payout'?c.payout:c.count,{rate:c.rate,origin:'jp_reveal'}); if(c.kind==='snd')window.dispatchEvent(new CustomEvent('jp-scene-cue',{detail:c})); if(c.kind==='end'&&runtime.jpHold){runtime.setJpHold(false);runtime.releaseAwards({rate:24});} }, getState: () => ({ ...effects.contextSnapshot().state, phase: ctrl.game.phase, howtoT: ctrl.howto?.t, prize: ctrl.game.prize, score: ctrl.game.jackpotEarnings, chain: ctrl.game.chainStatus, rules: app.rules }) }) : null;   // 全穴JP・継続。文言/熱さは jp_direction_allholes_v1.json。
+  // Native palace producer shares the cabinet GL. ?palacegpu=0 restores the original image path.
+  const palaceImageFactory = M3 && q.get('palacegpu') === '1' ? async o => (await import('./lcd_surface/palace_gpu_image_1029.mjs')).createPalaceGpuImage({...o, renderer:hr.renderer, THREE:await import('../web/vendor/three/three.module.js')}) : null;
+  const lcd = q.get('lcd') !== 'legacy' ? await (await import('./lcd_surface/lcd_surface_confirm1029.mjs')).createLcdSurface({ palaceImageFactory, manifestUrl: new URL(q.get('lcdclips') ?? './lcd_surface/ryugu1028/manifest.json', import.meta.url).href, jpManifestUrl: q.get('jpclips') === 'off' ? null : new URL(q.get('jpclips') ?? './lcd_surface/jp1029/manifest_confirm1029.json', import.meta.url).href, onJpCue: c => { if(c.kind==='hold'){const rank=app.rules.PrizeNames.indexOf(runtime.getPrize());runtime.setJpHold(true);return rank;} if(c.kind==='reveal'){runtime.setJpHold(false);} if(c.kind==='tray')runtime.awardToTray(c.count==='payout'?c.payout:c.count,{rate:c.rate,origin:'jp_reveal'}); if(c.kind==='snd')window.dispatchEvent(new CustomEvent('jp-scene-cue',{detail:c})); if(c.kind==='end'&&runtime.jpHold){runtime.setJpHold(false);runtime.releaseAwards({rate:24});} }, getState: () => ({ ...effects.contextSnapshot().state, phase: ctrl.game.phase, howtoT: ctrl.howto?.t, prize: ctrl.game.prize, score: ctrl.game.jackpotEarnings, chain: ctrl.game.chainStatus, rules: app.rules }) }) : null;   // 全穴JP・継続。文言/熱さは jp_direction_allholes_v1.json。
+  if(lcd?.jp){   // 液晶の映像の長さ・状態を規則へ渡す(規則は映像を知らない): 外れ・確定の映像の最中に時間切れの画面が割り込まない/確定の映像の間の通常球の着地を静かにする
+    const {man,model}=lcd.jp,sec=n=>man.scenes[n]?man.scenes[n].frames/man.fps:0;
+    Object.defineProperty(app.rules,'FailFilmSeconds',{value:Math.max(sec('fail_first'),sec('fail_chain')),enumerable:false,configurable:true,writable:true});
+    Object.defineProperty(app.rules,'ChainConfirmSeconds',{value:sec('chain_confirm'),enumerable:false,configurable:true,writable:true});
+    Object.defineProperty(app.rules,'quietGate',{value:()=>!!(model.active&&model.name==='chain_confirm'),enumerable:false,configurable:true,writable:true});
+  }
   if(lcd?.jp) Object.defineProperty(app.rules,'launchGate',{value:()=>lcd.jp.blocksChallengeLaunch,enumerable:false,configurable:true,writable:true});   // 最初のJPの導入・配当の映像の間は、勝負球の発射を待たせる(押しは保持され、解けた瞬間に出る)。映像を飛ばさず最後まで見せる
   if(lcd?.production) await (await import('./lcd_surface/temp_cards_20261029.mjs')).attachTempCards(lcd);   // 仮カード(スタート/まだまだ/計数中/重複/耐えた)の本番演出
   if(lcd?.production) await (await import('./lcd_surface/attract_surface_20261029.mjs')).attachAttractSurface(lcd,{getState:()=>({phase:ctrl.game.phase,howto:!!ctrl.howto})});
@@ -159,20 +171,20 @@ if (!q.has('nofx')) {
   app.overlay.fx.style.display = 'none';   // 旧ダミーの帯・カットイン・ルーレット・JPは液晶演出に置き換え
   if (!q.has('oldui')) app.overlay.setBare(true);   // 旧UI(上の帯・持ち玉・口の番号・キー表示・待機/時間切れ/結果の画面)は出さない。液晶と7セグが正式。?oldui で旧表示(デバッグ用)
 }
-let m3 = null, m3Clock = 0;
+let m3 = null;
 if (M3) { m3 = await (await import('./m3/m3_cabinet.mjs')).installM3Cabinet({ hr, fxApi, presenter, pa, q, getLamps: () => ctrl.game.lamps, getPrize: () => runtime.getPrize(), prizeNames: app.rules?.PrizeNames, ownedInitialEnvironment: M3 && !q.has('pack') ? hr.env : null }); pack.info.cabinet = { name: 'm3', ...m3.info }; window.__m3 = m3; }
 // 初回だけ重い処理(画像デコード・GPUアップロード・シェーダ)を遊技の前に済ませる。?prewarm=0 で無効
 if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi, rules: app.rules });
 window.__r2Audio = r2Audio;
 const stats = runtime.stats;
-const launcherArgs = M3 ? [(await import('./m3/launcher_body_m3.mjs')).createLauncherBody, { now: () => m3Clock, getLight: () => m3.state.k4 }] : [createLauncherBody, {}];
+const launcherArgs = M3 ? [(await import('./m3/launcher_body_m3.mjs')).createLauncherBody, { now: () => m3Clock, getLight: () => m3.state.k4, getLamp: () => launchLamp?.view }] : [createLauncherBody, {}];
 const launcherBody = q.has('nolauncher') ? null : launcherArgs[0]({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) }, launcherArgs[1]);   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
   cabinet.tick(performance.now()); ledStrip.update(performance.now());
   const s = pa.snapshot(); setAssemblyBalls(s); if (fxApi) fxApi.ballLights(s);   // 勝負中の玉をピンポイントで照らす(演出側)
   const lf = pack.lighting.frame(presenter.lightingInputs(), pa.tick); if (fxApi) { try { fxApi.applyLights(lf); } catch (e) { if (!window.__lightError) { window.__lightError = e.message; console.error('[lights]', e); } } }   // 演出の光(花びら・縁)が最終の書き手。範囲外などの異常は、その場の光だけ飛ばして遊技を止めない
   hr.setLightingFrame(lf);
-  m3?.update(m3Clock);
+  m3?.update(m3Clock); launchLamp?.update();
   hr.render(); launcherBody?.update(s.shuttle); app.overlay.render(presenter.view());
   if (fxApi && !app.overlay.bare) app.overlay.screen.style.display = ctrl.howto ? 'none' : '';   // ルール説明(howto)中は待機画面のDOMを消して、液晶の説明を見せる
   return s;

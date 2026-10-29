@@ -12,6 +12,7 @@ import { m3EnvironmentChannels, inheritM3EnvironmentChannels } from '../../web/s
 import { lutGlsl } from '../../web/src/lut.mjs';
 import { installNativeMergedMain } from '../../web/src/native_merged_main.mjs';
 import { makeBoardWash } from '../../../effects/runtime/board_wash.mjs';
+import { installMainFrontFusion } from '../../web/src/main_front_fusion.mjs';
 
 const W = 1440, H = 2560, ROW_M3 = 2215, ROW_TRAY = 2470;   // ROW_TRAY：R3-M5 の皿の絵の下の端（y 2209＋261）    // この行より上を m3 の筐体に（皿の窓は y 2225 から）
 const PINK = [1, 0.02, 0.3];
@@ -561,5 +562,7 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
     else hr.setEnvironment(patchedEnvironment(env)); // Revoked/changed ownership never mutates the supplied input.
     info.ms = Math.round(performance.now() - t0);
   }
+  result.frontFusion = installMainFrontFusion(hr, { expectedFinalShader: finalShader(hr.lut, man) });
+  result.frontFusion?.setEnabled(q.get('frontfusion') !== '0');
   return result;
 }

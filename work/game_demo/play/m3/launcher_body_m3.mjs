@@ -6,6 +6,7 @@
 //  ・見る角度：x の違う 5 か所で描いた絵のうち、近い 2 枚を不透明度でまぜる。
 //  ・0 灯／4 灯：射出器のまわりの canvas の色（桃の強さ）を非同期に読み、4 灯の絵の不透明度にする（読めないときは opts.light か 0）。
 //  ・状態：hasBall=true で L（爪が球をつかむ）。true→false の瞬間（撃った）に R1（0.05 秒、首が縮む・LED が光る）→ R2（0.06 秒）→ E（空）。
+//  opts.getLamp()：{ color, alpha } を返すと、レンズ（絵の上の桃の窓）にその色を重ねる（10/29 打てる/打てないの表示。play/launch_lamp_20261029.mjs。null か alpha 0 で何も重ねない）。
 // ?nolauncher で無効（play.mjs 側のまま）。物理と凍結の静止像は変えない。
 const STATES = ['L', 'E', 'R1', 'R2'], LIGHTS = ['0', '4'];
 const T_R1 = 0.05, T_R2 = 0.06;
@@ -32,8 +33,12 @@ export function createLauncherBody({ stage, canvas, camera, xRange }, opts = {})
           box.appendChild(im); img[s][l] = im;
         }
       }
+      // 打てる/打てないの表示(10/29 launch_lamp)。レンズ(絵の上の大きな桃の窓 x32〜121・y19〜72)に色を重ねる。通常は透明
+      const lens = document.createElement('div');
+      lens.style.cssText = `position:absolute;left:${pct(34, p.w)};top:${pct(21, p.h)};width:${pct(85, p.w)};height:${pct(49, p.h)};border-radius:12%;mix-blend-mode:color;opacity:0;pointer-events:none`;
+      box.appendChild(lens);
       el.appendChild(box);
-      return { p, box, img };
+      return { p, box, img, lens };
     });
   }).catch(e => console.warn('[launcher] 絵を読めない', e));
 
@@ -81,6 +86,9 @@ export function createLauncherBody({ stage, canvas, camera, xRange }, opts = {})
       if (on && l === '4') im.style.opacity = light.toFixed(3);
     }
     P.box.style.opacity = op.toFixed(3);
+    const lamp = opts.getLamp?.();
+    if (lamp?.color && lamp.alpha > 0.01) { P.lens.style.background = lamp.color; P.lens.style.boxShadow = `0 0 7px 2px ${lamp.color}`; P.lens.style.opacity = Math.min(1, lamp.alpha).toFixed(3); }
+    else if (P.lens.style.opacity !== '0') P.lens.style.opacity = '0';
   };
   return {
     update(shuttle) {

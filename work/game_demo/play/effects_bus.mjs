@@ -77,6 +77,7 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
   function receipt(r) {
     if (!r || r.id === receiptSeen) return;
     receiptSeen = r.id;
+    if (r.quiet) return;   // 静かな着地(JP・継続の映像の間の通常球): 灯・玉数は規則側で数え済み。光・音・液晶の演出は出さない(映像に重ねない)
     const g = ctrl.game;
     const data = { jackpotEarnings:g.jackpotEarnings, receiptId: r.id, lane: r.lane, pocket: r.lane, award: r.award, duration: r.duration, before: r.before, after: r.after };
     if (r.kind === 'Fresh') {
