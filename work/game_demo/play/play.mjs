@@ -200,7 +200,7 @@ if (M3 && fxApi && !q.has('pack') && !q.has('fxjs') && q.get('prebake') !== '0')
 if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi, rules: app.rules });
 window.__r2Audio = r2Audio;
 const stats = runtime.stats;
-const launchMotion = M3 && q.get('launchanim') === '1' && !q.has('nolauncher') && !pa.isWorkerProxy ? (await import('./launcher_motion_1030.mjs')).createLauncherMotion({ getShots: () => pa.shots }) : null;   // 射出の見え方（球を落とす・爪が開閉・待ち球）。見た目だけ。?launchanim=0 で従来
+const launchMotion = M3 && q.get('launchanim') !== '0' && !q.has('nolauncher') && !pa.isWorkerProxy ? (await import('./launcher_motion_1030.mjs')).createLauncherMotion({ getShots: () => pa.shots }) : null;   // 射出の見え方（球を落とす・爪が開閉・待ち球）。見た目だけ。?launchanim=0 で従来
 const launcherArgs = M3 ? [(await import('./m3/launcher_body_m3.mjs')).createLauncherBody, { now: () => m3Clock, getLight: () => m3.state.k4, getLamp: () => launchLamp?.view, ...(launchMotion ? { getPose: () => launchMotion.pose } : {}) }] : [createLauncherBody, {}];
 const launcherBody = q.has('nolauncher') ? null : launcherArgs[0]({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) }, launcherArgs[1]);   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
