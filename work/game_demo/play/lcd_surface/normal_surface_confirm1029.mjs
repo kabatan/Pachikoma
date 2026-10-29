@@ -1,3 +1,4 @@
+import {createFullPanelPreviousOwner} from './fullpanel_previous_1029.mjs';
 import {createResultHistoryOwner} from './result_history_owner_1029.mjs';
 import {withRestored2D} from './startup_warm.mjs';
 import {createClipPlayer,drawClipSnapshot} from './clip_player.mjs';
@@ -20,7 +21,7 @@ export function normalClipFor(id, p, variant = 0) {
   return null;
 }
 
-export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory = null, resultImageFactory = null, videoImageFactory = null, resultBoundaryGpu = null }) {
+export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory = null, resultImageFactory = null, videoImageFactory = null, resultBoundaryGpu = null, fullPanelPrevious = null }) {
   const base = new URL('.', manifestUrl);
   const canvas = document.createElement('canvas'); canvas.width = 1240; canvas.height = 1510;
   const ctx = canvas.getContext('2d', { alpha: false });
@@ -36,9 +37,11 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const choiceBridgeStats={captures:0,releases:0,cpuFallbacks:0,failures:[]};
   const releaseChoiceBridge=()=>{if(!choiceBridge)return;const old=choiceBridge;choiceBridge=null;try{old.lease.release();choiceBridgeStats.releases++;}catch(error){choiceBridgeStats.failures.push(String(error?.message??error));}};
   const bridgeLeaseValid=lease=>{try{return !!(lease?.live&&lease.width===1240&&lease.height===1510&&lease.texture&&typeof lease.release==='function');}catch{return false;}};
-  let gpuFrame=null,resultHistory=null;
+  let gpuFrame=null,resultHistory=null,fullPrevious=null;
+  if(fullPanelPrevious){fullPanelPrevious.warmup({sourceCanvas:canvas});fullPrevious=createFullPanelPreviousOwner({manager:fullPanelPrevious,ctx,previous,blocked:()=>!!(surfaceOwner?.choiceV20?.active||surfaceOwner?.choiceV20?.holding||choiceBridge||resultHistory?.active)});}
   const materializeGpu=(reason,force=false)=>{if(!gpuFrame)return false;const dest=gpuFrame.published||force?ctx:null;if(resultHistory?.active&&gpuFrame.backend===videoBackend){if(!resultHistory.fallback(reason,{panelCtx:dest,heldCtx:hold,includeBridge:true}))return false;}else{gpuFrame.backend.materializeTo({panelCtx:dest,heldCtx:hold,reason});resultHistory?.clearPublished();}gpuFrame=null;return true;};
   const bridge=()=>{
+    const external=fullPrevious?.begin();if(external==='gpu'){gpuFrame=null;invalidateResult();fadeLeft=.12;return;}if(external==='cpu'){gpuFrame=null;releaseChoiceBridge();invalidateResult();previous.drawImage(canvas,0,0);fadeLeft=.12;return;}
     const route=resultHistory?.begin({blocked:!!(surfaceOwner?.choiceV20?.active||surfaceOwner?.choiceV20?.holding||choiceBridge)});
     if(route==='gpu'){gpuFrame=null;invalidateResult();fadeLeft=.12;return;}if(route==='cpu')gpuFrame=null;
     if(gpuChoiceHold(surfaceOwner)||choiceBridge&&typeof surfaceOwner?.choiceV20?.captureGpuBridgeLease==='function'&&typeof surfaceOwner.choiceV20.materializeGpuBridgeFallback==='function'){
@@ -55,6 +58,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     releaseChoiceBridge();invalidateResult();previous.drawImage(canvas,0,0);fadeLeft=.12;
   };
   const blend=dt=>{if(fadeLeft<=0)return;fadeLeft=Math.max(0,fadeLeft-dt);
+    if(fullPrevious?.blend(fadeLeft/.12))return;
     if(choiceBridge){choiceBridge.alpha=fadeLeft/.12;if(fadeLeft<=0)releaseChoiceBridge();return;}
     ctx.globalAlpha=fadeLeft/.12;ctx.drawImage(transition,0,0);ctx.globalAlpha=1;
   };
@@ -230,11 +234,15 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       return chain?{...rush,chain}:rush;
     },
     onEvent, setCards(c) { cards = c; },
-    get gpuPanelSource(){return gpuFrame;},
+    get gpuPanelSource(){return fullPrevious?.wrap(gpuFrame)??gpuFrame;},
+    withFullPanelPreviousSource(source,fn){return fullPrevious?fullPrevious.withSource(source,fn):fn();},
+    get fullPanelPreviousManager(){return fullPanelPrevious;},
+    get fullPanelPreviousRawHeld(){return held;},
+    fullPanelPreviousDiagnostics(){return {...(fullPrevious?.diagnostics()??{enabled:false}),rawHeld:{width:held.width,height:held.height,finalSeeds:0},clip:{name:clips.name,time:clips.time},normalFrameCount:stats.frames};},
     get choiceGpuBridge(){return choiceBridge?{lease:choiceBridge.lease,alpha:choiceBridge.alpha}:null;},
     choiceGpuBridgeDiagnostics(){return {...choiceBridgeStats,failures:[...choiceBridgeStats.failures],active:!!choiceBridge,alpha:choiceBridge?.alpha??0};},
     get videoImageBackend(){return videoBackend;},
-    materializeGpuLcd(reason='consumer',force=false){return materializeGpu(reason,force);},
+    materializeGpuLcd(reason='consumer',force=false){if(fullPrevious?.active){fullPrevious.materialize(reason);gpuFrame=null;return true;}return materializeGpu(reason,force);},
     async warm(){if(clock!==0||jpOwns)throw Error('normal warm is boot-only');return clips.warm(hold,W,H);},
     setManual(on) { manual = !!on; clips.setManual(on); jp?.setManual(on); },
     async prepare(dt) { if(jp?.active){await jp.prepare(dt);return;} await clips.prepare(dt); },
@@ -243,13 +251,14 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       if(choiceWrites(this)){paintedResult=null;resultHistory?.clearPublished();}
       const s = getState();
       if (jp?.claimed) {
+        if(fullPrevious?.active){fullPrevious.fallback('final-previous-jp-owner');gpuFrame=null;}
         if(resultHistory?.active){resultHistory.fallback('jp-owner',{includeBridge:true});gpuFrame=null;}
         jp.palace?.imageBackend?.setLegacyMode(choiceWrites(this));
         let v=jp.frame(dt);
         if(!jp.active&&lastJpSerial>=0){bridge();lastJpSerial=-1;}
         // 映像の最初のコマがまだ読めていない間は、前の映像の最後(失敗の灰色＋扉など)を出さず、通常の画面のままにする。
         if (jp.active && (jpOwns || v?.readyState>=2)) {
-          if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered){fadeLeft=0;releaseChoiceBridge();}if(resultHistory?.active){resultHistory.fallback('jp-serial-bridge',{includeBridge:false});gpuFrame=null;}
+          if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered){fadeLeft=0;fullPrevious?.abandon();releaseChoiceBridge();}if(resultHistory?.active){resultHistory.fallback('jp-serial-bridge',{includeBridge:false});gpuFrame=null;}
           if(!jpOwns){clips.suspend();jpOwns=true;}
           if(v?.gpuPalaceImage&&jp.layered&&!choiceWrites(this)){
             const w=jp.where(),backend=v.gpuPalaceImage;if(gpuFrame?.backend!==backend)materializeGpu('gpu-owner-change');backend.setFlash(w?.flash,w?.flashColor);
@@ -333,6 +342,6 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     resultBoundaryDiagnostics(){return {...(resultHistory?.diagnostics()??{enabled:false}),pool:resultBoundaryGpu?.diagnostics?.()??null};},
     videoImageDiagnostics(){return {...videoStats,failures:[...videoStats.failures],backend:videoBackend?.diagnostics?.()??null};},
     diagnostics() { return clips.diagnostics().concat(jp?.diagnostics()??[]); },
-    dispose() { try{releaseChoiceBridge();try{resultHistory?.dispose();}finally{videoBackend?.dispose?.();}}finally{try{clips.dispose();}finally{jp?.dispose();}} },
+    dispose() { try{fullPrevious?.dispose();releaseChoiceBridge();try{resultHistory?.dispose();}finally{videoBackend?.dispose?.();}}finally{try{clips.dispose();}finally{jp?.dispose();}} },
   };surfaceOwner=api;return api;
 }
