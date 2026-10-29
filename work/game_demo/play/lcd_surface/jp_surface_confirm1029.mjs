@@ -192,6 +192,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     catch(error){resultFactory.mode='native-factory-fallback';resultFactory.failures.push(String(error?.message??error));try{compositor?.dispose?.();}catch(cleanup){resultFactory.failures.push('dispose: '+String(cleanup?.message??cleanup));}compositor=null;console.warn('[result-injection] original image path fallback',error);}
     if(!compositor)compositor=await createResultCompositor(base,man.result_compositor);
   }
+  const idleUpdates=!!palace.imageBackend&&new URLSearchParams(location.search).get('palaceidle')!=='0';
   const model=new JpTimeline(man,onCue,getState);let manual=false,current=null,serial=-1,errors=[],hole=null,visible=null,previous=null,fade=1,blockedResult=null;
   let blockedFor=0,wdSerial=-1,wdT=0;
   // 場面が終わらないまま居座る不具合の保険(10/29 監督指摘: 失敗後の灰色＋閉じた扉が残る)。待つ場面(狙い・飛行・ため・ループ・継続の選択)以外が、長さ+4秒を過ぎても進まなければ打ち切って通常に戻す。
@@ -242,7 +243,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   const stop=model.stop.bind(model);model.stop=reason=>{
     const failed=man.scenes[model.name]?.result_kind==='fail';
     record('end',{name:model.name,reason:reason??'end',time:model.time});
-    const r=stop(reason);
+    const r=stop(reason);if(idleUpdates)palace.hidden();
     // 失敗の映像の最後のコマ(灰色＋閉じた扉)を次の映像の読み込み中に出し直さない
     if(failed){visible=null;previous=null;current=null;serial=-1;blockedResult=null;blockedFor=0;fade=1;}
     return r;

@@ -70,6 +70,7 @@ export async function createResultCompositorInjected(base,config,{THREE,renderer
  if(!gl||!gl.getExtension('EXT_color_buffer_float'))throw Error('Native result compositor requires float render targets');
  gl.getExtension('OES_texture_float_linear');
 
+ const failBloom=new URLSearchParams(globalThis.location?.search??'').get('failbloom')!=='0';
  const canvas={width:W,height:H,readyState:4,isConnected:false,resultGpuSentinel:true};
  let vao=null,buffer=null,disposed=false,worker=null,scheduler=null;
  const workerPending=new Map();
@@ -108,8 +109,12 @@ export async function createResultCompositorInjected(base,config,{THREE,renderer
  o=vec4(b,1);}`);
  const warpP=prog(`uniform sampler2D im;uniform vec2 shift;uniform float zoom;void main(){vec2 p=(uv*vec2(1152,1268)-vec2(576,634)-shift)/zoom+vec2(576,634);o=texture(im,p/vec2(1152,1268));}`);
  const hiP=prog(`uniform sampler2D im;void main(){o=vec4(max(texture(im,uv).rgb-vec3(.92),vec3(0)),1);}`);
+ const reduceP=failBloom?prog(`uniform sampler2D im;void main(){ivec2 p=ivec2(gl_FragCoord.xy)*2;o=(texelFetch(im,p,0)+texelFetch(im,p+ivec2(1,0),0)+texelFetch(im,p+ivec2(0,1),0)+texelFetch(im,p+ivec2(1,1),0))*.25;}`):null;
  const finalP=prog(`uniform sampler2D im,b10,b36;void main(){vec2 v=vec2(uv.x,1.-uv.y);vec3 c=texture(im,v).rgb+(texture(b10,v).rgb*.6+texture(b36,v).rgb*.9)*.18;o=vec4(pow(clamp(c,0.,1.),vec3(1./2.2)),1);}`);
  const L=target(),tmp=target(),shadow=target(),glow=target(),image=target(),warped=target(),hi=target(),b10=target(),b36=target();
+ // Keep native text, highlights and output. Only broad fail bloom is sampled at half/quarter size.
+ const bloomTargets=failBloom?[target(W/2,H/2),target(W/2,H/2),target(W/2,H/2),target(W/4,H/4),target(W/4,H/4),target(W/4,H/4)]:[];
+ const [hi2,tmp2,b102,hi4,tmp4,b364]=bloomTargets;
  const slot=target(244,Math.floor(760*SCL)),slotBlur=target(244,Math.floor(760*SCL));
  const atlas={};const load=async(url)=>{const r=await fetch(url);if(!r.ok)throw Error('Result asset '+r.status+' '+url);const b=await createImageBitmap(await r.blob(),{premultiplyAlpha:'none',colorSpaceConversion:'none'});const t=tex(b.width,b.height,b,true);b.close();return t;};
  for(const [kind,path]of Object.entries(config.parts)){atlas[kind]={};for(const name of [...'0123456789'].flatMap(d=>['d'+d,'c'+d]).concat(['total','tama','ren','x']))atlas[kind][name]=await load(new URL(path+'/'+name+'.png',base));}
@@ -167,7 +172,9 @@ export async function createResultCompositorInjected(base,config,{THREE,renderer
   let shift=[0,0],zoom=1;if(kind==='confirm'){const tc=f-84;let sh=tc>=0&&tc<10?14*(1-tc/10):0;if(tl>=0&&tl<14){sh=Math.max(sh,40*(1-tl/16));zoom=1+.1*Math.exp(-tl*.42);}if(f>=108&&f<156)sh=Math.max(sh,2+3*((f-102)/54)**2);if(f>=147&&f<156)zoom=1+.03*ease((f-147)/9);shift=[sh*Math.sin(f*2.3),sh*Math.cos(f*3.1)];}else{const tt=f-64;if(tt>=0&&tt<12)shift=[0,12*Math.exp(-tt*.4)*Math.cos(tt*2.2)];}
   use(warpP,warped,{im:image},{shift,zoom});
   const t0=kind==='confirm'?90:78;if(f>=t0){const im=kind==='confirm'?happy:sad;let hop=0;if(kind==='confirm'&&f>=156){const ph=(f-156)%20;hop=ph<15?30*Math.sin(ph/15*Math.PI):0;}const enter=(1-ease((f-t0)/(kind==='confirm'?8:10)))*300;gl.bindTexture(gl.TEXTURE_2D,im.t);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);draw(im,warped,120,1250-im.h*2-hop+enter,4,4,1,1,0,1,kind==='fail'?.8:1);}
-  use(hiP,hi,{im:warped});blur(hi,tmp,b10,10);blur(hi,tmp,b36,36);use(finalP,null,{im:warped,b10,b36});canvas.resultRevision=(canvas.resultRevision??0)+1;return canvas;
+  use(hiP,hi,{im:warped});
+  if(kind==='fail'&&failBloom){use(reduceP,hi2,{im:hi});use(reduceP,hi4,{im:hi2});blur(hi2,tmp2,b102,5);blur(hi4,tmp4,b364,9);use(finalP,null,{im:warped,b10:b102,b36:b364});}
+  else{blur(hi,tmp,b10,10);blur(hi,tmp,b36,36);use(finalP,null,{im:warped,b10,b36});}canvas.resultRevision=(canvas.resultRevision??0)+1;return canvas;
   });
  }
  const render=(...args)=>renderRaw(...args);
@@ -189,7 +196,7 @@ export async function createResultCompositorInjected(base,config,{THREE,renderer
    if(hadRevision)canvas.resultRevision=revision;else delete canvas.resultRevision;
    if(disposed)return;
    gl.disable(gl.SCISSOR_TEST);gl.colorMask(true,true,true,true);
-   for(const out of [L,tmp,shadow,glow,image,warped,hi,b10,b36,slot,slotBlur,postTex])clear(out);
+   for(const out of [L,tmp,shadow,glow,image,warped,hi,b10,b36,slot,slotBlur,postTex,...bloomTargets])clear(out);
    // Old alpha:false default buffer was opaque. Never clear the main default FBO.
    gl.bindFramebuffer(gl.FRAMEBUFFER,output.framebuffer);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);
    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,bgTex.t);gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,W,H,packed?gl.RGB:gl.RGBA,gl.HALF_FLOAT,packed?zeros.subarray(0,W*H*3):zeros);

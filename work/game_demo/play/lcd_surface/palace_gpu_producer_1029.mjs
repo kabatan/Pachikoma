@@ -1,6 +1,7 @@
 // Main-renderer image producer. No new context, fetch, seek, play,
 // model/frame/clock call, or production routing. Caller owns source images/videos.
 import {PALACE_FRAGMENT, PALACE_VERTEX} from './palace_gpu_shader_1029.mjs';
+import {createVisibleVideoTexture} from './palace_video_texture_1030.mjs';
 
 export const PANEL = Object.freeze({width:1240,height:1510,x:34,y:28,w:1152,h:1268});
 
@@ -25,6 +26,8 @@ export function createPalaceGpuProducer({THREE,renderer,centerImages=null}) {
   if(!renderer?.isWebGLRenderer)throw Error('Existing THREE.WebGLRenderer is required');
   if(centerImages&&(!centerImages.F?.width||!centerImages.T?.width||!centerImages.meta?.cell))throw Error('Invalid center images/meta');
   const context=renderer.getContext();
+  const idleUpdates=new URLSearchParams(globalThis.location?.search??'').get('palaceidle')!=='0';
+  const updateStats={callbacks:0,suspends:0,resumes:0,backgroundSkipped:0};
   const resources=[],videoTextures=new Map();let disposed=false,revision=0;
   const stats={renders:0,videoTextures:0,videoUpdateRequests:0,readbacks:0,contextsCreated:0,canvasCopies:0,ownsClock:false,waitFrames:0,initialWaitFrames:0,recoveredWaits:0,waiting:false,waitReasonCounts:{},lastWait:[],lastVideoStates:[]};
   const own=x=>(resources.push(x),x);
@@ -77,9 +80,10 @@ export function createPalaceGpuProducer({THREE,renderer,centerImages=null}) {
     let entry=videoTextures.get(video);
     if(!entry){
       if(videoTextures.size>=3)throw Error('Snapshot backend is limited to background/current/previous (3 videos)');
-      const texture=configure(own(new THREE.VideoTexture(video)),true);
+      const texture=configure(own(idleUpdates?createVisibleVideoTexture(THREE,video,updateStats):new THREE.VideoTexture(video)),true);
       entry={texture,key:null};videoTextures.set(video,entry);stats.videoTextures++;
     }
+    entry.texture.resumeFrames?.();
     // Explicit paused-seek upload; never change the video or its presentation clock.
     const frameKey=key??'native-rVFC';
     if(entry.key!==frameKey){entry.texture.needsUpdate=true;entry.key=frameKey;stats.videoUpdateRequests++;}
@@ -147,7 +151,8 @@ export function createPalaceGpuProducer({THREE,renderer,centerImages=null}) {
         const i=resources.indexOf(entry.texture);if(i>=0)resources.splice(i,1);
       }
       setCenter(center);
-      uniforms.bg.value=videoTexture(background,sourceFrameKeys.background);
+      if(idleUpdates&&blackBg){videoTextures.get(background)?.texture.suspendFrames?.();uniforms.bg.value=placeholder;updateStats.backgroundSkipped++;}
+      else uniforms.bg.value=videoTexture(background,sourceFrameKeys.background);
       uniforms.fg.value=videoTexture(current,sourceFrameKeys.current);
       uniforms.old.value=previous?videoTexture(previous,sourceFrameKeys.previous):placeholder;
       uniforms.mixOld.value=previous?mixOld:0;uniforms.bgOn.value=blackBg?0:1;
@@ -160,6 +165,7 @@ export function createPalaceGpuProducer({THREE,renderer,centerImages=null}) {
       });
       revision++;stats.renders++;return surface;
     },
+    hidden(){if(idleUpdates)for(const entry of videoTextures.values())entry.texture.suspendFrames();},
     // Temporary sampler selection for same-instant main screenshot only.
     // Does not replace plate.tex or alter geometry/M3 uniforms/legacy CanvasTexture.
     withPlateSampler(plate,callback){
@@ -174,7 +180,7 @@ export function createPalaceGpuProducer({THREE,renderer,centerImages=null}) {
       withRendererState(THREE,renderer,()=>renderer.readRenderTargetPixels(target,x,y,w,h,bytes));stats.readbacks++;
       return {bytes,width:w,height:h,format:'RGBA8',origin:'bottom-left'};
     },
-    diagnostics(){return {...stats,waitReasonCounts:{...stats.waitReasonCounts},lastWait:stats.lastWait.map(s=>({...s})),lastVideoStates:stats.lastVideoStates.map(s=>({...s})),disposed,revision,targetBytes:PANEL.width*PANEL.height*4,videoReferences:[...videoTextures.keys()]};},
+    diagnostics(){return {...stats,idleUpdates,videoUpdates:{...updateStats,active:idleUpdates?[...videoTextures.values()].filter(e=>e.texture.framesActive).length:null},waitReasonCounts:{...stats.waitReasonCounts},lastWait:stats.lastWait.map(s=>({...s})),lastVideoStates:stats.lastVideoStates.map(s=>({...s})),disposed,revision,targetBytes:PANEL.width*PANEL.height*4,videoReferences:[...videoTextures.keys()]};},
     dispose(){if(disposed)return;disposed=true;for(const resource of resources)resource.dispose();resources.length=0;videoTextures.clear();},
   };
 }

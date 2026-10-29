@@ -154,6 +154,9 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       case 'challenge_flight': card(p.chain ? '連チャンの挑戦！' : '入れぇ！！', ['光っていない穴に 入れば成功！'], '#ffca78'); break;
       case 'jp':
         card('大当り！', [p.chain ? '積み増し！ 確定まで大切に' : '最初の配当は もう確定！'], '#ffe093', `${p.payout ?? p.award ?? 0}玉`); break;
+      case 'chain_announce':   // JP後の継続の告知（差し込み口。専用の映像ができるまでの仮カード）。first=最初の継続（選択なしで自動継続）／2回目以降は選択画面の前に出る
+        if (p.first) card('継続チャンス!!!', ['2/3でJP継続', 'もう一度ルーレット'], '#ffe093');
+        else card('継続チャンス!!!', ['継続で得た', `${p.atRisk ?? 0}玉を失う可能性あり`], '#ff9fb8', `${p.atRisk ?? 0}玉`); break;
       case 'chain_choice': {
         const pending = c.pendingAward ?? p.pending ?? 0, baseAward = c.baseAward ?? p.base ?? 0;
         const next = c.nextLamps ?? p.lamps ?? 1;
@@ -214,9 +217,9 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     if (id === 'ascend') return; // reset動画内の昇天を二重起動しない。
     if (id === 'launch') { launchPulses.push(clock); launchPulses = launchPulses.slice(-3); return; }
     if (id === 'start') { if(mode)bridge();mode = null; shotOn = false; return; }
-    if (['attract','title','howto','ticket','timeup','finish_count','result','add100','challenge_wait','challenge_declare','challenge_flight','jp','chain_choice','chain_continue','chain_stop','fail'].includes(id)) {
+    if (['attract','title','howto','ticket','timeup','finish_count','result','add100','challenge_wait','challenge_declare','challenge_flight','jp','chain_choice','chain_announce','chain_continue','chain_stop','fail'].includes(id)) {
       if (id === 'attract' || id === 'ticket') { variants = {}; normalN = 0; guard = null; }
-      const ttl = id === 'jp' ? Math.max(.5, p.duration ?? 6.3) : id === 'fail' ? Math.max(1.35, p.duration ?? 0) : id === 'chain_stop' ? 1.8 : id === 'add100' ? (cards?.ttl?.('add100') ?? 1.5) : id === 'ticket' ? (cards?.ttl?.('ticket') ?? Infinity) : Infinity;
+      const ttl = id === 'jp' ? Math.max(.5, p.duration ?? 6.3) : id === 'fail' ? Math.max(1.35, p.duration ?? 0) : id === 'chain_stop' ? 1.8 : id === 'chain_announce' ? Math.max(.5, p.seconds ?? 2.5) : id === 'add100' ? (cards?.ttl?.('add100') ?? 1.5) : id === 'ticket' ? (cards?.ttl?.('ticket') ?? Infinity) : Infinity;
       temporary(id, p, ttl);
     }
     if (id === 'challenge_cancel') {bridge();mode = null;}

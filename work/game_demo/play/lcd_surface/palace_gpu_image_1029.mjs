@@ -47,6 +47,7 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
   },fallback(error,reason){failed=true;stats.failures.push({reason,message:String(error?.message??error)});return fillFromLegacy();}});
   const sentinel={width:PANEL.w,height:PANEL.h,readyState:4,gpuPalaceImage:null};
   const api={
+   hidden(){producer.hidden();},
    palaceBoundary,get boundaryAvailable(){return !!palaceBoundary&&!failed&&!legacyMode&&producer.surface.revision>0;},
    render(input){if(disposed)throw Error('Palace live image disposed');lastInput={...input};
     if(failed||legacyMode)return fallbackImage();

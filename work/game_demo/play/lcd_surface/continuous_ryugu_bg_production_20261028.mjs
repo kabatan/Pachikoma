@@ -5,24 +5,33 @@ import {warmPausedVideo} from './startup_warm.mjs';
 export async function createSharedPalace({base,config,onError=()=>{},center=null,imageFactory=null}){
  const video=document.createElement('video');video.muted=true;video.playsInline=true;video.loop=true;video.preload='auto';
  let startupWarmMute=false,warmBusy=false;const errors=[],events=[],audit=[];let clock=0,loops=0,lastAudit=-1,manual=false,presentedTime=0,lastPresented=0,visible=false,segment=0;
- const presented=(wall,m)=>{if(!startupWarmMute){if(!manual&&m.mediaTime<lastPresented-.2)loops++;lastPresented=m.mediaTime;presentedTime=m.mediaTime;}video.requestVideoFrameCallback(presented);};video.requestVideoFrameCallback(presented);
+ // Presentation callbacks are needed only while the palace is visible. The
+ // video itself keeps playing on its original media clock, including while hidden.
+ let lazyPresentation=false,presentationId=null,presentationActive=false,lastMedia=0,presentationCallbacks=0;
+ const schedulePresentation=()=>{if(presentationActive&&presentationId===null)presentationId=video.requestVideoFrameCallback(presented);};
+ const presented=(wall,m)=>{presentationId=null;if(!presentationActive)return;presentationCallbacks++;if(!startupWarmMute){if(!lazyPresentation&&!manual&&m.mediaTime<lastPresented-.2)loops++;lastPresented=m.mediaTime;presentedTime=m.mediaTime;}schedulePresentation();};
+ const startPresentation=()=>{presentationActive=true;schedulePresentation();};
+ const stopPresentation=()=>{presentationActive=false;if(presentationId!==null)video.cancelVideoFrameCallback(presentationId);presentationId=null;};
+ const trackMediaLoop=()=>{if(lazyPresentation&&!manual&&!startupWarmMute){const t=video.currentTime;if(t<lastMedia-.2)loops++;lastMedia=t;}};
+ video.addEventListener('timeupdate',trackMediaLoop);
+ startPresentation();
  for(const kind of ['waiting','stalled','error','playing','ended'])video.addEventListener(kind,()=>{if(startupWarmMute)return;events.push({kind,wall:performance.now(),time:video.currentTime});if(kind==='error'){errors.push('palace video');onError('palace video');}});
  const ready=new Promise((resolve,reject)=>{video.addEventListener('loadeddata',resolve,{once:true});video.addEventListener('error',()=>reject(Error('palace decode')),{once:true});});
  video.src=new URL(config.file,base).href;video.load();await ready;
  // Optional candidate image producer; original video/time/event owner remains here.
  if(imageFactory&&!new URLSearchParams(location.search).has('jpaudit')){
   let image;try{image=await imageFactory({background:video,base,center});}catch(error){console.warn('[palace-injection] original image path fallback',error);}
-  if(image)return {video,audit,events,errors,
+  if(image){lazyPresentation=new URLSearchParams(location.search).get('palaceidle')!=='0';return {video,audit,events,errors,
    get canvas(){return image.rawCanvas('palace-canvas-consumer');},get imageBackend(){return image;},
    warm(){return image.warm();},
-   advance(dt){startupWarmMute=false;clock+=dt;if(!manual&&video.paused)video.play().catch(e=>{onError(e.message);});},
-   hidden(){visible=false;},
-   render(current,previous,alpha,scene,frame,centerState=null,blackBg=false){if(!visible){segment++;visible=true;}return image.render({current,previous,mixOld:previous?alpha:0,center:centerState,blackBg});},
-   setManual(on){manual=!!on;image.setManual(on);if(manual)video.pause();},
+   advance(dt){startupWarmMute=false;trackMediaLoop();clock+=dt;if(!manual&&video.paused)video.play().catch(e=>{onError(e.message);});},
+   hidden(){visible=false;if(lazyPresentation){stopPresentation();image.hidden?.();}},
+   render(current,previous,alpha,scene,frame,centerState=null,blackBg=false){if(lazyPresentation){if(blackBg)stopPresentation();else startPresentation();}if(!visible){segment++;visible=true;}return image.render({current,previous,mixOld:previous?alpha:0,center:centerState,blackBg});},
+   setManual(on){manual=!!on;lastMedia=video.currentTime;image.setManual(on);if(manual)video.pause();},
    async prepare(dt){if(!manual)return;const target=(clock+dt)%12;if(Math.abs(video.currentTime-target)<1e-4)return;await new Promise(resolve=>{video.addEventListener('seeked',resolve,{once:true});video.currentTime=target;});},
-   diagnostics(){return {kind:'continuous_palace_injected',time:video.currentTime,clock,loops,visible,segment,presentedTime,ready:video.readyState,src:video.currentSrc,errors:[...errors],image:image.diagnostics()};},
-   dispose(){image.dispose();video.pause();video.removeAttribute('src');video.load();}
-  };
+   diagnostics(){return {kind:'continuous_palace_injected',idleUpdates:lazyPresentation,presentationActive,presentationCallbacks,time:video.currentTime,clock,loops,visible,segment,presentedTime,ready:video.readyState,src:video.currentSrc,errors:[...errors],image:image.diagnostics()};},
+   dispose(){stopPresentation();video.removeEventListener('timeupdate',trackMediaLoop);image.dispose();video.pause();video.removeAttribute('src');video.load();}
+  };}
  }
  const cameras=await(await fetch(new URL(config.camera,base))).json();
  const canvas=document.createElement('canvas');canvas.width=1152;canvas.height=1268;canvas.readyState=4;
