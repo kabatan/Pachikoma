@@ -80,6 +80,7 @@ const app = await createMedalApp(document.getElementById('stage'), {
   rulesUrl: config.rules, seed, quiet: q.has('quiet'), music: false, log: !q.has('nolog'), human: !q.has('nolog') && !q.has('qa') && !q.has('manual'), manual: true,
 });
 const { ctrl, presenter } = app, effects = new EffectsBus();
+if (q.get('firegate') === '0') ctrl.fireGateEnabled = false;   // 射出の入口の一括判定(ui/controller.mjs fireBlockedReason)。?firegate=0 で従来(場面を問わず規則の canFire だけ)
 if (playRules.RuleVariant === 'H_20261029') {   // 無料の球が盤の外へ落ちた(lost)ときは、物理側が予備球に戻すので、その1球を取り消す(規則側は無料なので返金しない)
   const landing0 = ctrl.landing.bind(ctrl);
   ctrl.landing = (shotId, lane, reached = true) => { if (freeShotIds.delete(shotId) && !reached && !pa.isWorkerProxy) pa.stock = Math.max(0, pa.stock - 1); return landing0(shotId, lane, reached); };
@@ -163,6 +164,15 @@ if (!q.has('nofx')) {
     Object.defineProperty(app.rules,'FailFilmSeconds',{value:Math.max(sec('fail_first'),sec('fail_chain')),enumerable:false,configurable:true,writable:true});
     Object.defineProperty(app.rules,'ChainConfirmSeconds',{value:sec('chain_confirm'),enumerable:false,configurable:true,writable:true});
     Object.defineProperty(app.rules,'quietGate',{value:()=>!!(model.active&&model.name==='chain_confirm'),enumerable:false,configurable:true,writable:true});
+  }
+  if(lcd?.jp){   // 液晶の映像・選択が出ている間は射出しない(連打メーター中は規則側で撃てる)。万一の保険: 映像が20秒続いたら入口を開ける
+    let since=null;
+    ctrl.fireGate=()=>{
+      const m=lcd.jp.model,on=!!(m&&m.active)||!!lcd.choiceV20?.active;
+      if(!on){since=null;return null;}
+      since??=performance.now();if(performance.now()-since>20000)return null;
+      return m?.active?'film:'+(m.name??'?'):'choice';
+    };
   }
   if(lcd?.jp) Object.defineProperty(app.rules,'launchGate',{value:()=>lcd.jp.blocksChallengeLaunch,enumerable:false,configurable:true,writable:true});   // 最初のJPの導入・配当の映像の間は、勝負球の発射を待たせる(押しは保持され、解けた瞬間に出る)。映像を飛ばさず最後まで見せる
   if(lcd?.production) await (await import('./lcd_surface/temp_cards_20261029.mjs')).attachTempCards(lcd);   // 仮カード(スタート/まだまだ/計数中/重複/耐えた)の本番演出

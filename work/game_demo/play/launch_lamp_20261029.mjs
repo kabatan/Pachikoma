@@ -19,6 +19,7 @@ export function launchLampMode(ctrl, extraHold = false) {
   if (!g || !PLAYING.has(g.phase)) return 'ready';
   if (ctrl.confirmFinish) return 'closed';
   if (!g.canAim) return 'closed';
+  if (typeof ctrl.fireBlockedReason === 'function' && ctrl.fireBlockedReason()) return 'closed';   // 失敗・確定・配当の演出中など、射出の入口が閉じている間
   if (extraHold) return 'hold';
   const held = typeof g._challengeLaunchHeld === 'function' && !g.canFire && g._challengeLaunchHeld();
   if (held) return ctrl.fireBuffer ? 'queued' : 'hold';

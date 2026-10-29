@@ -17,12 +17,36 @@ export class MedalController {
     this.listeners = new Set(); this.sessionId = 0; this.resultAge = 0; this.replayAfter = 3;
     this.preBuffer = null; this.preWindow = 0.3; this.preWindowDrain = 5;
     this.fireBuffer = null; this.fireWindow = 0.3;   // 同時発射: 間隔待ち(残り0.3秒以内)に押された発射は、狙いを押した瞬間に固定して解禁と同時に撃つ
+    // 射出の入口の一括判定(?firegate=0 で fireGateEnabled=false → 従来)。fireGate は液晶側(映像・切替)の事情を返す関数(play.mjs が付ける)
+    this.fireGateEnabled = true; this.fireGate = null; this.lastFireGate = null; this.fireGateDrops = 0;
     this.droppedInputs = [];   // R-04: 勝負ボタンの先押しを0.3秒だけ1回保持。捨てた押しは記録
     this.inputLog = [];
     this.howtoSeconds = 0; this.howtoMinDwell = 0.5; this.howtoPanels = 5; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
   }
   onAction(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   get phase() { return this.game.phase; }
+
+  /** 射出の入口の一括判定。今の場面で球を撃ってはいけない理由(文字列)を返す。撃ってよければ null。
+   *  撃ってよい: 通常遊技(Ready/Flight/Effect の通常・導入)と連打メーター中(Meter。細かい可否は規則の canFire)。
+   *  撃てない: 開始前・結果・故障・継続選択・時間切れ・追加・ルーレット(ボタンは停止用)・失敗/確定/配当の演出中・液晶の映像中(fireGate)。 */
+  fireBlockedReason() {
+    if (!this.fireGateEnabled) return null;
+    const g = this.game, p = g.phase;
+    if (p === 'Meter') return null;
+    if (p !== MedalPhase.Ready && p !== MedalPhase.Flight && p !== MedalPhase.Effect) return p;
+    if (p === MedalPhase.Effect) { const k = g.receipt?.kind; if (k === 'Win' || k === 'Miss' || k === 'ChainStop' || k === 'Fault') return 'effect-' + k; }
+    if (g.meter) return null;
+    if (typeof this.fireGate === 'function') { try { const r = this.fireGate(this); if (r) return String(r); } catch { /* 判定の不具合で遊技を止めない */ } }
+    return null;
+  }
+  _fireGated() {   // 撃てない場面なら押しを捨てる(保持中の先押しも)。true=捨てた
+    const why = this.fireBlockedReason(); if (!why) return false;
+    if (this.fireBuffer) { this.fireBuffer = null; this.fireGateDrops++; }
+    this.lastFireGate = { frame: this.frame, reason: why };
+    this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'fire-gate:' + why });
+    if (this.droppedInputs.length > 256) this.droppedInputs.shift();
+    return true;
+  }
 
   /** 毎フレーム。dt は実時間秒。 */
   update(dt) {
@@ -39,6 +63,7 @@ export class MedalController {
       if ((g.overlap ? g.canArm : g.canFire) && !this.confirmFinish) { this.preBuffer = null; if (g.toggleChallenge()) for (const fn of this.listeners) fn('challenge', this); else this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: 'not-allowed-after-wait' }); }
       else if (this.preBuffer.left <= 0) { this.droppedInputs.push({ action: 'challenge', frame: this.frame, reason: 'expired' }); this.preBuffer = null; }
     }
+    if (this.fireBuffer && this.fireBlockedReason()) { this.fireBuffer = null; this.fireGateDrops++; }   // 演出の間に溜まった押しは捨てる(終わった直後にまとめて撃たない)
     if (this.fireBuffer) {
       this.fireBuffer.left -= dt;
       if (g.canFire && !this.confirmFinish && !this.preBuffer) { const b = this.fireBuffer; this.fireBuffer = null; if (this._fire(b.aim, b.dir)) for (const fn of this.listeners) fn('fire', this); }
@@ -57,7 +82,7 @@ export class MedalController {
     const phase=g.phase, intent=g.challengeIntent?.stage;
     const ok=this._dispatch(action);
     const queued=action==='fire' && this.fireBuffer && this.fireBuffer!==before;
-    const reason=ok?'accepted':queued?'buffered':action==='fire'&&before&&this.fireBuffer===before?'coalesced':sameFrame?'same-frame':this.confirmFinish?'finish-confirmation':
+    const reason=ok?'accepted':action==='fire'&&this.lastFireGate?.frame===this.frame?'fire-gate:'+this.lastFireGate.reason:queued?'buffered':action==='fire'&&before&&this.fireBuffer===before?'coalesced':sameFrame?'same-frame':this.confirmFinish?'finish-confirmation':
       g.shots.length>=g.rules.MaxInFlight?'in-flight-limit':g._sinceFire+1e-9<g.rules.FireInterval?'fire-interval':intent??phase;
     this.inputLog.push({action,frame:this.frame,phase,reason,queued:!!queued,fired:action==='fire'&&g.shot?.id!==shotId});
     if(this.inputLog.length>512)this.inputLog.shift();
@@ -65,7 +90,7 @@ export class MedalController {
   }
   _dispatch(action) {   // action は howto 開始時に 'howto' へ置換される
     if (this._lastActionFrame === this.frame) {
-      if(action==='fire'&&this.game.rules.ContinuousFire&&this.game.canAim&&!this.confirmFinish&&!this.fireBuffer)this.fireBuffer={aim:this.aim,dir:this.aimDir,left:Infinity};
+      if(action==='fire'&&this.game.rules.ContinuousFire&&this.game.canAim&&!this.confirmFinish&&!this.fireBuffer&&!this.fireBlockedReason())this.fireBuffer={aim:this.aim,dir:this.aimDir,left:Infinity};
       return false;
     }
     if (this.confirmFinish && !['cancelFinish', 'confirmFinish', 'quit'].includes(action)) return false;
@@ -125,6 +150,7 @@ export class MedalController {
   }
   _fire(aim = this.aim, dir = this.aimDir) {
     const g = this.game;
+    if (this._fireGated()) return false;
     if (g.rules.ContinuousFire && !g.canFire) {
       if (g.canAim) {if(!this.fireBuffer)this.fireBuffer={aim,dir,left:Infinity};return false;}
       this.droppedInputs.push({action:'fire',frame:this.frame,reason:g.phase});return false;

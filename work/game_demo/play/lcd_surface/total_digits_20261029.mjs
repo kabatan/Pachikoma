@@ -65,8 +65,20 @@ const CHOICE_MAP = {
   left: { su: 0.5237268518518519, cx: 351.5, y0: 424.77430555555554, top: 253.6, box: [80, 196, 623, 1052] },
   right: { su: 0.36747685185185186, cx: 252.5, y0: 647.7118055555555, top: 253.6, box: [62, 552, 443, 1023] },
 };
-export async function createChoiceTotal({ ctx, PX, PY, getValues, parts = null, cache = new URLSearchParams(location.search).get('choiceoverlay') !== '0' }) {
+export async function createChoiceTotal({ ctx, PX, PY, getValues, parts = null, cache = new URLSearchParams(location.search).get('choiceoverlay') !== '0', plateWarm = new URLSearchParams(location.search).get('choiceplatewarm') !== '0' }) {
   parts ??= await loadTotalParts();
+  // Realize the existing Canvas2D blur/image paths before gameplay. Scratch
+  // plates never enter the value cache or advance a visible animation clock.
+  const warmReceipt={enabled:!!plateWarm,completed:false,plates:0,ms:0,errors:[]};
+  if(plateWarm){const at=performance.now();try{
+    await Promise.all([...parts.d,...parts.c,parts.ren,parts.x].map(im=>im.decode?.()));
+    for(const [kind,value] of [['total',1234],['total',56789],['chain',1],['chain',23],['chain',45],['chain',67],['chain',89]]){
+      const row=kind==='total'?buildTotal(parts,value):buildChain(parts,value);let bitmap=null;
+      try{bitmap=await createImageBitmap(row.canvas);warmReceipt.plates++;}
+      finally{bitmap?.close();row.canvas.width=0;row.canvas.height=0;}
+    }
+    warmReceipt.completed=true;
+  }catch(error){warmReceipt.errors.push(String(error?.message??error));}finally{warmReceipt.ms=performance.now()-at;}}
   const occ = {}, rect = {};
   for (const state of Object.keys(CHOICE_MAP)) {
     const m = CHOICE_MAP[state], fy = (sy) => m.y0 + (sy - m.top) * m.su;
@@ -137,6 +149,7 @@ export async function createChoiceTotal({ ctx, PX, PY, getValues, parts = null, 
     },
     get value() { return last; },
     get plateKey() { return key; },
+    warmDiagnostics(){return {...warmReceipt,errors:[...warmReceipt.errors]};},
   };return api;
 }
 
