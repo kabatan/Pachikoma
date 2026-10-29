@@ -1,3 +1,4 @@
+import {resultMeterSteps} from './final_result_state_20261029.mjs';
 // Perf-only final result adapter. Video, result state and clock belong to surface.
 import {createFinalResultRendererInjected} from './final_result_compositor_gpu_1029.mjs';
 const W=1152,H=1268,PW=1240,PH=1510,PX=34,PY=28;
@@ -5,11 +6,12 @@ function restored(T,r,fn){
  const s={target:r.getRenderTarget(),face:r.getActiveCubeFace(),level:r.getActiveMipmapLevel(),vp:r.getViewport(new T.Vector4()),sc:r.getScissor(new T.Vector4()),test:r.getScissorTest(),color:r.getClearColor(new T.Color()),alpha:r.getClearAlpha(),auto:r.autoClear};
  try{return fn();}finally{r.resetState();r.setRenderTarget(s.target,s.face,s.level);r.setViewport(s.vp);r.setScissor(s.sc);r.setScissorTest(s.test);r.setClearColor(s.color,s.alpha);r.autoClear=s.auto;}
 }
-export function createFinalResultImageBackend({THREE:T,renderer:r,core}){
+export function createFinalResultImageBackend({THREE:T,renderer:r,core,actualWarm=true}){
  let disposed=false,panelValid=false,panelRevision=0,hud=null,hudTexture=null,hudRevision=0,lastPanelKey=null,cachedNative=null,cachedPanel=null,cachedRevision=null;
  let completedGeneration=0,completedStamp=null,publishedStamp=null;const producerToken={};
  const sameStamp=(a,b)=>a&&b&&['owner','publishedGeneration','nativeRevision','panelRevision','completedHud'].every(k=>a[k]===b[k]);
  const pinned=stamp=>!!(stamp&&core.surface.valid&&panelValid&&!hud&&stamp.completedHud===false&&sameStamp(stamp,publishedStamp)&&sameStamp(stamp,completedStamp)&&stamp.nativeRevision===core.surface.revision&&stamp.panelRevision===panelRevision&&stamp.publishedGeneration===completedGeneration);
+ let actualWarmReceipt={status:actualWarm?'pending':'disabled',frame:301};
  const stats={kind:'final_result_image_injected',composites:0,reads:0,readHits:0,materializations:0,warmCalls:0,failures:[]};
  const target=new T.WebGLRenderTarget(PW,PH,{format:T.RGBAFormat,type:T.UnsignedByteType,minFilter:T.LinearFilter,magFilter:T.LinearFilter,generateMipmaps:false,depthBuffer:false,stencilBuffer:false,samples:0,colorSpace:T.NoColorSpace});target.texture.flipY=false;target.texture.generateMipmaps=false;target.texture.name='final-result-full-panel';
  const dummy=new T.DataTexture(new Uint8Array([0,0,0,0]),1,1,T.RGBAFormat);dummy.needsUpdate=true;
@@ -35,6 +37,22 @@ export function createFinalResultImageBackend({THREE:T,renderer:r,core}){
   prewarm:()=>core.prewarm(),
   // Allocation/compile only, never manufacture a completed native revision.
   warmup(){live();if(core.surface.revision!==0)throw Error('Final warmup is boot-only');if(r.getRenderTarget()!==null)throw Error('Final warm requires default-target boundary');try{return restored(T,r,()=>{r.initRenderTarget(target);r.initTexture(dummy);r.compile(scene,camera);r.setRenderTarget(target);r.setViewport(0,0,PW,PH);r.setScissorTest(false);r.setClearColor(0,1);r.clear(true,false,false);stats.warmCalls++;return {kind:'final-result-panel-allocation-compile',producerDraws:0,completedRevision:0};});}catch(error){panelValid=false;fail('warmup',error);throw error;}},
+  warmActualDraw(){
+   live();if(!actualWarm)return actualWarmReceipt;
+   if(core.surface.revision!==0||panelRevision||panelValid||stats.composites||stats.reads||completedGeneration||completedStamp||publishedStamp||cachedNative||cachedPanel||hud)throw Error('Final actual warm is unused-boot-only');
+   if(actualWarmReceipt.status==='ready')return actualWarmReceipt;
+   const thresholds=[0,70,100,150,500],state=Object.freeze({value:1000000,totalText:'99999',rankIndex:4,prize:'S',thresholds,meterSteps:resultMeterSteps(thresholds),jp:8,best:2000000,newRecord:false,nextIndex:null,need:0,dreamRequired:false,nextMessage:'warm-only',day:'warm-no-storage',savedBest:2000000});
+   const oldUniforms=Object.fromEntries(Object.entries(u).map(([k,v])=>[k,v.value]));let receipt;
+   try{receipt=core.warmActual({state,afterNative:()=>restored(T,r,()=>{u.raw.value=core.surface.texture;u.hud.value=dummy;u.hudOn.value=0;r.autoClear=false;r.setRenderTarget(target);r.setViewport(0,0,PW,PH);r.setScissorTest(false);r.render(scene,camera);})});}
+   finally{
+    try{restored(T,r,()=>{r.setRenderTarget(target);r.setViewport(0,0,PW,PH);r.setScissorTest(false);r.setClearColor(0,1);r.clear(true,false,false);});}
+    catch(error){receipt={...(receipt??{status:'failed',frame:301}),status:'failed',panelBlackCleared:false,panelCleanupError:String(error?.message??error)};}
+    finally{for(const[k,value]of Object.entries(oldUniforms))u[k].value=value;panelValid=false;lastPanelKey=null;panelRevision=0;completedGeneration=0;completedStamp=publishedStamp=null;cachedRevision=null;}
+   }
+   actualWarmReceipt={...receipt,panelBlackCleared:receipt?.panelBlackCleared!==false,extraTargets:0,extraDecoders:0};
+   if(actualWarmReceipt.panelBlackCleared===false||receipt?.blackCleared===false)throw Error('Final warm black cleanup incomplete: '+(receipt?.panelCleanupError??receipt?.cleanupErrors?.join('; ')));
+   return actualWarmReceipt;
+  },
   render(f,state){live();try{const result=core.render(f,state);return result||core.surface.valid?sentinel:null;}catch(error){panelValid=false;fail('render',error);throw error;}},
   setHudCanvas(canvas){live();if(canvas===hud&&!canvas)return;hud=canvas;hudRevision++;if(canvas){if(!hudTexture){hudTexture=new T.CanvasTexture(canvas);hudTexture.colorSpace=T.NoColorSpace;hudTexture.generateMipmaps=false;hudTexture.minFilter=hudTexture.magFilter=T.LinearFilter;hudTexture.premultiplyAlpha=false;}hudTexture.needsUpdate=true;}},
   compose(){live();if(!core.surface.valid)return null;const key=core.surface.revision+':'+hudRevision;if(!hud&&panelValid&&key===lastPanelKey)return target.texture;if(r.getRenderTarget()!==null)throw Error('Final panel requires default-target boundary');panelValid=false;
@@ -47,12 +65,12 @@ export function createFinalResultImageBackend({THREE:T,renderer:r,core}){
   getComposedPanelContext:()=>r.getContext(),
   rawCanvas:()=>nativeImage(),
   materializeTo({panelCtx=null,heldCtx=null,reason='final-boundary'}={}){live();const image=nativeImage();if(!image)return null;stats.materializations++;for(const [ctx,source]of [[heldCtx,image],[panelCtx,cachedPanel]])if(ctx){ctx.save();try{ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='copy';ctx.filter='none';ctx.drawImage(source,0,0);}finally{ctx.restore();}}return image;},
-  diagnostics:()=>({...stats,failures:stats.failures.map(x=>({...x})),mode:'gpu',legacyMode:false,disposed,valid:core.surface.valid,panelValid,revision:core.surface.revision,panelRevision,hud:!!hud,hudRevision,cachedRevision,completedStamp:completedStamp?{...completedStamp}:null,publishedStamp:publishedStamp?{...publishedStamp}:null,extraContexts:0,core:core.diagnostics()}),
+  diagnostics:()=>({...stats,failures:stats.failures.map(x=>({...x})),mode:'gpu',legacyMode:false,actualWarm:JSON.parse(JSON.stringify(actualWarmReceipt)),disposed,valid:core.surface.valid,panelValid,revision:core.surface.revision,panelRevision,hud:!!hud,hudRevision,cachedRevision,completedStamp:completedStamp?{...completedStamp}:null,publishedStamp:publishedStamp?{...publishedStamp}:null,extraContexts:0,core:core.diagnostics()}),
   dispose(){if(disposed)return;disposed=true;panelValid=false;target.dispose();dummy.dispose();hudTexture?.dispose();mat.dispose();geometry.dispose();core.dispose();cachedNative=cachedPanel=null;}
  };
  sentinel.gpuFinalResultImage=api;return api;
 }
-export async function createFinalResultGpuImage({base,man,video,THREE,renderer}){
+export async function createFinalResultGpuImage({base,man,video,THREE,renderer,actualWarm=true}){
  const core=await createFinalResultRendererInjected(base,man,video,{THREE,renderer});
- try{return createFinalResultImageBackend({THREE,renderer,core});}catch(error){core.dispose();throw error;}
+ try{return createFinalResultImageBackend({THREE,renderer,core,actualWarm});}catch(error){core.dispose();throw error;}
 }

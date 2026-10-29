@@ -8,7 +8,7 @@ const CH=[2.4,1.55,1.12,.93,1.04,1], MID=[1.20,.96,1.03,1], LAST=[1.85,1.38,.92,
 
 export async function createFinalResultRendererInjected(base,man,video,{THREE,renderer}){
  const gl=renderer.getContext();
- const canvas={width:W,height:H,readyState:4,resultRevision:0};let disposed=false,valid=false,output=null,vao=null,buffer=null;
+ const canvas={width:W,height:H,readyState:4,resultRevision:0};let disposed=false,valid=false,output=null,vao=null,buffer=null,warming=false;
  const stats={renders:0,cacheHits:0,waits:0,failures:[],reads:0,lastInput:null};
  if(!gl||!gl.getExtension('EXT_color_buffer_float'))throw Error('Native result compositor requires float render targets');
  gl.getExtension('OES_texture_float_linear');
@@ -121,11 +121,37 @@ export async function createFinalResultRendererInjected(base,man,video,{THREE,re
   step(clampP);use(passthrough,null,{im:current});canvas.resultRevision=(canvas.resultRevision??0)+1;return canvas;
  }
  const surface={type:'lcd-gpu-surface',texture:output.texture,target:output.target,width:W,height:H,context:gl,origin:'bottom-left',encoding:'srgb-encoded',alphaMode:'opaque',get revision(){return canvas.resultRevision;},get valid(){return valid&&!disposed;}};
- function render(f,state){if(disposed)return null;if(video.readyState<2){stats.waits++;return null;}const key=Math.max(0,Math.floor(f))+':'+JSON.stringify(state);if(key===lastKey&&valid){stats.cacheHits++;return surface;}valid=false;try{const result=segment.run('final-render',()=>renderBody(f,state));if(result){valid=true;stats.renders++;stats.lastInput={f:Math.max(0,Math.floor(f)),state:JSON.parse(JSON.stringify(state))};return surface;}return null;}catch(error){lastKey=null;stats.failures.push({reason:'render',message:String(error?.message??error)});throw error;}}
- return {surface,prewarm,render,get ready(){return effects.size===fxRows.length;},shaderSources:()=>[...shaderBodies],segmentDiagnostics:()=>segment.diagnostics(),
+ function render(f,state){if(warming)throw Error('Final live render during boot actual warm');if(disposed)return null;if(video.readyState<2){stats.waits++;return null;}const key=Math.max(0,Math.floor(f))+':'+JSON.stringify(state);if(key===lastKey&&valid){stats.cacheHits++;return surface;}valid=false;try{const result=segment.run('final-render',()=>renderBody(f,state));if(result){valid=true;stats.renders++;stats.lastInput={f:Math.max(0,Math.floor(f)),state:JSON.parse(JSON.stringify(state))};return surface;}return null;}catch(error){lastKey=null;stats.failures.push({reason:'render',message:String(error?.message??error)});throw error;}}
+ function warmActual({state,afterNative}={}){
+  if(disposed||warming||valid||canvas.resultRevision!==0||stats.renders||lastKey!==null)throw Error('Final actual warm requires unused boot core');
+  if(renderer.getRenderTarget()!==null)throw Error('Final actual warm requires default-target boundary');
+  if(effects.size!==fxRows.length)return {status:'skipped',reason:'fx-prewarm-incomplete',frame:301,nativeDraws:0,panelDraws:0,blackCleared:true,metadataReset:true,error:null,cleanupErrors:[]};
+  if(video.readyState<2||video.seeking||!video.paused||video.videoWidth!==W||video.videoHeight!==H||video.error)return {status:'skipped',reason:'loaded-paused-native-video-required',frame:301,nativeDraws:0,panelDraws:0,blackCleared:true,metadataReset:true,error:null,cleanupErrors:[]};
+  if(!state||typeof afterNative!=='function'||afterNative.constructor.name==='AsyncFunction')throw Error('Final warm pure state and sync panel callback required');
+  const source=()=>({src:video.currentSrc??video.src??'',time:video.currentTime,paused:video.paused,seeking:video.seeking,width:video.videoWidth,height:video.videoHeight,readyState:video.readyState});
+  const before=source(),saved={current,other,lastKey,letterBounds,revision:canvas.resultRevision,valid};const receipt={status:'failed',frame:301,nativeDraws:0,panelDraws:0,blackCleared:false,metadataReset:false,sourceBefore:before,sourceAfter:null,error:null,cleanupErrors:[]};
+  warming=true;let mag=null;
+  try{
+   segment.run('final-actual-warm-upa-filter',()=>{gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,upa.t);mag=gl.getTexParameter(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER);});
+   const result=segment.run('final-actual-warm-native',()=>renderBody(301,state));if(!result)throw Error('Final actual warm native declined');receipt.nativeDraws=1;
+   // Raw GL scope has fully closed. The borrowed Three panel callback is sync.
+   const value=afterNative();if(value?.then){Promise.resolve(value).catch(()=>{});throw Error('Final warm panel callback returned Promise');}if(value===false)throw Error('Final actual warm panel declined');receipt.panelDraws=1;receipt.status='ready';
+  }catch(error){receipt.error=String(error?.message??error);}
+  finally{
+   try{segment.run('final-actual-warm-black-cleanup',()=>{
+    gl.disable(gl.BLEND);gl.disable(gl.SCISSOR_TEST);gl.clearColor(0,0,0,0);
+    for(const f of fbos){try{gl.bindFramebuffer(gl.FRAMEBUFFER,f);gl.clear(gl.COLOR_BUFFER_BIT);}catch(error){receipt.cleanupErrors.push(String(error?.message??error));}}
+    try{gl.bindFramebuffer(gl.FRAMEBUFFER,output.framebuffer);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}catch(error){receipt.cleanupErrors.push(String(error?.message??error));}
+    if(mag!==null){try{gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,upa.t);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,mag);}catch(error){receipt.cleanupErrors.push(String(error?.message??error));}}
+   });}catch(error){receipt.cleanupErrors.push(String(error?.message??error));}
+   current=saved.current;other=saved.other;lastKey=saved.lastKey;letterBounds=saved.letterBounds;canvas.resultRevision=saved.revision;valid=saved.valid;warming=false;receipt.metadataReset=true;receipt.blackCleared=receipt.cleanupErrors.length===0;receipt.sourceAfter=source();if(!receipt.blackCleared)receipt.status='failed';
+  }
+  return receipt;
+ }
+ return {surface,prewarm,render,warmActual,get ready(){return effects.size===fxRows.length;},shaderSources:()=>[...shaderBodies],segmentDiagnostics:()=>segment.diagnostics(),
   readPixels(){if(!surface.valid)throw Error('Final result has no completed native image');stats.reads++;return output.readPixels();},
   diagnostics:()=>({...stats,lastInput:stats.lastInput?JSON.parse(JSON.stringify(stats.lastInput)):null,failures:stats.failures.map(x=>({...x})),kind:'final_result_compositor_injected',valid:surface.valid,revision:canvas.resultRevision,ready:effects.size===fxRows.length,segment:segment.diagnostics(),extraContexts:0,disposed}),
-  dispose(){if(disposed)return;disposed=true;valid=false;effects.clear();try{segment.run('final-dispose',cleanup);}finally{output.dispose();}}
+  dispose(){if(warming)throw Error('Final dispose during synchronous actual warm');if(disposed)return;disposed=true;valid=false;effects.clear();try{segment.run('final-dispose',cleanup);}finally{output.dispose();}}
  };
  }catch(error){disposed=true;valid=false;try{segment.run('final-init-failed-cleanup',cleanup);}finally{output?.dispose();}throw error;}
 

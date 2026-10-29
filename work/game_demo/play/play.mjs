@@ -166,7 +166,7 @@ if (!q.has('nofx')) {
   if(lcd?.jp) Object.defineProperty(app.rules,'launchGate',{value:()=>lcd.jp.blocksChallengeLaunch,enumerable:false,configurable:true,writable:true});   // 最初のJPの導入・配当の映像の間は、勝負球の発射を待たせる(押しは保持され、解けた瞬間に出る)。映像を飛ばさず最後まで見せる
   if(lcd?.production) await (await import('./lcd_surface/temp_cards_20261029.mjs')).attachTempCards(lcd);   // 仮カード(スタート/まだまだ/計数中/重複/耐えた)の本番演出
   if(lcd?.production) await (await import('./lcd_surface/attract_surface_20261029.mjs')).attachAttractSurface(lcd,{getState:()=>({phase:ctrl.game.phase,howto:!!ctrl.howto})});
-  const finalResultImageFactory=fullPanelPrevious?async o=>(await import('./lcd_surface/final_result_gpu_image_1029.mjs')).createFinalResultGpuImage({...o,renderer:hr.renderer,THREE:await import('../web/vendor/three/three.module.js')}):null;
+  const finalResultImageFactory=fullPanelPrevious?async o=>(await import('./lcd_surface/final_result_gpu_image_1029.mjs')).createFinalResultGpuImage({...o,actualWarm:q.get('finalwarm')!=='0',renderer:hr.renderer,THREE:await import('../web/vendor/three/three.module.js')}):null;
   if(lcd?.production) await (await import('./lcd_surface/final_result_surface_20261029.mjs')).attachFinalResultSurface(lcd,{controller:ctrl,finalResultImageFactory,fullPanelPrevious});
   if(lcd?.production) (await import('./lcd_surface/chain_connect_20261029.mjs')).attachChainConnect(lcd,{controller:ctrl});
   const choiceImageFactory = M3 && q.get('choicegpu') !== '0' ? async o => (await import('./lcd_surface/choice_gpu_image_1029.mjs')).createChoiceGpuImage({...o, renderer:hr.renderer, THREE:await import('../web/vendor/three/three.module.js')}) : null;

@@ -111,6 +111,7 @@ vec4 prebakeC(ivec2 p){
     const plate=getPlate();
     if(!enabled||hr.viewMode!==0||U.uM3Off.value!==0||!plate?.mat.uniforms.uPanel){stats.legacyFrames++;return legacy.call(hr);}
     hr.trayVisualHandle?.update();stats.frames++;
+    hr._updateEnvUniforms();
     r.setScissorTest(false);
     if(backDirty.changed())drawField(back,bakeBack);else stats.fieldReuses++;
     if(frontDirty.changed())drawField(front,bakeFront);else stats.fieldReuses++;

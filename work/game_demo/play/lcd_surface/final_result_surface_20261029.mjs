@@ -49,5 +49,5 @@ export async function attachFinalResultSurface(lcd,{controller,finalResultImageF
  lcd.finalResultSurface={video,renderer,errors,initErrors,get gpuMode(){return gpuMode;},get generation(){return generation;},diagnostics:()=>renderer.diagnostics?.()??{mode:'legacy',extraContexts:1},playback,manifest:man,daily,get active(){return active;},get time(){return time;},get state(){return state;},get frame(){return renderedFrame;}};
  lcd.dispose=()=>{if(disposed)return;disposed=true;exit();if(videoCallback!=null)video.cancelVideoFrameCallback?.(videoCallback);video.removeAttribute('src');video.load();renderer.dispose();original.dispose();};
  // Load sparse lossless FX while attract/howto is displayed, never on a result stamp.
- try{await renderer.prewarm();renderer.warmup?.();}catch(error){disposed=true;if(videoCallback!=null)video.cancelVideoFrameCallback?.(videoCallback);renderer.dispose();video.removeAttribute('src');video.load();throw error;}return lcd;
+ try{await renderer.prewarm();renderer.warmup?.();renderer.warmActualDraw?.();}catch(error){disposed=true;if(videoCallback!=null)video.cancelVideoFrameCallback?.(videoCallback);renderer.dispose();video.removeAttribute('src');video.load();throw error;}return lcd;
 }
