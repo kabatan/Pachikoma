@@ -1,6 +1,6 @@
 // 30 Hz precomputed physical light script; the LCD's displayed media time is the clock.
 // R3 (10/29 night): flash_fx adds pachinko-style strobes on top of the table and derives the RGB strip colour (api.strip).
-import {createFx,evalFx,hsvTo,stripFrom} from './flash_fx_20261029.mjs';
+import {createFx,evalFx,hsvTo,stripFrom,ledBoost} from './flash_fx_20261029.mjs';
 const cw=new Float32Array(8).fill(1);
 const triples=n=>Array.from({length:n},()=>[0,0,0]);
 const COPY=[['Kc',8,8],['wash',32,8],['zone',56,8],['ring',80,4]];
@@ -37,13 +37,17 @@ export async function attachCabinetLightScript(lcd,{getLamps=()=>[],getState=()=
    else if(mode===2){hsvTo(sc,0,h);for(let j=0;j<3;j++)c[j]+=(sc[j]*m-c[j])*mix;}
    for(let j=0;j<3;j++)c[j]*=gain;};
  const modulate=()=>{
-   const g0=Math.min(1.5,fx.gain),mode=fx.mode,mix=fx.mix,d=fx.cDepth;
+   const g0=Math.min(ledBoost()?1.8:1.5,fx.gain),mode=fx.mode,mix=fx.mix,d=fx.cDepth;
    // running light: a cosine crest travels around the frame (phase PH per region); dips by up to d, no allocation
    for(let i=0;i<8;i++)cw[i]=d>0?1-d+d*Math.pow(.5+.5*Math.cos(6.283185307*(clock*fx.cHz-PH[i])),fx.cSharp):1;
-   cw[1]=cw[2]=cw[0]; // head, gills and logo (with the score board) are one lit group: they must dim and brighten together
+   cw[1]=cw[2]=cw[0];
+   if(fx.aDepth>0){ // R5 alternation: left pillar / right pillar swap places; head group steady-ish, bottom follows the left
+     const a=fx.aWave,L=1-fx.aDepth*(1-a),R=1-fx.aDepth*a;
+     cw[3]*=L;cw[4]*=L;cw[5]*=R;cw[6]*=R;cw[7]*=R;
+   } // head, gills and logo (with the score board) are one lit group: they must dim and brighten together
    for(let i=0;i<8;i++){
      const g=g0*cw[i];
-     row.K[i]=Math.min(1.55,Math.max(row.K[i]*fx.gain+fx.white*.45,fx.floor*1.1))*cw[i];
+     row.K[i]=Math.min(ledBoost()?1.9:1.55,Math.max(row.K[i]*fx.gain+fx.white*.45,fx.floor*1.1))*cw[i];
      const c=row.Kc[i];
      if(mode===1){c[0]+=(fx.r-c[0])*mix;c[1]+=(fx.g-c[1])*mix;c[2]+=(fx.b-c[2])*mix;}
      else if(mode===2){hsvTo(sc,0,fx.hue+fx.spread*PH[i]);for(let j=0;j<3;j++)c[j]+=(sc[j]-c[j])*mix;}

@@ -2,6 +2,12 @@
 // One pure function, shared by the 3D cabinet lights (K / Kc) and the physical RGB strip, so both
 // flash on exactly the same beats. No allocation: evalFx() fills a caller-owned object.
 // Rules of thumb: bright + punchy, never more than ~10 Hz, high rates only for short bursts.
+// R5 (10/30): ?ledboost=0 restores the R3 look (rates up to 10 Hz, no alternation/rainbow extras, no brightness lift).
+// With boost on, no periodic blink is faster than 7.5 Hz (period >= 4 frames at 30 fps, MOTION_RULES).
+let BOOST = !(typeof location !== 'undefined' && /[?&]ledboost=0(&|$)/.test(location.search || ''));
+export const setLedBoost = v => { BOOST = !!v; };
+export const ledBoost = () => BOOST;
+const HZ = n => BOOST && n > 7.5 ? 7.5 : n;
 const TAU = Math.PI * 2;
 const frac = x => x - Math.floor(x);
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
@@ -9,7 +15,7 @@ const sq = (x, duty = .5) => frac(x) < duty ? 1 : 0;                  // square 
 const pulse = (x, decay) => Math.exp(-frac(x) * decay);                 // fast attack, exponential fall once per cycle
 const GOLD = [1, .52, .02], RED = [1, .02, .03], PINK = [1, .06, .42], VIOLET = [.42, .04, 1], BLUE = [.05, .3, 1], WHITE = [1, .95, .85], VIOLET_DEEP = [.38, .02, .8];
 
-export function createFx() { return { gain: 1, white: 0, floor: 0, mode: 0, mix: 0, hue: 0, spread: 0, r: 0, g: 0, b: 0, active: false, cDepth: 0, cHz: 0, cSharp: 2, cWave: 1 }; }
+export function createFx() { return { gain: 1, white: 0, floor: 0, mode: 0, mix: 0, hue: 0, spread: 0, r: 0, g: 0, b: 0, active: false, cDepth: 0, cHz: 0, cSharp: 2, cWave: 1, aDepth: 0, aHz: 0, aWave: 1 }; }
 // Running light: each cabinet region dims by up to `depth` as a crest travels around the frame at hz (regions are phased by PH in the runtime). cWave = the same crest for the one-colour strip (whole-strip throb).
 function chase(o, depth, hz, sharp = 2) { o.cDepth = depth; o.cHz = hz; o.cSharp = sharp; }
 
@@ -24,13 +30,13 @@ function blinks(o, t, hz, count, color, mix = .85, hi = 1.55, lo = .22) {
 }
 
 const ROULETTE_STOP = { roulette_30: 4.033, roulette_40: 4.033, roulette_100: 4.433, roulette_200: 4.833, roulette_500: 4.967 };
-const HEAT_HZ = { flight_heat0: 3.5, flight_heat1: 5, flight_heat2: 7, flight_heat3: 9 };
+const HEAT_HZ = { flight_heat0: 3.5, flight_heat1: 5, flight_heat2: 7, flight_heat3: 9 };   // 9 is capped to 7.5 by HZ() when boosted
 const HEAT_COLOR = { flight_heat0: VIOLET, flight_heat1: PINK, flight_heat2: RED, flight_heat3: GOLD };
 
 // c: { grammar, name, t (seconds in the clip / mode), clock, lampN, hitAge (s since a ball entered a hole), secondsLeft, playing, source }
 export function evalFx(o, c) {
   const t = c.t, ck = c.clock, g = c.grammar;
-  o.gain = 1; o.white = 0; o.mode = 0; o.mix = 0; o.hue = 0; o.spread = 0; o.floor = 0; o.cDepth = 0; o.cHz = 0;
+  o.gain = 1; o.white = 0; o.mode = 0; o.mix = 0; o.hue = 0; o.spread = 0; o.floor = 0; o.cDepth = 0; o.cHz = 0; o.aDepth = 0; o.aHz = 0;
   switch (g) {
     case 'sea_breathe': {                          // normal lamps: the more lamps, the more it throbs
       const n = c.lampN;
@@ -43,35 +49,39 @@ export function evalFx(o, c) {
       break;
     }
     case 'blue_arrival': blinks(o, t, 7, 3, BLUE, .8, 1.5, .15); break;
-    case 'violet_arrival': blinks(o, t, 8, 4, VIOLET, .85, 1.5, .15); break;
-    case 'pink_arrival': blinks(o, t, 9, 5, PINK, .9, 1.55, .12); break;
-    case 'sakura': blinks(o, t, 9, 6, PINK, .9, 1.55, .12); break;
-    case 'school_gold': blinks(o, t, 10, 8, GOLD, .95, 1.55, .1); break;
-    case 'jp_prepare': { const a = sq(t * 8, .5); o.gain = a ? 1.55 : .2; if (a) o.floor = .95; tint(o, a ? GOLD : RED, .95); if (a && frac(t * 8) < .25) o.white = .5; chase(o, .4, 4, 3); break; }
+    case 'violet_arrival': blinks(o, t, HZ(8), 4, VIOLET, .85, 1.5, .15); break;
+    case 'pink_arrival': blinks(o, t, HZ(9), 5, PINK, .9, 1.55, .12); break;
+    case 'sakura': blinks(o, t, HZ(9), 6, PINK, .9, 1.55, .12); break;
+    case 'school_gold': blinks(o, t, HZ(10), 8, GOLD, .95, 1.55, .1); break;
+    case 'jp_prepare': { const a = sq(t * HZ(8), .5); o.gain = a ? 1.55 : .2; if (a) o.floor = .95; tint(o, a ? GOLD : RED, .95); if (a && frac(t * HZ(8)) < .25) o.white = .5; chase(o, .4, 4, 3); break; }
     case 'guard': blinks(o, t, 7, 3, BLUE, .7, 1.4, .3); break;
     case 'reset': { const a = sq(t * 5, .5); o.gain = a ? 1.5 : .3; if (a) o.floor = .85; tint(o, RED, a ? .9 : .5); break; }
     case 'chance_gold': { const a = sq(t * 7, .55); o.gain = a ? 1.55 : .2; if (a) o.floor = .95; tint(o, GOLD, .95); if (a && frac(t * 7) < .15) o.white = .55; chase(o, .4, 3.5, 3); break; }
     case 'aim': { const ph = ck * 4; o.gain = .5 + 1.05 * pulse(ph * 2, 1.6); tint(o, frac(ph) < .5 ? GOLD : RED, .95); chase(o, .45, 2.5, 3); break; }   // gold / red alternation, 4 Hz + running light
     case 'flight': { o.gain = .4 + 1.15 * pulse(ck * 5, 2.4); tint(o, PINK, .85); chase(o, .5, 2, 3); break; }
     case 'flight_heat0': case 'flight_heat1': case 'flight_heat2': case 'flight_heat3': {
-      const hz = HEAT_HZ[g], a = sq(ck * hz, .5);
+      const hz = HZ(HEAT_HZ[g]), a = sq(ck * hz, .5);
       o.gain = a ? 1.55 : .18; if (a) o.floor = .75 + .07 * (hz > 8 ? 3 : hz > 6 ? 2 : hz > 4 ? 1 : 0); tint(o, HEAT_COLOR[g], .95); if (g === 'flight_heat3') { o.white = a ? .4 : 0; if (a) o.mix = .6; } chase(o, .3 + .1 * (hz > 6 ? 1 : 0), hz * .4, 3);
       break;
     }
     case 'mouth_squeeze': case 'miss_squeeze': o.gain = .8; break;     // the table already goes nearly black: tension before the result
     case 'jackpot_burst': {                          // the hit: white-gold strobe at 10 Hz, then rainbow
-      const a = sq(t * 10, .5);
+      const a = sq(t * HZ(10), .5);
       if (t < .8) { o.gain = a ? 1.55 : .1; if (a) o.floor = 1; tint(o, a ? WHITE : GOLD, .95); o.white = a ? .8 : 0; }
-      else { o.gain = 1.2 + .3 * sq(ck * 8, .5); o.floor = .85; rainbow(o, ck * 2, .6); chase(o, .3, 3, 2); }
+      else { o.gain = 1.2 + .3 * sq(ck * HZ(8), .5); o.floor = .85; rainbow(o, ck * 2, .6); chase(o, .3, 3, 2); }
       break;
     }
-    case 'rush_rainbow': { o.gain = .9 + .65 * sq(ck * 9, .5); o.floor = .85; rainbow(o, ck * 2.4, .7); chase(o, .35, 3, 2); break; }
-    case 'bridge_charge': { const k = clamp(t / 2.6); const hz = 3 + 7 * k, a = sq(t * hz, .5); o.gain = (.5 + 1.05 * k) * (a ? 1 : .4); o.floor = (a ? .3 : .12) + .6 * k; tint(o, GOLD, .9); if (k > .85) o.white = a ? .3 : 0; break; }
-    case 'lightning': { const a = t < .27 ? .35 : t < .33 || (t > .45 && t < .5) ? 1 : 0; o.gain = .45 + 1.1 * a; tint(o, WHITE, .5 + .4 * a); o.white = .6 * a; break; }
+    case 'rush_rainbow': { o.gain = .9 + .65 * sq(ck * HZ(9), .5); o.floor = .85; rainbow(o, ck * 2.4, .7); chase(o, .35, 3, 2); break; }
+    case 'bridge_charge': { const k = clamp(t / 2.6); const hz = HZ(3 + 7 * k), a = sq(t * hz, .5); o.gain = (.5 + 1.05 * k) * (a ? 1 : .4); o.floor = (a ? .3 : .12) + .6 * k; tint(o, GOLD, .9); if (k > .85) o.white = a ? .3 : 0; break; }
+    case 'lightning': {                              // 紫の雷: 周りの電飾も紫で点滅（10/30）。閃光=強い紫、間=暗い深紫。点滅の間隔は4コマ以上（.27→.45 は約5.4コマ）
+      const a = t >= .27 && t < .33 || (t > .45 && t < .5);
+      o.gain = a ? 1.55 : t < .27 ? .75 : .2; if (a) o.floor = .9; else o.floor = .12;
+      tint(o, a ? VIOLET : VIOLET_DEEP, a ? .97 : .85); break;
+    }
     case 'intro_squeeze': o.gain = .4 + .6 * pulse(ck * 2, 1.8); tint(o, VIOLET, .7); chase(o, .5, 1.2, 2); break;
     case 'roulette': {                               // colours step around, then lock to gold
       const stop = ROULETTE_STOP[c.name] ?? 4.5;
-      if (t < stop) { const sl = Math.floor(t * (16 - 7 * clamp(t / stop))); rainbow(o, sl / 12, 0, 1); o.gain = .8 + .7 * (sl & 1); o.floor = .8; chase(o, .3, 4, 2); }
+      if (t < stop) { const sl = Math.floor(t * (BOOST ? 15 : 16) * (1 - .45 * clamp(t / stop))); rainbow(o, sl / 12, 0, 1); o.gain = .8 + .7 * (sl & 1); o.floor = .8; chase(o, .3, 4, 2); if (BOOST) { o.aDepth = .6; o.aHz = 6; } }
       else { const a = t - stop; o.gain = 1 + .55 * pulse(a * 6, 3); o.floor = .85; tint(o, GOLD, 1); o.white = .8 * Math.exp(-a / .1); chase(o, .25, 1.5, 2); }
       break;
     }
@@ -101,7 +111,7 @@ export function evalFx(o, c) {
       o.gain = calm; chase(o, .25, .4, 1.5); o.mode = 1; o.mix = .45; o.r = BLUE[0] + (PINK[0] - BLUE[0]) * h; o.g = BLUE[1] + (PINK[1] - BLUE[1]) * h; o.b = BLUE[2] + (PINK[2] - BLUE[2]) * h;
       if (t >= 3.5 && t < 5.83) { o.gain = .7 + .85 * pulse(t * 3, 2.2); o.floor = .5; tint(o, GOLD, .8); chase(o, .4, 2, 3); }
       else if (t >= 5.83 && t < 7.23) { const a = sq(t * 6, .5); o.gain = a ? 1.55 : .4; if (a) o.floor = .9; tint(o, a ? WHITE : GOLD, .85); if (a && frac(t * 6) < .25) o.white = .35; }
-      else if (t >= 7.23 && t < 8.47) { const sl = Math.floor((t - 7.23) * (10 - 5 * (t - 7.23) / 1.24)); rainbow(o, sl / 12, 0, .8); o.gain = 1.1 + .3 * (sl & 1); o.floor = .75; }
+      else if (t >= 7.23 && t < 8.47) { const sl = Math.floor((t - 7.23) * (BOOST ? 9 : 10) * (1 - .5 * (t - 7.23) / 1.24)); rainbow(o, sl / 12, 0, .8); o.gain = 1.1 + .3 * (sl & 1); o.floor = .75; }
       else if (t >= 8.47 && t < 9.23) { o.gain = 1.1 + .45 * pulse((t - 8.47) * 5, 3); o.floor = .85; tint(o, GOLD, .95); }
       else if (t >= 9.23 && t < 13.5) { o.gain = 1.2 + .3 * sq(t * 5, .5); o.floor = .7; rainbow(o, t * 1.4, .6, .9); }
       const wf = Math.max(.85 * w(8.47, .1), .8 * w(9.23, .12), .6 * w(13.63, .12), .6 * w(19.8, .12));
@@ -120,13 +130,13 @@ export function evalFx(o, c) {
     case 'result_media': {                           // 11.7 s result: doors 0-1.3 / count 3.4-5.2 / lock 5.2 / medal 7.13 / re-challenge 9.73
       const a = (x) => t - x;
       if (t < 3.4) { o.gain = .8 + .15 * pulse(t * .8, 2); tint(o, VIOLET, .4); }
-      else if (t < 5.2) { const k = clamp((t - 3.4) / 1.8), hz = 4 + 4 * k, on = sq(t * hz, .5); o.gain = .4 + .7 * k + (on ? .5 : 0); o.floor = .35 + .3 * k; tint(o, GOLD, .85); chase(o, .3, 2.5, 2); }
+      else if (t < 5.2) { const k = clamp((t - 3.4) / 1.8), hz = HZ(4 + 4 * k), on = sq(t * hz, .5); o.gain = .4 + .7 * k + (on ? .5 : 0); o.floor = .35 + .3 * k; tint(o, GOLD, .85); chase(o, .3, 2.5, 2); }
       else if (t < 7.13) { const d = a(5.2); o.gain = 1 + .55 * pulse(d * 6, 3); o.floor = .6; tint(o, GOLD, 1); o.white = .95 * Math.exp(-d / .12); chase(o, .25, 1.5, 2); }
       else if (t < 9.73) { const d = a(7.13); o.gain = 1.15 + .35 * pulse(d * 1.5, 2); o.floor = .6; if (d < .9) rainbow(o, ck * 2.2, .7, 1 - d / .9); else tint(o, GOLD, .9); chase(o, .3, 2, 2); o.white = Math.max(o.white, .9 * Math.exp(-d / .15)); }
       else { o.gain = .6 + .6 * pulse(ck * 2, 2.2); tint(o, PINK, .8); chase(o, .4, 1.5, 2); }
       break;
     }
-    case 'start': { blinks(o, t, 8, 5, GOLD, .95, 1.55, .15); break; }
+    case 'start': { blinks(o, t, HZ(8), 5, GOLD, .95, 1.55, .15); break; }
     case 'timeup': { const a = sq(ck * 3, .5); o.gain = a ? 1.3 : .2; o.floor = a ? .85 : .05; tint(o, RED, a ? .95 : .7); chase(o, .3, 1.5, 2); break; }
     case 'extend': { o.gain = .6 + .95 * pulse(ck * 4, 2.2); tint(o, GOLD, .95); chase(o, .4, 2, 3); break; }
     case 'count': { o.gain = .6 + .7 * pulse(ck * 3.5, 2.4); tint(o, BLUE, .7); chase(o, .35, 1.5, 2); break; }
@@ -134,6 +144,7 @@ export function evalFx(o, c) {
     case 'continue': { o.gain = .55 + .9 * pulse(ck * 4, 2.2); tint(o, PINK, .9); chase(o, .4, 2.2, 3); break; }
     default: break;
   }
+  if (BOOST) boostPass(o, c, g);
   // A ball that just entered a hole: bright flick on top of whatever is playing.
   const age = c.hitAge;
   if (age >= 0 && age < .6) {
@@ -149,8 +160,61 @@ export function evalFx(o, c) {
     if (a) { o.gain = Math.max(o.gain, 1.3); o.floor = .95; tint(o, RED, .95); } else o.gain *= .3;
   }
   o.cWave = o.cDepth > 0 ? Math.pow(.5 + .5 * Math.cos(TAU * ck * o.cHz), o.cSharp) : 1;
-  o.active = o.gain !== 1 || o.white > 0 || o.mix > 0 || o.mode !== 0 || o.floor > 0 || o.cDepth > 0;
+  o.aWave = o.aDepth > 0 ? sq(ck * o.aHz, .5) : 1;
+  o.active = o.aDepth > 0 || o.gain !== 1 || o.white > 0 || o.mix > 0 || o.mode !== 0 || o.floor > 0 || o.cDepth > 0;
   return o;
+}
+
+// ---- R5 boost layer ------------------------------------------------------------------------
+// Scenes where the lamps should be at their loudest: chance / jackpot / roulette / success.
+const HOT = new Set(['chance_gold', 'jp_prepare', 'aim', 'flight', 'flight_heat0', 'flight_heat1', 'flight_heat2', 'flight_heat3', 'jackpot_burst', 'rush_rainbow', 'bridge_charge', 'roulette', 'reward_gold', 'reward_rainbow', 'gold_hold', 'confirm', 'start', 'school_gold', 'result']);
+const CALM = new Set(['failure', 'offer', 'timeup', 'reset', 'lightning']);
+// Rainbow takes over a gold/red scene for a share of each cycle: share = fraction of the cycle that is rainbow.
+function rainbowBeat(o, ck, cycleHz, share, spread = .9) { if (frac(ck * cycleHz) < share) rainbow(o, ck * 3.2, spread, .92); }
+function alt(o, depth, hz) { o.aDepth = depth; o.aHz = HZ(hz); }
+function boostPass(o, c, g) {
+  if (CALM.has(g)) { if (g === 'timeup' || g === 'reset') { o.gain *= 1.15; alt(o, .5, 3); } return; }
+  const ck = c.clock, t = c.t;
+  if (HOT.has(g)) {
+    // brighter, deeper and faster running light + left/right alternation on top of the R3 pattern
+    o.gain = o.gain * 1.2 + .1; o.floor = Math.max(o.floor, .5);
+    if (o.cDepth > 0) { o.cDepth = Math.min(.8, o.cDepth + .2); o.cHz = Math.min(7.5, o.cHz * 1.5 + .8); }
+    else chase(o, .5, 2.5, 3);
+    if (g.startsWith('flight_heat')) alt(o, .45 + .1 * +g.slice(-1), o.cHz * .5);
+    else if (g === 'aim' || g === 'chance_gold' || g === 'jp_prepare') alt(o, .55, g === 'jp_prepare' ? 4 : 3);
+    else if (g === 'jackpot_burst' && t >= .8) alt(o, .5, 4);
+    else if (g === 'reward_gold' || g === 'gold_hold' || g === 'start' || g === 'school_gold') alt(o, .4, 2.5);
+    // rainbow shares: the more a scene is "the" moment, the more of the cycle is rainbow
+    if (g === 'aim' || g === 'chance_gold') rainbowBeat(o, ck, .9, .3);
+    else if (g === 'flight_heat2') rainbowBeat(o, ck, 1.2, .25);
+    else if (g === 'flight_heat3') rainbowBeat(o, ck, 1.6, .5, 1.2);
+    else if (g === 'reward_gold' || g === 'gold_hold') rainbowBeat(o, ck, .7, .35);
+    else if (g === 'confirm' && t < 5.2) rainbowBeat(o, ck, 1 + t * .25, .25 + .35 * clamp(t / 5));
+    return;
+  }
+  switch (g) {
+    case 'sea_breathe': {
+      const n = c.lampN;
+      o.gain = o.gain * 1.2 + .06; o.floor = Math.max(o.floor, .22 + .05 * n);
+      if (n >= 3) { alt(o, .25 + .08 * n, 1.2 + .5 * n); if (o.cDepth > 0) o.cHz = Math.min(7.5, o.cHz * 1.4); }
+      if (n === 5) rainbowBeat(o, ck, 1.1, .3, 1.1);
+      else if (n >= 6) rainbowBeat(o, ck, 1.3, .4, 1.2);
+      else if (n === 4) rainbowBeat(o, ck, .45, .18, .8);
+      break;
+    }
+    case 'blue_arrival': case 'violet_arrival': case 'pink_arrival': case 'sakura':
+      o.gain = o.gain * 1.15 + .08; alt(o, .4, 3.5); if (g === 'pink_arrival' || g === 'sakura') rainbowBeat(o, ck, 1.5, .35); break;
+    case 'guard': o.gain *= 1.15; break;
+    case 'attract': case 'title': case 'attract_wait': case 'instruction': case 'choice_neutral': case 'choice_left': case 'choice_right':
+    case 'intro_squeeze': case 'extend': case 'count': case 'continue': case 'result_media': {
+      o.gain = o.gain * 1.2 + .08; o.floor = Math.max(o.floor, .28);
+      if (g === 'attract' || g === 'title' || g === 'attract_wait') { if (o.mode !== 2 && frac(ck / 9) < .25) rainbow(o, ck * .35, .8, .55 * Math.sin(Math.PI * frac(ck / 9) * 4)); }   // a slow rainbow sweep every 9 s
+      else if (g === 'choice_right' || g === 'continue' || g === 'extend') { alt(o, .35, 2.5); rainbowBeat(o, ck, .8, .22); }
+      else if (g === 'choice_neutral') alt(o, .3, 1.5);
+      break;
+    }
+    default: o.gain = o.gain * 1.15; break;
+  }
 }
 
 // hue (0..1) -> rgb written into out[i..i+2]
@@ -172,10 +236,10 @@ export function stripFrom(strip, o, K, Kc) {
   let sum = 0, r = 0, g = 0, b = 0;
   for (let i = 0; i < 8; i++) { const k = K[i]; sum += k; r += k * Kc[i][0]; g += k * Kc[i][1]; b += k * Kc[i][2]; }
   if (sum > 1e-4) { r /= sum; g /= sum; b /= sum; } else { r = Kc[0][0]; g = Kc[0][1]; b = Kc[0][2]; }
-  const level = clamp(sum / 8 * 1.25 + .06, 0, 1);
+  const level = clamp(BOOST ? sum / 8 * 1.7 + .2 : sum / 8 * 1.25 + .06, 0, 1);
   if (o.mode === 1) { r += (o.r - r) * o.mix; g += (o.g - g) * o.mix; b += (o.b - b) * o.mix; }
   else if (o.mode === 2) { hsvTo(scratch, 0, o.hue); r += (scratch[0] - r) * o.mix; g += (scratch[1] - g) * o.mix; b += (scratch[2] - b) * o.mix; }
-  const m = Math.max(r, g, b, 1e-3), amp = clamp(Math.max(level * o.gain, o.floor) * (1 - o.cDepth * (1 - o.cWave) * .8), 0, 1.5) / m;   // max channel of the colour = brightness
+  const m = Math.max(r, g, b, 1e-3), amp = clamp(Math.max(level * o.gain, o.floor) * (1 - o.cDepth * (1 - o.cWave) * .8), 0, BOOST ? 1.9 : 1.5) / m;   // max channel of the colour = brightness
   strip[0] = clamp(r * amp + o.white, 0, 1);
   strip[1] = clamp(g * amp + o.white * .93, 0, 1);
   strip[2] = clamp(b * amp + o.white * .8, 0, 1);

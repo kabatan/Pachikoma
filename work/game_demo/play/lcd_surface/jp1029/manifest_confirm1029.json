@@ -8326,13 +8326,11 @@
     },
     "jp_intro_dopamine": {
       "file": "production_20261028/jp_intro_dopamine.mp4",
-      "frames": 84,
+      "frames": 54,
       "cut": [
         24,
         36,
-        48,
-        60,
-        72
+        48
       ],
       "next": "jp_chance_d4",
       "layered": false,
@@ -8352,13 +8350,11 @@
     },
     "jp_intro_reach": {
       "file": "production_20261028/jp_intro_reach.mp4",
-      "frames": 84,
+      "frames": 54,
       "cut": [
         24,
         36,
-        48,
-        60,
-        72
+        48
       ],
       "next": "jp_chance_d4",
       "layered": false,

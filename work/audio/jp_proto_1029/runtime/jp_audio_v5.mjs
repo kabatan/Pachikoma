@@ -159,12 +159,13 @@ export async function installJpAudioV5(engine, opts = {}) {
     tier('S', frT(tS, 12), { blip: 3, g: -3 });
     if (lightningFirst()) {
       // 雷は既に鳴らした(導入の最初)。チャンス題字の溜め(ライザー)だけ、公称84コマ後+5コマの頂点に合わせて先に鳴らす。一撃はチャンスの場面の検知時
-      st.scheduledC = frT(tS, 84); A('v4_riser_short', frT(st.scheduledC, 5), -13); st.done.add('chancePre');
+      st.scheduledC = frT(tS, introFrames()); A('v4_riser_short', frT(st.scheduledC, 5), -13); st.done.add('chancePre');
     } else {
       // 従来の順: 雷の前触れ(風のうなり・頂点まで1.4秒)だけは公称84コマ後に合わせて先に鳴らす。雷本体は雷の場面の検知時に鳴らす
       st.scheduledL = frT(tS, 84); A('v3_pre_swell', st.scheduledL, -9 + EV_THUNDER);
     }
   }
+  const introFrames = () => window.__lcdSurface?.jp?.man?.scenes?.jp_intro_dopamine?.frames ?? 84;   // 黒背景+文字の長さ(manifestに従う。10/30 短縮で54)
   const lightningFirst = () => window.__lcdSurface?.jp?.man?.intro_order === 'lightning_first';
   function thunder(tL) {     // 雷 4コマ: 閃光(0)、ネガ反転(+6)、2発目(+8)、再点灯(+10)。「ぶーん」系の非音楽(v4と同じ)
     once('thunder', () => {
