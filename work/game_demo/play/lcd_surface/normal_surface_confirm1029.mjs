@@ -19,7 +19,7 @@ export function normalClipFor(id, p, variant = 0) {
   return null;
 }
 
-export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory = null }) {
+export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory = null, resultImageFactory = null }) {
   const base = new URL('.', manifestUrl);
   const canvas = document.createElement('canvas'); canvas.width = 1240; canvas.height = 1510;
   const ctx = canvas.getContext('2d', { alpha: false });
@@ -39,7 +39,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const fail = (message) => { stats.errors.push(message); console.error('[normal1026]', message); };
   const clips = createClipPlayer({base, files:man.files, onError:fail, record:e=>{stats.lifecycle.push(e);if(stats.lifecycle.length>2000)stats.lifecycle.shift();}});
   const shown = {get name(){return clips.name;},get time(){return clips.time;}};
-  const jp = jpManifestUrl ? await createJpSurface({manifestUrl:jpManifestUrl,palaceImageFactory,onCue:onJpCue,getState,log:n=>stats.played.push([+clock.toFixed(3),n])}).catch(e=>{stats.errors.push('JP: '+e.message);console.warn('[jp1029]',e.message);return null;}) : null;
+  const jp = jpManifestUrl ? await createJpSurface({manifestUrl:jpManifestUrl,palaceImageFactory,resultImageFactory,onCue:onJpCue,getState,log:n=>stats.played.push([+clock.toFixed(3),n])}).catch(e=>{stats.errors.push('JP: '+e.message);console.warn('[jp1029]',e.message);return null;}) : null;
   if(jp){const r=getState().rules;r.FirstJackpotEffectSeconds=Object.fromEntries(jp.man.digits.map(d=>[d,r.JackpotAwards.map(p=>jpEffectSeconds(jp.man,p))]));
     // 継続成功の演出時間: 着地+継続成功v4+配当の通しの長さ(初回JPと同様に映像へ合わせる)。映像が無い場合は規則の既定のまま。
     const chainSeconds=r.JackpotAwards.map(p=>chainEffectSeconds(jp.man,p));if(chainSeconds.every(Number.isFinite))r.JackpotEffectSeconds=chainSeconds;}
@@ -191,6 +191,13 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
             const w=jp.where(),backend=v.gpuPalaceImage;backend.setFlash(w?.flash,w?.flashColor);
             gpuFrame={backend,published:false};stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
           }
+          const resultBackend=v?.gpuResultImage,rw=resultBackend?jp.where():null;
+          // Preserve the existing 2D dim/fade/choice ownership at unsafe seams.
+          if(resultBackend&&fadeLeft<=0&&!rw?.dim&&!jp.transition&&!choiceWrites(this)){
+            resultBackend.setFlash(rw?.flash,rw?.flashColor);
+            gpuFrame={backend:resultBackend,published:false};stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
+          }
+          if(resultBackend)v=resultBackend.rawCanvas('legacy-result-owner-frame');
           if(v?.gpuPalaceImage)v=v.gpuPalaceImage.rawCanvas('legacy-owner-frame');
           gpuFrame=null;
           // A result revision certifies only the compositor's completed immutable pixels.

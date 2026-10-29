@@ -175,7 +175,7 @@ export class JpTimeline extends OriginalJpTimeline {
   }
   where(){const w=super.where();return w?{...w,d:this.d,heat:this.heat,isChain:!!this.chainMode,chainStage:this.chainStage,cutin:this.cutin,clock:this.clock,introVariant:this.introVariant}:null;}
 }
-export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getState=()=>({}),palaceImageFactory=null}) {
+export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getState=()=>({}),palaceImageFactory=null,resultImageFactory=null}) {
   const res=await fetch(manifestUrl);if(!res.ok)throw new Error('JP manifest HTTP '+res.status);
   const man=await res.json(),base=new URL('.',manifestUrl);if(!man.background_layer)return createLegacyJpSurface({manifestUrl,onCue,log});
   const lightRes=await fetch(new URL(man.lights,base));if(!lightRes.ok)throw new Error('JP lights HTTP '+lightRes.status);
@@ -186,7 +186,12 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   if(pinned)slots.push(pinned);
   man.directionTable=await (await fetch(new URL(man.direction,base))).json();
   const offer=await createChainOffer();
-  const compositor=man.result_compositor?await createResultCompositor(base,man.result_compositor):null;
+  const resultFactory={requested:!!resultImageFactory,mode:'native',failures:[]};let compositor=null;
+  if(man.result_compositor){
+    if(resultImageFactory)try{compositor=await resultImageFactory({base,config:man.result_compositor});if(!compositor?.render||!compositor?.ready||!compositor?.prepare)throw Error('Invalid result image factory API');resultFactory.mode='injected';}
+    catch(error){resultFactory.mode='native-factory-fallback';resultFactory.failures.push(String(error?.message??error));try{compositor?.dispose?.();}catch(cleanup){resultFactory.failures.push('dispose: '+String(cleanup?.message??cleanup));}compositor=null;console.warn('[result-injection] original image path fallback',error);}
+    if(!compositor)compositor=await createResultCompositor(base,man.result_compositor);
+  }
   const model=new JpTimeline(man,onCue,getState);let manual=false,current=null,serial=-1,errors=[],hole=null,visible=null,previous=null,fade=1,blockedResult=null;
   let blockedFor=0,wdSerial=-1,wdT=0;
   // 場面が終わらないまま居座る不具合の保険(10/29 監督指摘: 失敗後の灰色＋閉じた扉が残る)。待つ場面(狙い・飛行・ため・ループ・継続の選択)以外が、長さ+4秒を過ぎても進まなければ打ち切って通常に戻す。
@@ -253,6 +258,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   };
   return {man,model,get center(){return center;},get active(){return model.active&&model.delay<=0;},get claimed(){return model.active;},get blocksChallengeLaunch(){return blocksChallengeLaunch();},
     warmResults:()=>compositor?.warmup?.()??{skipped:true,reason:'no-result-compositor'},
+    resultDiagnostics:()=>({factory:{...resultFactory,failures:[...resultFactory.failures]},image:compositor?.diagnostics?.()??{kind:'result_compositor_native',scheduler:compositor?.schedulerDiagnostics?.()}}),
     warmStartupRush(ctx,w=1152,h=1268,{afterDraw=()=>{}}={}){
       if(model.active||model.clock!==0||model.serial!==0||current||visible||previous||serial!==-1)throw Error('JP rush warm is boot-only');
       if(startupWarmPromise)return startupWarmPromise;
