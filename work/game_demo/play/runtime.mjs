@@ -5,7 +5,17 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects, onReca
   presenter.externalTray = true;
   const effectsBridge = connectEffects({ ctrl, presenter, bus: effects });
   const stats = { cups: Array(8).fill(0), lost: 0, trayLost: 0, nudge: 0, peg: 0, overflow: 0, valve: 0, reserve: 0, countDone: null, maxLedgerDrift: 0, recalled: 0 };
-  let acc = 0, countStarted = false, jpHold = false, shownPrize = ctrl.game.prize;
+  let acc = 0, countStarted = false, jpHold = false;
+  // 景品の灯。H(PrizeBasis:'wallet')は持ち玉で賞が決まり撃つたびに上下するので、灯は「その試合で一度でも届いた最高の賞」まで点けて下げない。G／従来は game.prize のまま
+  let litGame = null, litIdx = 0;
+  const litPrize = () => {
+    const g = ctrl.game, r = g.rules;
+    if (r.PrizeBasis !== 'wallet') return g.prize;
+    if (g !== litGame) { litGame = g; litIdx = 0; }
+    for (let k = r.PrizeThresholds.length - 1; k > litIdx; k--) if (r.PrizeThresholds[k] <= g.wallet) { litIdx = k; break; }
+    return r.PrizeNames[litIdx];
+  };
+  let shownPrize = litPrize();
   ctrl.onAction((action) => {
     if (action === 'start') {
       pa.beginGame(ctrl.rules.LoanBalls); countStarted = false; acc = 0; stats.countDone = null;
@@ -62,7 +72,7 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects, onReca
         if (e.type === 'cup' || e.type === 'lost') {presenter.update(0);effectsBridge.sync();flushRecall();}
         if (['cup', 'lost', 'stuck_nudge', 'overflow', 'reserve_return', 'tray_lost', 'count_done', 'launch', 'returned'].includes(e.type)) log?.write('physics', e, ctrl.game);
       }
-      if (!jpHold) shownPrize = ctrl.game.prize;
+      if (!jpHold) shownPrize = litPrize();
       const L = pa.ledger();
       // 未受領の配当と飛行中の1球も追跡。Result中は数えた玉を含める。
       const physical = L.dish + L.tunnel + L.queue + L.overflow + L.stock + L.travel + L.shuttle + L.counted;
@@ -76,6 +86,6 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects, onReca
     return { physicsMs, steps };
   }
   const awardToTray = (count, opts = {}) => jpHold && opts.origin !== 'jp_reveal' ? 0 : presenter.awardToTray(count, opts);
-  const setJpHold = on => { jpHold=!!on; if(on) presenter.setAwardHold(true,14); else shownPrize=ctrl.game.prize; };
+  const setJpHold = on => { jpHold=!!on; if(on) presenter.setAwardHold(true,14); else shownPrize=litPrize(); };
   return { stats, advance, setJpHold, getPrize: () => shownPrize, get jpHold() {return jpHold;}, effects: effectsBridge.bus, effectsBridge, awardToTray, releaseAwards: (o) => jpHold ? 0 : presenter.releaseAwards(o), setAwardHold: (on, maxHold) => presenter.setAwardHold(on, maxHold), trayStatus: () => presenter.trayStatus() };
 }

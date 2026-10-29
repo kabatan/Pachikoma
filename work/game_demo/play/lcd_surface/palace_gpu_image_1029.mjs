@@ -1,5 +1,6 @@
 // Native palace image backend; model/events/video playback stay with the caller.
 import {createPalaceGpuProducer,PANEL,withRendererState} from './palace_gpu_producer_1029.mjs';
+import {createPalaceBoundaryImage} from './palace_boundary_1030.mjs';
 import {createContinuousRyuguBg} from './palace_gpu_fallback_1029.mjs';
 
 // Pure boundary cache: at most one read attempt per immutable producer revision.
@@ -14,12 +15,13 @@ export function createBoundaryCache({read,fallback}){
 export async function createPalaceGpuImage({THREE,renderer,background,base,center,drawWarm=true}){
  const images=[];
  const load=async path=>{const r=await fetch(new URL(path,base));if(!r.ok)throw Error('Palace atlas HTTP '+r.status);const im=await createImageBitmap(await r.blob(),{premultiplyAlpha:'none',colorSpaceConversion:'none'});images.push(im);return im;};
- let producer,legacy=null,disposed=false,failed=false,legacyMode=false,manual=false,lastInput=null,flash={alpha:0,color:'#fff'},hud=null,hudTexture=null;
+ let palaceBoundary=null,producer,legacy=null,disposed=false,failed=false,legacyMode=false,manual=false,lastInput=null,flash={alpha:0,color:'#fff'},hud=null,hudTexture=null;
  let rawPanel=null,rawCtx=null,rawVisible=null,rawVisibleCtx=null;
  const stats={producerCalls:0,heldFrames:0,composites:0,boundaryMaterializations:0,legacyCalls:0,legacyCreates:0,legacyInitMs:0,legacyInitMaxMs:0,legacyDrawMs:0,legacyDrawMaxMs:0,boundaryReadMs:0,boundaryReadMaxMs:0,failures:[],boundaryReadbackMaySynchronize:true};
  try{
   const centerImages=center?{F:await load(center.F),T:await load(center.T),meta:center.meta}:null;
   producer=createPalaceGpuProducer({THREE,renderer,centerImages});
+  palaceBoundary=new URLSearchParams(globalThis.location?.search??'').get('palacebridge')!=='0'?createPalaceBoundaryImage({THREE,renderer,palaceSurface:producer.surface}):null;
   const output=new THREE.WebGLRenderTarget(PANEL.width,PANEL.height,{format:THREE.RGBAFormat,type:THREE.UnsignedByteType,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,generateMipmaps:false,depthBuffer:false,stencilBuffer:false,samples:0,colorSpace:THREE.NoColorSpace});
   output.texture.generateMipmaps=false;output.texture.flipY=false;output.texture.name='palace-lifecycle-flash-hud';
   const dummy=new THREE.DataTexture(new Uint8Array([0,0,0,0]),1,1,THREE.RGBAFormat);dummy.needsUpdate=true;
@@ -45,6 +47,7 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
   },fallback(error,reason){failed=true;stats.failures.push({reason,message:String(error?.message??error)});return fillFromLegacy();}});
   const sentinel={width:PANEL.w,height:PANEL.h,readyState:4,gpuPalaceImage:null};
   const api={
+   palaceBoundary,get boundaryAvailable(){return !!palaceBoundary&&!failed&&!legacyMode&&producer.surface.revision>0;},
    render(input){if(disposed)throw Error('Palace live image disposed');lastInput={...input};
     if(failed||legacyMode)return fallbackImage();
     try{const revision=producer.surface.revision;const rendered=producer.render({background,...input,sourceFrameKeys:manual?{background:background.currentTime,current:input.current?.currentTime,previous:input.previous?.currentTime}:undefined});
@@ -70,6 +73,7 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
    },
    rawCanvas(reason='raw-capture'){return legacy?.canvas??(failed||legacyMode?fallbackImage():this.materializeTo({reason}));},
    warm(){
+    palaceBoundary?.warm();
     if(!drawWarm){try{return producer.warm(background,{draw:false});}catch(error){failed=true;stats.failures.push({reason:'warm',message:String(error?.message??error)});return {kind:'legacy-image-fallback-on-first-frame',error:String(error?.message??error)};}}
     if(disposed)throw Error('Palace warm disposed');if(lastInput||producer.surface.revision!==0||stats.producerCalls||stats.composites||legacy)throw Error('Palace image draw warm is boot-only');
     const saved={raw:uniforms.raw.value,hud:uniforms.hud.value,hudOn:uniforms.hudOn.value,flashA:uniforms.flashA.value,flashRGB:uniforms.flashRGB.value,flashCopy:uniforms.flashRGB.value.clone()};let temporary=null,composeAttempted=false;
@@ -85,9 +89,9 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
      finally{uniforms.raw.value=saved.raw;uniforms.hud.value=saved.hud;uniforms.hudOn.value=saved.hudOn;uniforms.flashA.value=saved.flashA;uniforms.flashRGB.value=saved.flashRGB;saved.flashRGB.copy(saved.flashCopy);temporary?.dispose();}
     }
    },
-   diagnostics(){return {...stats,failures:stats.failures.map(f=>({...f,...(f.video?{video:{...f.video}}:{})})),failed,legacyMode,manual,boundary:boundary.stats(),producer:producer.diagnostics(),extraContexts:legacy?1:0};},
-   dispose(){if(disposed)return;disposed=true;producer.dispose();legacy?.dispose();output.dispose();material.dispose();geometry.dispose();dummy.dispose();hudTexture?.dispose();for(const image of images)image.close();images.length=0;boundary.clear();rawPanel=rawVisible=null;}
+   diagnostics(){return {...stats,failures:stats.failures.map(f=>({...f,...(f.video?{video:{...f.video}}:{})})),failed,legacyMode,manual,boundary:boundary.stats(),producer:producer.diagnostics(),palaceBoundary:palaceBoundary?.diagnostics()??null,extraContexts:legacy?1:0};},
+   dispose(){if(disposed)return;disposed=true;palaceBoundary?.dispose();producer.dispose();legacy?.dispose();output.dispose();material.dispose();geometry.dispose();dummy.dispose();hudTexture?.dispose();for(const image of images)image.close();images.length=0;boundary.clear();rawPanel=rawVisible=null;}
   };
   sentinel.gpuPalaceImage=api;return api;
- }catch(error){producer?.dispose();for(const image of images)image.close();throw error;}
+ }catch(error){palaceBoundary?.dispose();producer?.dispose();for(const image of images)image.close();throw error;}
 }

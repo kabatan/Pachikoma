@@ -47,9 +47,10 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
   // 次の景品までの実数(結果画面・計数の「あと○玉でA賞」用)。景品は規則の判定(g.prize)に従う:
   // R3 は持ち玉でなく JP の合計(継続の積み増しを含む)で決まる。Gの規則(medal_rules_g)は合計500玉でS賞
   const nextRank = g => {
-    const rules = g.rules, th = rules.PrizeThresholds, score = rules.R3Enabled ? g.jackpotEarnings : g.wallet;
+    const rules = g.rules, th = rules.PrizeThresholds, score = g.prizeScore ?? (rules.R3Enabled ? g.jackpotEarnings : g.wallet);   // H(PrizeBasis:'wallet')の prizeScore は終了時の持ち玉
     const rank = Math.max(0, rules.PrizeNames.indexOf(g.prize)), last = th.length - 1;   // Gの規則は合計500玉でS賞。リザルト画面(final_result_state)と同じ賞・次の賞にそろえる(10/29)
-    return rank + 1 <= last ? { rankIndex: rank, score, next_rank: rank + 1, to_next: th[rank + 1] - score, next_threshold: th[rank + 1] } : { rankIndex: rank, score, next_rank: null, to_next: 0, next_threshold: null };
+    const basis = rules.PrizeBasis === 'wallet' ? { basis: 'wallet' } : {};   // H: 賞は終了時の持ち玉で決まる(液晶の文言が「JPの合計」でなく「持ち玉」になる)。G には付かない
+    return rank + 1 <= last ? { rankIndex: rank, score, ...basis, next_rank: rank + 1, to_next: th[rank + 1] - score, next_threshold: th[rank + 1] } : { rankIndex: rank, score, ...basis, next_rank: null, to_next: 0, next_threshold: null };
   };
   const send = (id, data = {}, category) => {
     const first = category ? !seen.has(category) : false;

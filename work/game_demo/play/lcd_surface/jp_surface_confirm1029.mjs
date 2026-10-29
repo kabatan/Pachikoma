@@ -318,6 +318,17 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
       const layers=[layer(visible,1)];if(previous?.v.readyState>=2)layers.push(layer(previous,1-fade));
       return {owner:'jp-plain',generation:model.serial,serial:model.serial,manual,layers};
     },
+    // The returned image, rather than the requested scene, decides the image path.
+    // This contract never materializes palace.canvas or advances a media clock.
+    palaceBoundarySnapshot(video){
+      const scene=man.scenes[model.name],old=man.scenes[previous?.name],w=model.where();
+      if(!palace.imageBackend?.boundaryAvailable||!model.active||!scene||scene.layered||scene.offer||digits)return null;
+      if(video?.gpuPalaceImage===palace.imageBackend)return {kind:'palace',dim:!!w?.dim,flash:w?.flash,flashColor:w?.flashColor};
+      // The injected rawCanvas has no video readyState, so the existing CPU
+      // path omits its inner overlay. Keep that displayed result unchanged.
+      if(video===visible?.v&&visible?.ready&&video.videoWidth===1152&&video.videoHeight===1268&&(sResult()||previous?.ready&&old?.layered))return {kind:'video',video,manual,innerAlpha:0,dim:!!w?.dim,flash:w?.flash,flashColor:w?.flashColor};
+      return null;
+    },
     get layered(){return !!man.scenes[model.name]?.layered;},get palace(){return palace;},
     // Light script follows the decoded image actually being presented, even while the next clip loads.
     get lightingCurrent(){return model.active&&model.delay<=0&&visible?.ready?{name:visible.name,time:visible.v.currentTime}:null;},

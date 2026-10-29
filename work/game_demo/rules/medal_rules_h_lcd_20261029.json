@@ -95,10 +95,10 @@
   ],
   "PrizeThresholds": [
     0,
-    40,
-    80,
-    160,
-    500
+    45,
+    85,
+    150,
+    400
   ],
   "PrizeNames": [
     "参加賞",
@@ -184,6 +184,7 @@
       "HighLampDuplicateProtectionCount": 3
     }
   ],
+  "PrizeBasis": "wallet",
   "JpMeterByLane": {
     "1": {
       "Seconds": 14,

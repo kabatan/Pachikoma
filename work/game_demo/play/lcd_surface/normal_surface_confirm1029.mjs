@@ -37,13 +37,15 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const choiceBridgeStats={captures:0,releases:0,cpuFallbacks:0,failures:[]};
   const releaseChoiceBridge=()=>{if(!choiceBridge)return;const old=choiceBridge;choiceBridge=null;try{old.lease.release();choiceBridgeStats.releases++;}catch(error){choiceBridgeStats.failures.push(String(error?.message??error));}};
   const bridgeLeaseValid=lease=>{try{return !!(lease?.live&&lease.width===1240&&lease.height===1510&&lease.texture&&typeof lease.release==='function');}catch{return false;}};
-  let gpuFrame=null,resultHistory=null,fullPrevious=null;
+  let gpuFrame=null,resultHistory=null,fullPrevious=null,palaceBoundary=null;
+  const palaceFrame=()=>({owner:'palace-boundary',backend:palaceBoundary,get published(){return palaceBoundary.published;},set published(v){palaceBoundary.published=v;}});
   if(fullPanelPrevious){fullPanelPrevious.warmup({sourceCanvas:canvas});fullPrevious=createFullPanelPreviousOwner({manager:fullPanelPrevious,ctx,previous,blocked:()=>!!(surfaceOwner?.choiceV20?.active||surfaceOwner?.choiceV20?.holding||choiceBridge||resultHistory?.active)});}
-  const materializeGpu=(reason,force=false)=>{if(!gpuFrame)return false;const dest=gpuFrame.published||force?ctx:null;if(resultHistory?.active&&gpuFrame.backend===videoBackend){if(!resultHistory.fallback(reason,{panelCtx:dest,heldCtx:hold,includeBridge:true}))return false;}else{gpuFrame.backend.materializeTo({panelCtx:dest,heldCtx:hold,reason});resultHistory?.clearPublished();}gpuFrame=null;return true;};
+  const materializeGpu=(reason,force=false)=>{if(!gpuFrame)return false;const dest=gpuFrame.published||force?ctx:null;if(resultHistory?.active&&gpuFrame.backend===videoBackend){if(!resultHistory.fallback(reason,{panelCtx:dest,heldCtx:hold,includeBridge:true}))return false;}else{gpuFrame.backend.materializeTo({panelCtx:dest,heldCtx:hold,previousCtx:previous,reason});if(gpuFrame.backend===palaceBoundary)palaceBoundary.abandon();resultHistory?.clearPublished();}gpuFrame=null;return true;};
   const bridge=()=>{
     const external=fullPrevious?.begin();if(external==='gpu'){gpuFrame=null;invalidateResult();fadeLeft=.12;return;}if(external==='cpu'){gpuFrame=null;releaseChoiceBridge();invalidateResult();previous.drawImage(canvas,0,0);fadeLeft=.12;return;}
     const route=resultHistory?.begin({blocked:!!(surfaceOwner?.choiceV20?.active||surfaceOwner?.choiceV20?.holding||choiceBridge)});
     if(route==='gpu'){gpuFrame=null;invalidateResult();fadeLeft=.12;return;}if(route==='cpu')gpuFrame=null;
+    if(palaceBoundary&&jp?.active&&!jp.layered&&!choiceWrites(surfaceOwner)&&gpuFrame&&(gpuFrame.backend===jp.palace.imageBackend||gpuFrame.backend===palaceBoundary)&&palaceBoundary.begin(gpuFrame.backend)){gpuFrame=null;invalidateResult();fadeLeft=.12;return;}
     if(gpuChoiceHold(surfaceOwner)||choiceBridge&&typeof surfaceOwner?.choiceV20?.captureGpuBridgeLease==='function'&&typeof surfaceOwner.choiceV20.materializeGpuBridgeFallback==='function'){
       let lease=null;try{lease=surfaceOwner.choiceV20.captureGpuBridgeLease();}catch(error){choiceBridgeStats.failures.push(String(error?.message??error));}
       if(bridgeLeaseValid(lease)){
@@ -59,6 +61,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   };
   const blend=dt=>{if(fadeLeft<=0)return;fadeLeft=Math.max(0,fadeLeft-dt);
     if(fullPrevious?.blend(fadeLeft/.12))return;
+    if(palaceBoundary?.setAlpha(fadeLeft/.12))return;
     if(choiceBridge){choiceBridge.alpha=fadeLeft/.12;if(fadeLeft<=0)releaseChoiceBridge();return;}
     ctx.globalAlpha=fadeLeft/.12;ctx.drawImage(transition,0,0);ctx.globalAlpha=1;
   };
@@ -77,11 +80,11 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   }catch(error){try{videoBackend?.dispose?.();}catch{}videoBackend=null;videoStats.mode='factory-fallback';videoStats.failures.push(String(error?.message??error));}
   const publishVideo=(snapshot,w=null,bridgeDt=0)=>{
     if(!videoBackend||videoFailed||!snapshot||!resultHistory?.active&&(!snapshot.layers.length||snapshot.layers[0].alpha!==1)||snapshot.layers.some(l=>!l.drawable||l.video.videoWidth!==W||l.video.videoHeight!==H))return false;
-    if(gpuFrame&&gpuFrame.backend!==videoBackend)materializeGpu('video-owner-entry');
+    if(gpuFrame&&gpuFrame.backend!==videoBackend&&gpuFrame.backend!==palaceBoundary)materializeGpu('video-owner-entry');
     try{
       const output=videoBackend.render(snapshot);
       if(!output){videoStats.fallbacks++;const d=videoBackend.diagnostics?.();if(d?.failed){videoFailed=true;videoStats.mode='render-fallback';videoStats.failures.push(String(d.reason??'GPU video image failed'));}return false;}
-      videoBackend.setFlash(w?.flash,w?.flashColor);if(choiceBridge)blend(bridgeDt);gpuFrame={backend:videoBackend,published:false,owner:snapshot.owner};videoStats.frames++;return true;
+      videoBackend.setFlash(w?.flash,w?.flashColor);if(palaceBoundary?.active){palaceBoundary.setFrame({kind:'backend',backend:videoBackend});blend(bridgeDt);gpuFrame=palaceFrame();}else{if(gpuFrame?.backend===palaceBoundary)palaceBoundary.abandon();if(choiceBridge)blend(bridgeDt);gpuFrame={backend:videoBackend,published:false,owner:snapshot.owner};}videoStats.frames++;return true;
     }catch(error){videoFailed=true;videoStats.failures.push(String(error?.message??error));videoStats.mode='render-fallback';return false;}
   };
   if(resultBoundaryGpu&&videoBackend?.seedResultHistory&&videoBackend?.materializeHistoryTo)resultHistory=createResultHistoryOwner({manager:resultBoundaryGpu,backend:videoBackend,ctx,hold,previous});
@@ -90,6 +93,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const clips = createClipPlayer({base, files:man.files, onError:fail, record:e=>{stats.lifecycle.push(e);if(stats.lifecycle.length>2000)stats.lifecycle.shift();}});
   const shown = {get name(){return clips.name;},get time(){return clips.time;}};
   const jp = jpManifestUrl ? await createJpSurface({manifestUrl:jpManifestUrl,palaceImageFactory,resultImageFactory,onResultBeforeReuse:next=>{if(resultHistory?.beforeReuse(next)?.cpu)gpuFrame=null;},onCue:onJpCue,getState,log:n=>stats.played.push([+clock.toFixed(3),n])}).catch(e=>{stats.errors.push('JP: '+e.message);console.warn('[jp1029]',e.message);return null;}) : null;
+  palaceBoundary=jp?.palace?.imageBackend?.palaceBoundary??null;
   if(jp){const r=getState().rules;r.FirstJackpotEffectSeconds=Object.fromEntries(jp.man.digits.map(d=>[d,r.JackpotAwards.map(p=>jpEffectSeconds(jp.man,p))]));
     // 継続成功の演出時間: 着地+継続成功v4+配当の通しの長さ(初回JPと同様に映像へ合わせる)。映像が無い場合は規則の既定のまま。
     const chainSeconds=r.JackpotAwards.map(p=>chainEffectSeconds(jp.man,p));if(chainSeconds.every(Number.isFinite))r.JackpotEffectSeconds=chainSeconds;}
@@ -161,8 +165,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       case 'fail': card('また挑戦しよう！', [p.chain ? `最初の ${p.base ?? 0}玉 は残ります` : 'ランプを集めて もう一度！'], '#c5d9ff', p.chainLost > 0 ? `積み増し −${p.chainLost}玉` : null); break;
       case 'timeup': card('時間です', ['追加で ＋22秒・10玉', '追加しないと 計数へ進みます'], '#ffccac'); break;
       case 'add100': card('まだまだ！', ['続きを楽しもう！'], '#ffdb92', `＋${p.seconds ?? 22}秒`); break;
-      case 'finish_count': card('計数中', [`JPの合計 ${p.score ?? s.score ?? 0}玉`], '#b8e8ff', `${p.total ?? p.balls ?? s.balls}玉`); break;
-      case 'result': card(s.prize || ['参加賞','C賞','B賞','A賞','S賞'][p.rankIndex ?? p.rank ?? 0], ['ありがとうございました！'], '#ffe198', `JP合計 ${p.score ?? s.score ?? 0}玉`); break;
+      case 'finish_count': card('計数中', [p.basis === 'wallet' ? '持ち玉の数で賞が決まります' : `JPの合計 ${p.score ?? s.score ?? 0}玉`], '#b8e8ff', `${p.total ?? p.balls ?? s.balls}玉`); break;
+      case 'result': card(s.prize || ['参加賞','C賞','B賞','A賞','S賞'][p.rankIndex ?? p.rank ?? 0], ['ありがとうございました！'], '#ffe198', p.basis === 'wallet' ? `持ち玉 ${p.balls ?? p.score ?? s.score ?? 0}玉` : `JP合計 ${p.score ?? s.score ?? 0}玉`); break;
       case 'reset_fallback': card('重複！', ['ランプが消えた… もう一度！'], '#ffb0ba'); break;
     }
   }
@@ -248,7 +252,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     async prepare(dt) { if(jp?.active){await jp.prepare(dt);return;} await clips.prepare(dt); },
     frame(dt, F) {
       const t0 = performance.now(); clock += dt;stableResult=false;
-      if(choiceWrites(this)){paintedResult=null;resultHistory?.clearPublished();}
+      if(choiceWrites(this)){paintedResult=null;resultHistory?.clearPublished();if(gpuFrame?.backend===palaceBoundary)materializeGpu('palace-choice-owner');}
       const s = getState();
       if (jp?.claimed) {
         if(fullPrevious?.active){fullPrevious.fallback('final-previous-jp-owner');gpuFrame=null;}
@@ -258,20 +262,26 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
         if(!jp.active&&lastJpSerial>=0){bridge();lastJpSerial=-1;}
         // 映像の最初のコマがまだ読めていない間は、前の映像の最後(失敗の灰色＋扉など)を出さず、通常の画面のままにする。
         if (jp.active && (jpOwns || v?.readyState>=2)) {
-          if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered){fadeLeft=0;fullPrevious?.abandon();releaseChoiceBridge();}if(resultHistory?.active){resultHistory.fallback('jp-serial-bridge',{includeBridge:false});gpuFrame=null;}
+          if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered){fadeLeft=0;fullPrevious?.abandon();releaseChoiceBridge();if(palaceBoundary?.ownsFrame){if(gpuFrame?.backend===palaceBoundary)gpuFrame=null;palaceBoundary.abandon();}}if(resultHistory?.active){resultHistory.fallback('jp-serial-bridge',{includeBridge:false});gpuFrame=null;}
           if(!jpOwns){clips.suspend();jpOwns=true;}
           if(v?.gpuPalaceImage&&jp.layered&&!choiceWrites(this)){
             const w=jp.where(),backend=v.gpuPalaceImage;if(gpuFrame?.backend!==backend)materializeGpu('gpu-owner-change');backend.setFlash(w?.flash,w?.flashColor);
             gpuFrame={backend,published:false};stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
           }
+          const palaceImage=!choiceWrites(this)?jp.palaceBoundarySnapshot?.(v):null;
+          if(palaceImage&&palaceBoundary&&(fadeLeft<=0||palaceBoundary.active)){
+            if(gpuFrame&&gpuFrame.backend!==palaceBoundary&&gpuFrame.backend!==jp.palace.imageBackend)materializeGpu('palace-boundary-entry');
+            palaceBoundary.setFrame(palaceImage);blend(dt);gpuFrame=palaceFrame();finishFrame(t0);return;
+          }
           const resultBackend=v?.gpuResultImage,rw=resultBackend?jp.where():null;
           // Preserve the existing 2D dim/fade/choice ownership at unsafe seams.
-          if(resultBackend&&(fadeLeft<=0||choiceBridge)&&!rw?.dim&&!jp.transition&&!choiceWrites(this)){
-            if(gpuFrame?.backend!==resultBackend)materializeGpu('gpu-owner-change');
+          if(resultBackend&&(fadeLeft<=0||choiceBridge||palaceBoundary?.active)&&!rw?.dim&&!jp.transition&&!choiceWrites(this)){
+            if(palaceBoundary?.active){resultBackend.setFlash(rw?.flash,rw?.flashColor);palaceBoundary.setFrame({kind:'backend',backend:resultBackend});blend(dt);gpuFrame=palaceFrame();finishFrame(t0);return;}
+            if(gpuFrame?.backend===palaceBoundary){palaceBoundary.abandon();gpuFrame=null;}else if(gpuFrame?.backend!==resultBackend)materializeGpu('gpu-owner-change');
             resultBackend.setFlash(rw?.flash,rw?.flashColor);if(choiceBridge)blend(dt);
             gpuFrame=resultHistory?resultHistory.resultFrame(resultBackend):{backend:resultBackend,published:false};stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
           }
-          if(videoBackend&&(fadeLeft<=0||choiceBridge)&&!choiceWrites(this)){
+          if(videoBackend&&(fadeLeft<=0||choiceBridge||palaceBoundary?.active)&&!choiceWrites(this)){
             const image=jp.plainVideoSnapshot?.(v);
             if(publishVideo(image,jp.where(),dt)){finishFrame(t0);return;}
           }
@@ -339,6 +349,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
           ring: Array.from({length:4}, () => [0,0,0]), zone: Array.from({length:8}, () => col.map(v => v*.2)) };
       }
     },
+    palaceBoundaryDiagnostics(){return palaceBoundary?.diagnostics()??{enabled:false};},
     resultBoundaryDiagnostics(){return {...(resultHistory?.diagnostics()??{enabled:false}),pool:resultBoundaryGpu?.diagnostics?.()??null};},
     videoImageDiagnostics(){return {...videoStats,failures:[...videoStats.failures],backend:videoBackend?.diagnostics?.()??null};},
     diagnostics() { return clips.diagnostics().concat(jp?.diagnostics()??[]); },

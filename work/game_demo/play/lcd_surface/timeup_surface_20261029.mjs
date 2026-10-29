@@ -20,7 +20,7 @@ export async function attachTimeupSurface(lcd,{controller,canvas,onInput,unlock,
   for(const c of [first,held]){c.width=W;c.height=H;c.getContext('2d').drawImage(v,0,0,W,H);}
   const heldCtx=held.getContext('2d');
   // 左の札の TOTAL: 映像の流れる桁は、桁なしの板で隠し、いまの JP 合計(確定済み＋積み増し)を重ねる
-  const totalOv=await createTimeupTotal({ctx,PX,PY,getValues:()=>{const g=controller.game;return {total:(g.jackpotEarnings??0)+(g.chainStatus?.pendingAward??0)};}});
+  const totalOv=await createTimeupTotal({ctx,PX,PY,getValues:()=>{const g=controller.game;return {total:g.rules?.PrizeBasis==='wallet'?g.prizeScore:(g.jackpotEarnings??0)+(g.chainStatus?.pendingAward??0)};}});   // H(wallet)は持ち玉＋積み増し
   let plateIdx=0;
   const staffClear=new Image();staffClear.src=new URL('staff_clock_clear.png',manifestUrl).href;await staffClear.decode();
   // Local runtime override: retain source configs and all other tuning.

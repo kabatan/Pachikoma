@@ -12,7 +12,7 @@ export function attachCreditPanel({parent,ctrl,overlay,onInput}){
  left.addEventListener('click',onLeft);right.addEventListener('click',onRight);
  const key=e=>{if(e.code!=='KeyS'||e.repeat||ctrl.phase!=='StaffWait')return;e.preventDefault();input('staffActivate','staff-keyboard');};window.addEventListener('keydown',key);
  function render(){
-  const g=ctrl.game,waiting=g.phase==='StaffWait';panel.hidden=!waiting&&g.phase!=='Continue';
+  const g=ctrl.game,waiting=g.phase==='StaffWait';panel.hidden=(!waiting&&g.phase!=='Continue')||panel.dataset.lcd==='1';   // 液晶の追加画面が出る経路では箱を出さない
   title.textContent=waiting?'100円チケットをスタッフに渡してください':`つづけますか？ あと${Math.ceil(g.offerLeft)}秒`;
   detail.textContent=waiting?'スタッフの確認後に再開します（スタッフ：左右ボタン同時に長押し／Sキー）':'追加100円で＋22秒・＋10玉。今の続きから遊べます。';
   right.hidden=waiting;left.textContent=waiting?'左：取り消して終了':'左：終了する';

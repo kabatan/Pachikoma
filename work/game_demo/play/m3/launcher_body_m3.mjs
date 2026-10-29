@@ -8,11 +8,13 @@
 //  ・状態：hasBall=true で L（爪が球をつかむ）。true→false の瞬間（撃った）に R1（0.05 秒、首が縮む・LED が光る）→ R2（0.06 秒）→ E（空）。
 //  opts.getLamp()：{ color, alpha } を返すと、レンズ（絵の上の桃の窓）にその色を重ねる（10/29 打てる/打てないの表示。play/launch_lamp_20261029.mjs。null か alpha 0 で何も重ねない）。
 // ?nolauncher で無効（play.mjs 側のまま）。物理と凍結の静止像は変えない。
-const STATES = ['L', 'E', 'R1', 'R2'], LIGHTS = ['0', '4'];
+const STATES_OLD = ['L', 'E', 'R1', 'R2'], STATES_ANIM = ['A0', 'A1', 'A2', 'A3', 'R1', 'R2'], LIGHTS = ['0', '4'];   // ANIM：爪の開き 0・.35・.7・1、R1・R2 は反動（10/30 射出アニメ。球は絵に入れずゲームの 3D の球）
 const T_R1 = 0.05, T_R2 = 0.06;
 export function createLauncherBody({ stage, canvas, camera, xRange }, opts = {}) {
   const W = canvas.width, H = canvas.height;   // 1440×2560（canvas 内部座標）
-  const base = opts.assetBase ?? new URL('../../../upa_frame3d/m3/integration/launcher_sprites/', import.meta.url).href;
+  // opts.getPose()：射出アニメ（play/launcher_motion_1030.mjs）の爪の絵の名前。渡されたときだけ、球なしの絵（launcher_sprites_anim1）を使う
+  const ANIM = typeof opts.getPose === 'function', STATES = ANIM ? STATES_ANIM : STATES_OLD;
+  const base = opts.assetBase ?? new URL(ANIM ? '../../../upa_frame3d/m3/integration/launcher_sprites_anim1/' : '../../../upa_frame3d/m3/integration/launcher_sprites/', import.meta.url).href;
   const el = document.createElement('div');
   el.dataset.launcher = 'm3';
   el.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden';
@@ -99,7 +101,7 @@ export function createLauncherBody({ stage, canvas, camera, xRange }, opts = {})
       if (had === true && !has) tFire = now;
       had = has;
       const dt = tFire < 0 ? 1e9 : now - tFire;
-      const s = has ? 'L' : dt < T_R1 ? 'R1' : dt < T_R1 + T_R2 ? 'R2' : 'E';
+      const s = ANIM ? opts.getPose() : has ? 'L' : dt < T_R1 ? 'R1' : dt < T_R1 + T_R2 ? 'R2' : 'E';
       const [x, y, z] = shuttle.position_m, [cx, cy] = proj(x, y, z);
       readLight(cx, cy);
       // 近い 2 枚：下に a を不透明で、上に b を t で重ねる

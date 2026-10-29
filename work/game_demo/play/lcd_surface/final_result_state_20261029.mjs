@@ -14,7 +14,7 @@ export function resultMeterSteps(thresholds){
  return marks.map(m=>Object.freeze({...m,scale:m.width/420}));
 }
 export function finalResultState(game,daily){
- const rules=game.rules,thresholds=rules.PrizeThresholds.slice(),names=rules.PrizeNames.slice(),value=finiteInt(game.jackpotEarnings);
+ const rules=game.rules,thresholds=rules.PrizeThresholds.slice(),names=rules.PrizeNames.slice(),value=finiteInt(game.prizeScore??game.jackpotEarnings);   // H(PrizeBasis:'wallet')は終了時の持ち玉。G／H(earnings)は prizeScore が無いか JPで得た玉と同じ
  let rankIndex=Math.max(0,names.indexOf(game.prize));
  // 賞はゲーム側(game.prize)が決めた値をそのまま使う。Gの規則では合計が500玉でS賞(計数カード・resultイベントと同じ)。
  // 以前はここで「夢JP(500玉のJP確定)なしはAまで」に抑えていたため、計数カードのS賞とリザルトのA賞が食い違った(10/29 監督指摘)。

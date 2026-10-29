@@ -175,6 +175,7 @@ if (!q.has('nofx')) {
   if(M3 && lcd?.production && q.get('cabinetlights')!=='off') await (await import('../../effects/cabinet_light_script/cabinet_light_script_20261029.mjs')).attachCabinetLightScript(lcd,{getLamps:()=>ctrl.game.lamps,getState:()=>{const g=ctrl.game,p=g.phase;lightState.secondsLeft=g.secondsLeft;lightState.playing=p==='Ready'||p==='Flight'||p==='Effect'||p==='Meter'||p==='Roulette';return lightState;}});
   if(lcd?.production) (await import('./lcd_surface/timer_display_20261029.mjs')).attachTimerDisplay(lcd,{getState:()=>({phase:ctrl.game.phase,secondsLeft:ctrl.game.secondsLeft,offerLeft:ctrl.game.offerLeft,howto:!!ctrl.howto})});
   if(lcd?.production) await (await import('./lcd_surface/timeup_surface_20261029.mjs')).attachTimeupSurface(lcd,{controller:ctrl,canvas:document.getElementById('c'),onInput:app.onInput,unlock:()=>app.audio.unlock()});
+  if(lcd?.timeupSurface)document.getElementById('g-credit-panel')?.setAttribute('data-lcd','1');   // 液晶が追加画面を出すのでHTMLの箱は隠す
   // 新しいJP尺の音も起動時に作り、着地のフレームで長い音声バッファを生成しない。
   if(lcd?.jp && r2Audio){
     const {winPlan,createWinSound}=await import('../../audio/runtime/win_sound.mjs');const engine=r2Audio.engine;
@@ -199,11 +200,12 @@ if (M3 && fxApi && !q.has('pack') && !q.has('fxjs') && q.get('prebake') !== '0')
 if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi, rules: app.rules });
 window.__r2Audio = r2Audio;
 const stats = runtime.stats;
-const launcherArgs = M3 ? [(await import('./m3/launcher_body_m3.mjs')).createLauncherBody, { now: () => m3Clock, getLight: () => m3.state.k4, getLamp: () => launchLamp?.view }] : [createLauncherBody, {}];
+const launchMotion = M3 && q.get('launchanim') === '1' && !q.has('nolauncher') && !pa.isWorkerProxy ? (await import('./launcher_motion_1030.mjs')).createLauncherMotion({ getShots: () => pa.shots }) : null;   // 射出の見え方（球を落とす・爪が開閉・待ち球）。見た目だけ。?launchanim=0 で従来
+const launcherArgs = M3 ? [(await import('./m3/launcher_body_m3.mjs')).createLauncherBody, { now: () => m3Clock, getLight: () => m3.state.k4, getLamp: () => launchLamp?.view, ...(launchMotion ? { getPose: () => launchMotion.pose } : {}) }] : [createLauncherBody, {}];
 const launcherBody = q.has('nolauncher') ? null : launcherArgs[0]({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) }, launcherArgs[1]);   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
   cabinet.tick(performance.now()); ledStrip.update(performance.now());
-  const s = pa.snapshot(); setAssemblyBalls(s); if (fxApi) fxApi.ballLights(s);   // 勝負中の玉をピンポイントで照らす(演出側)
+  const s = pa.snapshot(); setAssemblyBalls(launchMotion ? launchMotion.update(s).snapshot : s); if (fxApi) fxApi.ballLights(s);   // 勝負中の玉をピンポイントで照らす(演出側)
   const lf = pack.lighting.frame(presenter.lightingInputs(), pa.tick); if (fxApi) { try { fxApi.applyLights(lf); } catch (e) { if (!window.__lightError) { window.__lightError = e.message; console.error('[lights]', e); } } }   // 演出の光(花びら・縁)が最終の書き手。範囲外などの異常は、その場の光だけ飛ばして遊技を止めない
   hr.setLightingFrame(lf);
   m3?.update(m3Clock); launchLamp?.update();

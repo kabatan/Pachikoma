@@ -6,6 +6,7 @@
 //   5. 重複（光った穴への再入）は時間で変える（序盤は消えやすく、終盤は消えにくく）
 //   6. 時計は連打中も止めない（既定。ClockStopOnMeter / ClockStopOnRoulette で変えられる）
 //   7. （10/29 夜・候補3の統合）穴ごとのJP秒数／しきい値、当たり穴の組ごとの継続しきい値、時計0の継続は100円の追加、重複の6灯目ガセ・JP後の割合補正
+//   8. （10/30 監督決定）賞は「終了時の持ち玉（wallet）」で決める（PrizeBasis:'wallet'）。JPで得た玉・500配当の確保（DreamHit）では決めない。
 // G は消さず、上書きもしない。物理（球の動き）・盤面・釘には触らない。詳細は work/game_tuning/H_1029/RULES_H.md・BALANCE.md §13。
 import {MedalRules as GRules, MedalGame as GGame, MedalPhase, MedalEvent} from './medal_rules_g_20261028.mjs';
 export {makeRng, MedalPhase, MedalEvent, loanSeconds, winSeconds, JACKPOT_SECONDS} from './medal_rules_g_20261028.mjs';
@@ -59,6 +60,8 @@ export class MedalRules extends GRules {
     this.DuplicateRestartScaleAfterJp = o.DuplicateRestartScaleAfterJp ?? 1;   // JPチャンスが一度あった後は、重複区間とガセの判定に使う経過割合をこの倍にする（1で無効）
     // --- 時計0の継続（候補3） ---
     this.ChainContinueNeedsAddAtZero = o.ChainContinueNeedsAddAtZero ?? false; // true: 配当後に残り0以下なら、継続の選択は「100円追加で継続」のみ。追加で時間・玉が入り、そのまま継続の連打へ。払わなければ確定
+    // --- 賞の判定（10/30）。'wallet': 終了（精算）の瞬間の持ち玉 wallet だけで決める。'earnings': 従来（JPで得た玉 jackpotEarnings、500配当の確保でS）
+    this.PrizeBasis = o.PrizeBasis ?? 'earnings';
     this.RuleVariant = 'H_20261029';
     this._hReady = true;
     this.validate();
@@ -80,8 +83,16 @@ export class MedalRules extends GRules {
     return this.ChainThresholdByHitSet?.[k] ?? fallback;
   }
   validate() {
-    super.validate();
-    if (!this._hReady) return;   // 基底クラスの構築中に呼ばれる分は、H の項目がまだ無い
+    // G の検証は S賞の閾値=500 を求める。持ち玉で決める H では S の閾値を変えられるよう、G の検証の間だけ G の既定値に差し替える。
+    const t = this.PrizeThresholds;
+    const tOk = Array.isArray(t) && t.length === 5 && t[0] === 0 && t.every((v, i) => Number.isFinite(v) && v >= 0 && (i === 0 || v > t[i - 1]));
+    if (tOk && t[4] !== 500) {
+      this.PrizeThresholds = [0, 30, 200, 320, 500];
+      try { super.validate(); } finally { this.PrizeThresholds = t; }
+    } else super.validate();
+    if (!this._hReady) return;
+    if (!['earnings', 'wallet'].includes(this.PrizeBasis)) throw new Error('Invalid H PrizeBasis');
+    if (this.PrizeBasis === 'earnings' && this.PrizeThresholds[4] !== 500) throw new Error('H PrizeBasis=earnings requires S threshold 500');   // 基底クラスの構築中に呼ばれる分は、H の項目がまだ無い
     const r = this;
     const posInt = (x) => Number.isInteger(x) && x >= 1;
     const w4 = (w) => Array.isArray(w) && w.length === 4 && w.every((x) => isNum(x) && x >= 0) && sum(w) === 100;
@@ -483,6 +494,18 @@ export class MedalGame extends GGame {
     const r = this.rules, targets = LANES.filter((d) => !this._lamps.has(d)), cfg = r.jpMeterFor(targets[0]);   // 残りは1穴。穴ごとの秒・しきい値
     this._startMeter('jp', { targets, threshold: cfg.Threshold, seconds: cfg.Seconds, intro: r.JpMeterIntroSeconds });
   }
+  /** 賞。PrizeBasis='wallet' なら、終了（精算）の瞬間の持ち玉 wallet（払い出し待ち・継続の積み増しの確定分を含む。飛行中の玉は無い）だけで決める。
+   *  500配当の確保（jackpotDreamHit）による S賞の上書きはしない。'earnings'（既定）は G と同じ従来の判定。 */
+  get prize() {
+    if (this.rules.PrizeBasis !== 'wallet') return super.prize;
+    const t = this.rules.PrizeThresholds; let i = 0;
+    const score = this.prizeScore;
+    for (let k = 0; k < t.length; k++) if (t[k] <= score) i = k;
+    return this.rules.PrizeNames[i];
+  }
+  /** 賞の判定に使う値（結果画面・「あと○玉」の表示用）。wallet 基準なら持ち玉（まだ確定していない継続の積み増しは、計数すると持ち玉に入るので足す。
+   *  精算(finish)後は積み増しが wallet に入り 0 になるので二重には数えない）。従来は JPで得た玉 jackpotEarnings */
+  get prizeScore() { return this.rules.PrizeBasis === 'wallet' ? this.wallet + (this.jackpotChain?.pendingAward ?? 0) : this.jackpotEarnings; }
   finish() {
     if (this.meter || this.phase === HPhase.Roulette) return false;   // 連打・ルーレットの途中では精算しない
     return super.finish();

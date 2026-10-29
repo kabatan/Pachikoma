@@ -146,9 +146,32 @@ vec3 frameLit(vec3 s0, vec3 s4, float kk, vec3 col, float rc) {
   float m = max(pos.r, max(pos.g, pos.b));
   return l2s(l0 + min(kk, 1.0) * neg + kk * mix(pos, m * col, rc));
 }
+// ロゴ（パチコマ）：文字の下の青・赤の焼き込み映り込みと、文字そのものの照らされ方（1030 ロゴ・得点板の質感）
+float logoBox(vec2 uv) { vec2 q = abs(uv * vec2(1440.0, 2560.0) - vec2(461.0, 330.0)) - vec2(340.0, 185.0); return 1.0 - smoothstep(-40.0, 0.0, max(q.x, q.y)); }
+float chroma3(vec3 c) { return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)); }
+float logoLetter(vec2 uv) {
+  if (logoBox(uv) <= 0.0) return 0.0;
+  vec2 d = vec2(4.0 / 1440.0, 4.0 / 2560.0);
+  float c = chroma3(texture(uMA, vec3(uv, 0.0)).rgb);
+  c = max(c, chroma3(texture(uMA, vec3(uv + vec2(d.x, 0.0), 0.0)).rgb)); c = max(c, chroma3(texture(uMA, vec3(uv - vec2(d.x, 0.0), 0.0)).rgb));
+  c = max(c, chroma3(texture(uMA, vec3(uv + vec2(0.0, d.y), 0.0)).rgb)); c = max(c, chroma3(texture(uMA, vec3(uv - vec2(0.0, d.y), 0.0)).rgb));
+  c = max(c, chroma3(texture(uMA, vec3(uv + d, 0.0)).rgb)); c = max(c, chroma3(texture(uMA, vec3(uv - d, 0.0)).rgb));
+  return smoothstep(0.25, 0.5, c) * logoBox(uv);
+}
+// 文字は塗り（拡散）と艶（白い映り込み）に分け、部屋の色を塗りへ薄く・艶へ強く。部屋が暗いと塗りも沈む
+vec3 logoRelight(vec3 lit, float m, float kk, vec3 col) {
+  if (m <= 0.0) return lit;
+  vec3 L = s2l(lit), cn = col / max(max(col.r, max(col.g, col.b)), 1e-4);
+  float e = min(kk, 1.0), sp = min(L.r, min(L.g, L.b));
+  vec3 dif = L - sp, spec = vec3(sp);
+  dif = dif * mix(vec3(1.0), cn, 0.38 * e) * mix(0.6, 1.0, e) + cn * lumi(dif) * 0.22 * e;
+  vec3 coloredSpec = spec * mix(vec3(1.0), cn * 1.1, 0.8 * e);
+  return mix(lit, l2s(dif + coloredSpec), m);
+}
 // 枠の光（3D 担当の色なしの素材 B4・W4、pack A の 6・7 層）：線形で F0 + k·(B4 − F0) + k·LED·色。めっきは部屋の明るさに沈み、LED の光だけが演出の色になる
 vec3 frameLitBW(vec3 s0, vec2 uv, float kk, vec3 col) {
   vec3 l0 = s2l(s0), b4 = s2l(texture(uMA, vec3(uv, 6.0)).rgb), w4 = s2l(texture(uMA, vec3(uv, 7.0)).rgb);
+  b4 = mix(b4, vec3(lumi(b4)), logoBox(uv) * (1.0 - logoLetter(uv)) * 0.9);   // 文字の下の青・赤の焼き込み映り込みは部屋の色に任せる
   vec3 dl = max(w4 - b4, 0.0); float led = max(dl.r, max(dl.g, dl.b));
   vec3 cn = col / max(max(col.r, max(col.g, col.b)), 1e-4);
   return l2s(l0 + min(kk, 1.0) * (b4 - l0) + kk * led * cn);
@@ -275,6 +298,7 @@ void main() {
         vec3 dyed = l2s(mix(s2l(f0.rgb), pattern * hue * kk, 1.0));
         lit = mix(lit, dyed, (ra.x + ra.y) / wsum);
       }
+      lit = logoRelight(lit, logoLetter(uvA), kk, col);   // ロゴの文字：部屋の色を塗りと艶に受ける
       o = mix(o, lit, f0.a);
     }
     // 得点表示板：消灯の絵 ＋ 点ける区画（線形の光）
@@ -286,11 +310,16 @@ void main() {
       for (int j = 0; j < 7; j++) { vec4 s = dec(texture(uMD, vec3(ud, float(2 + j)))); sg += s.x * uSeg[j * 4] + s.y * uSeg[j * 4 + 1] + s.z * uSeg[j * 4 + 2] + s.w * uSeg[j * 4 + 3]; }
       vec3 add = sg * ${D.scale.toFixed(2)} * uSegC;
       for (int j = 0; j < 5; j++) if (uMet[j] > 0.0) add += dec(texture(uMD, vec3(ud, float(9 + j)))).rgb * ${D.scale.toFixed(2)} * uMet[j];
-      // 得点板の絵は周りの枠まで含むので、枠の光（F0/F4）と色がずれて四角く見える。表示板の縁の内側だけを差し替える
-      vec2 dp = ud * vec2(${D.width}.0, ${D.height}.0), bc = vec2(235.0, 186.0), bh = vec2(207.0, 146.0);
-      vec2 bq = abs(dp - bc) - bh + 24.0;
-      float bd = length(max(bq, 0.0)) + min(max(bq.x, bq.y), 0.0) - 24.0;
+      // 得点板の絵は周りの枠まで含むので、枠の光（F0/F4）と色がずれて四角く見える。窓（ガラスと C/B/A/S の皿）の内側だけを差し替え、縁のめっきと周りは枠（B4/W4）に任せる
+      vec2 dp = ud * vec2(${D.width}.0, ${D.height}.0), bc = vec2(246.0, 186.0), bh = vec2(184.0, 126.0);
+      vec2 bq = abs(dp - bc) - bh + 12.0;
+      float bd = length(max(bq, 0.0)) + min(max(bq.x, bq.y), 0.0) - 12.0;
       float fade = 1.0 - smoothstep(-3.0, 1.0, bd);
+      // 窓の中：C/B/A/S の板は部屋の色を薄く受け、ガラスは部屋の色を斜めに映す
+      vec3 cnS = mix(col / max(max(col.r, max(col.g, col.b)), 1e-4), vec3(1.0), 0.25); float eS = min(kk, 1.0);
+      off = l2s(s2l(off) * mix(vec3(1.0), cnS, 0.3 * eS));
+      float gl = smoothstep(0.0, 1.0, 1.0 - ((dp.x - 62.0) / 368.0 * 0.6 + (dp.y - 60.0) / 252.0 * 0.8));
+      add += cnS * eS * (0.012 + 0.05 * gl) * (dp.y < 236.0 ? 1.0 : 0.5);
       o = mix(o, Tm(invTm(off) + add), fade);
     }
   }

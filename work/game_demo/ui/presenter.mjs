@@ -207,8 +207,8 @@ export class MedalPresenter {
     const c = this.ctrl, g = c.game, rules = g.rules, f = this.fx;
     const lamps = this.displayLamps(), mode = this.mode(), wallet = this.displayWallet();
     // 景品は規則の判定(g.prize)に従う。R3 は JP の合計で決まり、S は 500 を当てた時だけなので A の次は出さない
-    const th = rules.PrizeThresholds, score = rules.R3Enabled ? g.jackpotEarnings : g.wallet, ti = Math.max(0, rules.PrizeNames.indexOf(g.prize));
-    const next = ti + 1 <= (rules.R3Enabled ? th.length - 2 : th.length - 1) ? { name: rules.PrizeNames[ti + 1], need: th[ti + 1] - score } : null;
+    const th = rules.PrizeThresholds, score = g.prizeScore ?? (rules.R3Enabled ? g.jackpotEarnings : g.wallet), ti = Math.max(0, rules.PrizeNames.indexOf(g.prize));   // H(PrizeBasis:'wallet')は持ち玉で決まり、Sも持ち玉で届く
+    const next = ti + 1 <= (rules.R3Enabled && rules.PrizeBasis !== 'wallet' ? th.length - 2 : th.length - 1) ? { name: rules.PrizeNames[ti + 1], need: th[ti + 1] - score } : null;
     const stake = this.reveal ? rules.Awards[this.reveal.r.before.length] : (g.shot?.challenge ? g.shot.award : g.award);
     return {
       phase: g.phase, mode, secondsLeft: g.secondsLeft, secondsTotal: rules.InitialSeconds + (rules.R3Enabled ? g.extraCreditsUsed : Number(g.addedCredit)) * rules.ExtraSeconds,

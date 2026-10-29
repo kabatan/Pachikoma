@@ -73,7 +73,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
   }
   countdown=await createChoiceCountdown(lcd.canvas,()=>controller?.game.choiceLeft);
   // 左の札(確定)の TOTAL と連×N: いま確定した場合の額(確定済みの JP 合計＋積み増し)を実行時に重ねる。映像は桁なしの版。
-  total=await createChoiceTotal({ctx,PX,PY,getValues:()=>{const g=controller?.game,c=g?.chainStatus;return g?{total:(g.jackpotEarnings??0)+(c?.pendingAward??0),chain:(c?.successes??0)+1}:null;}});
+  total=await createChoiceTotal({ctx,PX,PY,getValues:()=>{const g=controller?.game,c=g?.chainStatus;return g?{total:g.rules?.PrizeBasis==='wallet'?g.prizeScore:(g.jackpotEarnings??0)+(c?.pendingAward??0),chain:(c?.successes??0)+1}:null;}});
   const choose=state=>{
     if(selected===state)return;
     let from=selected,alpha=0;
