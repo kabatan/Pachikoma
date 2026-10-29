@@ -83,6 +83,7 @@ export async function createChoiceTotal({ ctx, PX, PY, getValues, parts = null }
   U.w = Math.max(...Object.values(rect).map((r) => r.x + r.w)) - U.x; U.h = Math.max(...Object.values(rect).map((r) => r.y + r.h)) - U.y;
   const saved = mk(U.w, U.h), sctx = saved.getContext('2d', { alpha: false });
   const ov = mk(U.w, U.h), octx = ov.getContext('2d');
+  const overlayCanvas=mk(U.w,U.h),overlayCtx=overlayCanvas.getContext('2d');let overlayMode=false,overlayRevision=0;
   let savedValid = false, key = null, total = null, chain = null, last = { total: 0, chain: 1 };
   const refresh = () => {
     const v = getValues(); if (!v) return false;
@@ -109,19 +110,24 @@ export async function createChoiceTotal({ ctx, PX, PY, getValues, parts = null }
     ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(ov, 0, 0, r.w, r.h, PX + r.x, PY + r.y, r.w, r.h); ctx.restore();
   };
   const visible = (tau) => { const { f } = clipPhase(tau); return tau < XF || f >= T_CH; };
-  return {
+  const api={
     invalidate() { savedValid = false; },     // 映像を描き直した(下の絵は元に戻った)
     clear() { if (savedValid) { ctx.drawImage(saved, PX + U.x, PY + U.y); savedValid = false; } },
     // state: 選んでいる状態、blend: {from,to,alpha}(from が null のときは直前の絵が残っている)
     draw(state, blend, tau) {
       if (!visible(tau) || !refresh()) return;
-      sctx.drawImage(ctx.canvas, PX + U.x, PY + U.y, U.w, U.h, 0, 0, U.w, U.h); savedValid = true;
+      if(!overlayMode){sctx.drawImage(ctx.canvas, PX + U.x, PY + U.y, U.w, U.h, 0, 0, U.w, U.h); savedValid = true;}
       if (blend) { if (blend.from) layer(blend.from, tau, 1 - blend.alpha); layer(state === blend.to ? blend.to : state, tau, blend.from ? blend.alpha : Math.max(.001, blend.alpha)); }
       else layer(state, tau, 1);
     },
+    renderOverlay(state,blend,tau){
+      const previous=ctx;overlayCtx.clearRect(0,0,U.w,U.h);overlayCtx.save();overlayCtx.translate(-PX-U.x,-PY-U.y);ctx=overlayCtx;overlayMode=true;
+      try{api.draw(state,blend,tau);}finally{ctx=previous;overlayMode=false;overlayCtx.restore();savedValid=false;}
+      return {canvas:overlayCanvas,x:PX+U.x,y:PY+U.y,width:U.w,height:U.h,revision:++overlayRevision};
+    },
     get value() { return last; },
     get plateKey() { return key; },
-  };
+  };return api;
 }
 
 // ── 時間切れ(左の札) ─────────────────────────────────────

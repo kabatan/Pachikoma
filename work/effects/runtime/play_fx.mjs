@@ -201,7 +201,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
       if (last.lcd) {
         if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain });
         const choice=lcd?.choiceV20;
-        const gpu=lcd?.gpuPanelSource,covered=choice?.active||choice?.holding||lcd?.attractSurface?.active||lcd?.finalResultSurface?.active||lcd?.timeupSurface?.active;
+        const gpu=lcd?.gpuPanelSource,covered=((choice?.active||choice?.holding)&&gpu?.owner!=='choice')||lcd?.attractSurface?.active||lcd?.finalResultSurface?.active||lcd?.timeupSurface?.active;
         if(gpu&&!covered){
           const texture=gpu.backend.compose();
           if(texture){plate.mat.uniforms.uT.value=texture;gpu.published=true;uploadRevision=undefined;return last;}

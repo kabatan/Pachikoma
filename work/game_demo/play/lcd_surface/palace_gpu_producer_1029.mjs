@@ -95,7 +95,28 @@ export function createPalaceGpuProducer({THREE,renderer,centerImages=null}) {
   }
   return {
     surface,
-    warm(background){assertLive();renderer.initTexture(videoTexture(background, 'startup'));renderer.initTexture(centerF);renderer.initTexture(centerT);renderer.initRenderTarget(target);renderer.compile(scene,camera);return {kind:'injected-palace-shaders-atlases-bg',extraContexts:0};},
+    warm(background,{draw=true}={}){
+      if(!draw){assertLive();renderer.initTexture(videoTexture(background,'startup'));renderer.initTexture(centerF);renderer.initTexture(centerT);renderer.initRenderTarget(target);renderer.compile(scene,camera);return {kind:'injected-palace-shaders-atlases-bg',extraContexts:0};}
+      assertLive();if(revision!==0||stats.renders!==0)throw Error('Palace draw warm requires unused producer');
+      if(renderer.getRenderTarget()!==null)throw Error('Palace draw warm requires default-target boundary');
+      const state=videoState(background,PANEL.w,'background');if(state.state!=='ready')return {skipped:true,reason:'background-not-ready',state};
+      const temporary=configure(new THREE.DataTexture(new Uint8Array([32,24,16,255,224,208,192,255]),2,1,THREE.RGBAFormat,THREE.UnsignedByteType),false);temporary.needsUpdate=true;
+      // Preserve all references and vector contents. Existing warm's retained bg
+      // VideoTexture/cache is intentional; synthetic foreground never enters it.
+      const saved=Object.fromEntries(Object.entries(uniforms).map(([key,u])=>[key,{value:u.value,copy:u.value?.isVector2||u.value?.isVector3||u.value?.isVector4?u.value.clone():null}]));
+      let draws=0;try{return withRendererState(THREE,renderer,()=>{
+        renderer.initTexture(videoTexture(background,'startup'));renderer.initTexture(centerF);renderer.initTexture(centerT);renderer.initRenderTarget(target);renderer.initTexture(temporary);renderer.compile(scene,camera);
+        uniforms.bg.value=videoTextures.get(background).texture;uniforms.fg.value=temporary;uniforms.old.value=temporary;
+        uniforms.mixOld.value=.37;uniforms.bgOn.value=1;
+        if(centerImages)setCenter({cell:0,x:PANEL.w/2,y:PANEL.h/2,scale:1,gain:1,smear:.2,resid:0});else uniforms.cOn.value=0;
+        renderer.autoClear=false;renderer.setRenderTarget(target);renderer.setScissorTest(false);renderer.setClearColor(0,1);renderer.setViewport(0,0,PANEL.width,PANEL.height);renderer.clear(true,false,false);
+        renderer.setViewport(PANEL.x,PANEL.height-PANEL.y-PANEL.h,PANEL.w,PANEL.h);renderer.render(scene,camera);draws++;
+        return {kind:'injected-palace-actual-draw-warm',extraContexts:0,draws,temporaryPackedBytes:8,sourceVideoUploads:'existing background init only; real packed VideoTexture remains cold'};
+      });}finally{
+        try{withRendererState(THREE,renderer,()=>{renderer.setRenderTarget(target);renderer.setScissorTest(false);renderer.setViewport(0,0,PANEL.width,PANEL.height);renderer.setClearColor(0,1);renderer.clear(true,false,false);});}
+        finally{for(const[key,old]of Object.entries(saved)){uniforms[key].value=old.value;if(old.copy)old.value.copy(old.copy);}temporary.dispose();}
+      }
+    },
     render({background,current,previous=null,mixOld=0,center=null,blackBg=false,sourceFrameKeys={}}){
       assertLive();
       // Snapshot v1 runs between main frames, never inside a caller's FBO pass.

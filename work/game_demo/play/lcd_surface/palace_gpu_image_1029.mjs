@@ -11,7 +11,7 @@ export function createBoundaryCache({read,fallback}){
    stats:()=>({...stats,revision}),clear(){revision=null;value=null;cachedError=null;}};
 }
 
-export async function createPalaceGpuImage({THREE,renderer,background,base,center}){
+export async function createPalaceGpuImage({THREE,renderer,background,base,center,drawWarm=true}){
  const images=[];
  const load=async path=>{const r=await fetch(new URL(path,base));if(!r.ok)throw Error('Palace atlas HTTP '+r.status);const im=await createImageBitmap(await r.blob(),{premultiplyAlpha:'none',colorSpaceConversion:'none'});images.push(im);return im;};
  let producer,legacy=null,disposed=false,failed=false,legacyMode=false,manual=false,lastInput=null,flash={alpha:0,color:'#fff'},hud=null,hudTexture=null;
@@ -55,6 +55,7 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
    setManual(on){manual=!!on;},setLegacyMode(on){legacyMode=!!on;},
    setFlash(alpha=0,color='miss'){flash={alpha:Math.max(0,Math.min(1,alpha||0)),color:color==='hit'?'#fff':'#736099'};},
    setHudCanvas(canvas){hud=canvas;if(canvas){if(!hudTexture){hudTexture=new THREE.CanvasTexture(canvas);hudTexture.colorSpace=THREE.NoColorSpace;hudTexture.generateMipmaps=false;hudTexture.minFilter=hudTexture.magFilter=THREE.LinearFilter;}hudTexture.needsUpdate=true;}},
+   getComposedPanelContext(){return renderer.getContext();},
    compose(){if(disposed)throw Error('Palace live image disposed');if(failed||legacyMode)return null;
     uniforms.hud.value=hud?hudTexture:dummy;uniforms.hudOn.value=hud?1:0;uniforms.flashA.value=flash.alpha;
     uniforms.flashRGB.value.set(...(flash.color==='#fff'?[1,1,1]:[115/255,96/255,153/255]));
@@ -68,7 +69,22 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
     return image.visible;
    },
    rawCanvas(reason='raw-capture'){return legacy?.canvas??(failed||legacyMode?fallbackImage():this.materializeTo({reason}));},
-   warm(){try{return producer.warm(background);}catch(error){failed=true;stats.failures.push({reason:'warm',message:String(error?.message??error)});return {kind:'legacy-image-fallback-on-first-frame',error:String(error?.message??error)};}},
+   warm(){
+    if(!drawWarm){try{return producer.warm(background,{draw:false});}catch(error){failed=true;stats.failures.push({reason:'warm',message:String(error?.message??error)});return {kind:'legacy-image-fallback-on-first-frame',error:String(error?.message??error)};}}
+    if(disposed)throw Error('Palace warm disposed');if(lastInput||producer.surface.revision!==0||stats.producerCalls||stats.composites||legacy)throw Error('Palace image draw warm is boot-only');
+    const saved={raw:uniforms.raw.value,hud:uniforms.hud.value,hudOn:uniforms.hudOn.value,flashA:uniforms.flashA.value,flashRGB:uniforms.flashRGB.value,flashCopy:uniforms.flashRGB.value.clone()};let temporary=null,composeAttempted=false;
+    try{
+     const result=producer.warm(background);if(result?.skipped)return result;
+     const bytes=new Uint8Array(304*308*4);for(let i=0;i<bytes.length;i+=4){bytes[i]=180;bytes[i+1]=120;bytes[i+2]=64;bytes[i+3]=128;}
+     temporary=new THREE.DataTexture(bytes,304,308,THREE.RGBAFormat,THREE.UnsignedByteType);temporary.needsUpdate=true;temporary.flipY=true;temporary.premultiplyAlpha=false;temporary.colorSpace=THREE.NoColorSpace;temporary.generateMipmaps=false;temporary.minFilter=temporary.magFilter=THREE.LinearFilter;
+     composeAttempted=true;withRendererState(THREE,renderer,()=>{renderer.initRenderTarget(output);renderer.initTexture(temporary);renderer.initTexture(dummy);uniforms.raw.value=producer.surface.texture;uniforms.hud.value=temporary;uniforms.hudOn.value=1;uniforms.flashA.value=.125;uniforms.flashRGB.value.set(115/255,96/255,153/255);renderer.autoClear=false;renderer.setRenderTarget(output);renderer.setScissorTest(false);renderer.setViewport(0,0,PANEL.width,PANEL.height);renderer.render(scene,camera);});
+     return {...result,imageComposeDraws:1,temporaryHudBytes:bytes.byteLength,imageTargetBytes:PANEL.width*PANEL.height*4};
+    }catch(error){return {kind:'palace-draw-warm-incomplete',error:String(error?.message??error),playbackFallbackChanged:false};}
+    finally{
+     try{if(composeAttempted)withRendererState(THREE,renderer,()=>{renderer.setRenderTarget(output);renderer.setScissorTest(false);renderer.setViewport(0,0,PANEL.width,PANEL.height);renderer.setClearColor(0,1);renderer.clear(true,false,false);});}
+     finally{uniforms.raw.value=saved.raw;uniforms.hud.value=saved.hud;uniforms.hudOn.value=saved.hudOn;uniforms.flashA.value=saved.flashA;uniforms.flashRGB.value=saved.flashRGB;saved.flashRGB.copy(saved.flashCopy);temporary?.dispose();}
+    }
+   },
    diagnostics(){return {...stats,failures:stats.failures.map(f=>({...f,...(f.video?{video:{...f.video}}:{})})),failed,legacyMode,manual,boundary:boundary.stats(),producer:producer.diagnostics(),extraContexts:legacy?1:0};},
    dispose(){if(disposed)return;disposed=true;producer.dispose();legacy?.dispose();output.dispose();material.dispose();geometry.dispose();dummy.dispose();hudTexture?.dispose();for(const image of images)image.close();images.length=0;boundary.clear();rawPanel=rawVisible=null;}
   };

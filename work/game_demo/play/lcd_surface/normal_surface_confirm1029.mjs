@@ -1,3 +1,4 @@
+import {createResultHistoryOwner} from './result_history_owner_1029.mjs';
 import {withRestored2D} from './startup_warm.mjs';
 import {createClipPlayer,drawClipSnapshot} from './clip_player.mjs';
 import {createJpSurface,jpEffectSeconds,chainEffectSeconds} from './jp_surface_confirm1029.mjs';
@@ -19,7 +20,7 @@ export function normalClipFor(id, p, variant = 0) {
   return null;
 }
 
-export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory = null, resultImageFactory = null, videoImageFactory = null }) {
+export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory = null, resultImageFactory = null, videoImageFactory = null, resultBoundaryGpu = null }) {
   const base = new URL('.', manifestUrl);
   const canvas = document.createElement('canvas'); canvas.width = 1240; canvas.height = 1510;
   const ctx = canvas.getContext('2d', { alpha: false });
@@ -27,11 +28,36 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const previous = transition.getContext('2d',{alpha:false});let fadeLeft=0,lastJpSerial=-1;
   let paintedResult=null,resultUploadRevision=0,stableResult=false;
   const invalidateResult=()=>{paintedResult=null;stableResult=false;};
-  const choiceWrites=lcd=>!!(lcd?.choiceV20?.active||lcd?.choiceV20?.holding);
-  let gpuFrame=null;
-  const materializeGpu=(reason,force=false)=>{if(!gpuFrame)return false;gpuFrame.backend.materializeTo({panelCtx:gpuFrame.published||force?ctx:null,heldCtx:hold,reason});gpuFrame=null;return true;};
-  const bridge=()=>{materializeGpu('bridge');invalidateResult();previous.drawImage(canvas,0,0);fadeLeft=.12;};
-  const blend=dt=>{if(fadeLeft<=0)return;fadeLeft=Math.max(0,fadeLeft-dt);ctx.globalAlpha=fadeLeft/.12;ctx.drawImage(transition,0,0);ctx.globalAlpha=1;};
+  // V2 opt-in: choice still owns active frames; GPU handoff may borrow the new
+  // base source, while its wrapper composes both the inner and outer fades.
+  const gpuChoiceHold=lcd=>{const c=lcd?.choiceV20;return !!(c?.holding&&!c.active&&c.gpuHoldActive&&typeof c.captureGpuBridgeLease==='function'&&typeof c.materializeGpuBridgeFallback==='function');};
+  const choiceWrites=lcd=>!!(lcd?.choiceV20?.active||lcd?.choiceV20?.holding&&!gpuChoiceHold(lcd));
+  let surfaceOwner=null,choiceBridge=null;
+  const choiceBridgeStats={captures:0,releases:0,cpuFallbacks:0,failures:[]};
+  const releaseChoiceBridge=()=>{if(!choiceBridge)return;const old=choiceBridge;choiceBridge=null;try{old.lease.release();choiceBridgeStats.releases++;}catch(error){choiceBridgeStats.failures.push(String(error?.message??error));}};
+  const bridgeLeaseValid=lease=>{try{return !!(lease?.live&&lease.width===1240&&lease.height===1510&&lease.texture&&typeof lease.release==='function');}catch{return false;}};
+  let gpuFrame=null,resultHistory=null;
+  const materializeGpu=(reason,force=false)=>{if(!gpuFrame)return false;const dest=gpuFrame.published||force?ctx:null;if(resultHistory?.active&&gpuFrame.backend===videoBackend){if(!resultHistory.fallback(reason,{panelCtx:dest,heldCtx:hold,includeBridge:true}))return false;}else{gpuFrame.backend.materializeTo({panelCtx:dest,heldCtx:hold,reason});resultHistory?.clearPublished();}gpuFrame=null;return true;};
+  const bridge=()=>{
+    const route=resultHistory?.begin({blocked:!!(surfaceOwner?.choiceV20?.active||surfaceOwner?.choiceV20?.holding||choiceBridge)});
+    if(route==='gpu'){gpuFrame=null;invalidateResult();fadeLeft=.12;return;}if(route==='cpu')gpuFrame=null;
+    if(gpuChoiceHold(surfaceOwner)||choiceBridge&&typeof surfaceOwner?.choiceV20?.captureGpuBridgeLease==='function'&&typeof surfaceOwner.choiceV20.materializeGpuBridgeFallback==='function'){
+      let lease=null;try{lease=surfaceOwner.choiceV20.captureGpuBridgeLease();}catch(error){choiceBridgeStats.failures.push(String(error?.message??error));}
+      if(bridgeLeaseValid(lease)){
+        // The hook returns one owned handle. Complete the replacement before
+        // releasing the old handle, and never read a stale base GPU source.
+        releaseChoiceBridge();choiceBridge={lease,alpha:1};choiceBridgeStats.captures++;gpuFrame=null;invalidateResult();fadeLeft=.12;return;
+      }
+      try{lease?.release?.();}catch{}
+      if(!surfaceOwner.choiceV20.materializeGpuBridgeFallback())throw Error('GPU choice bridge has neither a completed native lease nor CPU fallback');
+      choiceBridgeStats.cpuFallbacks++;gpuFrame=null;
+    }else materializeGpu('bridge');
+    releaseChoiceBridge();invalidateResult();previous.drawImage(canvas,0,0);fadeLeft=.12;
+  };
+  const blend=dt=>{if(fadeLeft<=0)return;fadeLeft=Math.max(0,fadeLeft-dt);
+    if(choiceBridge){choiceBridge.alpha=fadeLeft/.12;if(fadeLeft<=0)releaseChoiceBridge();return;}
+    ctx.globalAlpha=fadeLeft/.12;ctx.drawImage(transition,0,0);ctx.globalAlpha=1;
+  };
   const held = document.createElement('canvas'); held.width = W; held.height = H;
   const hold = held.getContext('2d', { alpha: false });
   hold.fillStyle = '#052a57'; hold.fillRect(0, 0, W, H);
@@ -43,22 +69,23 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   if(videoImageFactory)try{
     videoBackend=await videoImageFactory({width:canvas.width,height:canvas.height,visible:{x:PX,y:PY,w:W,h:H}});
     if(!videoBackend?.render||!videoBackend?.compose||!videoBackend?.setFlash||!videoBackend?.setHudCanvas||!videoBackend?.materializeTo)throw Error('Invalid video image factory API');
-    videoStats.mode='injected';
+    videoStats.mode='injected';if(resultBoundaryGpu&&videoBackend.warmHistory)videoStats.historyWarm=videoBackend.warmHistory();
   }catch(error){try{videoBackend?.dispose?.();}catch{}videoBackend=null;videoStats.mode='factory-fallback';videoStats.failures.push(String(error?.message??error));}
-  const publishVideo=(snapshot,w=null)=>{
-    if(!videoBackend||videoFailed||!snapshot||!snapshot.layers.length||snapshot.layers[0].alpha!==1||snapshot.layers.some(l=>!l.drawable||l.video.videoWidth!==W||l.video.videoHeight!==H))return false;
+  const publishVideo=(snapshot,w=null,bridgeDt=0)=>{
+    if(!videoBackend||videoFailed||!snapshot||!resultHistory?.active&&(!snapshot.layers.length||snapshot.layers[0].alpha!==1)||snapshot.layers.some(l=>!l.drawable||l.video.videoWidth!==W||l.video.videoHeight!==H))return false;
     if(gpuFrame&&gpuFrame.backend!==videoBackend)materializeGpu('video-owner-entry');
     try{
       const output=videoBackend.render(snapshot);
       if(!output){videoStats.fallbacks++;const d=videoBackend.diagnostics?.();if(d?.failed){videoFailed=true;videoStats.mode='render-fallback';videoStats.failures.push(String(d.reason??'GPU video image failed'));}return false;}
-      videoBackend.setFlash(w?.flash,w?.flashColor);gpuFrame={backend:videoBackend,published:false,owner:snapshot.owner};videoStats.frames++;return true;
+      videoBackend.setFlash(w?.flash,w?.flashColor);if(choiceBridge)blend(bridgeDt);gpuFrame={backend:videoBackend,published:false,owner:snapshot.owner};videoStats.frames++;return true;
     }catch(error){videoFailed=true;videoStats.failures.push(String(error?.message??error));videoStats.mode='render-fallback';return false;}
   };
+  if(resultBoundaryGpu&&videoBackend?.seedResultHistory&&videoBackend?.materializeHistoryTo)resultHistory=createResultHistoryOwner({manager:resultBoundaryGpu,backend:videoBackend,ctx,hold,previous});
   const finishFrame=t0=>{stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);};
 
   const clips = createClipPlayer({base, files:man.files, onError:fail, record:e=>{stats.lifecycle.push(e);if(stats.lifecycle.length>2000)stats.lifecycle.shift();}});
   const shown = {get name(){return clips.name;},get time(){return clips.time;}};
-  const jp = jpManifestUrl ? await createJpSurface({manifestUrl:jpManifestUrl,palaceImageFactory,resultImageFactory,onCue:onJpCue,getState,log:n=>stats.played.push([+clock.toFixed(3),n])}).catch(e=>{stats.errors.push('JP: '+e.message);console.warn('[jp1029]',e.message);return null;}) : null;
+  const jp = jpManifestUrl ? await createJpSurface({manifestUrl:jpManifestUrl,palaceImageFactory,resultImageFactory,onResultBeforeReuse:next=>{if(resultHistory?.beforeReuse(next)?.cpu)gpuFrame=null;},onCue:onJpCue,getState,log:n=>stats.played.push([+clock.toFixed(3),n])}).catch(e=>{stats.errors.push('JP: '+e.message);console.warn('[jp1029]',e.message);return null;}) : null;
   if(jp){const r=getState().rules;r.FirstJackpotEffectSeconds=Object.fromEntries(jp.man.digits.map(d=>[d,r.JackpotAwards.map(p=>jpEffectSeconds(jp.man,p))]));
     // 継続成功の演出時間: 着地+継続成功v4+配当の通しの長さ(初回JPと同様に映像へ合わせる)。映像が無い場合は規則の既定のまま。
     const chainSeconds=r.JackpotAwards.map(p=>chainEffectSeconds(jp.man,p));if(chainSeconds.every(Number.isFinite))r.JackpotEffectSeconds=chainSeconds;}
@@ -186,7 +213,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     }
     if (id === 'challenge_cancel') {bridge();mode = null;}
   }
-  return {
+  const api={
     canvas, stats, production: true, jp,
     get uploadRevision(){return stableResult&&!choiceWrites(this)?resultUploadRevision:undefined;},
     get current() { return { mode: jp?.active ? 'jp1029' : mode?.id ?? null, clip: jp?.active ? jp.where()?.name : shown.name, shot: shotOn, time: shown.time, normalN, lastEvent }; },
@@ -204,6 +231,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     },
     onEvent, setCards(c) { cards = c; },
     get gpuPanelSource(){return gpuFrame;},
+    get choiceGpuBridge(){return choiceBridge?{lease:choiceBridge.lease,alpha:choiceBridge.alpha}:null;},
+    choiceGpuBridgeDiagnostics(){return {...choiceBridgeStats,failures:[...choiceBridgeStats.failures],active:!!choiceBridge,alpha:choiceBridge?.alpha??0};},
     get videoImageBackend(){return videoBackend;},
     materializeGpuLcd(reason='consumer',force=false){return materializeGpu(reason,force);},
     async warm(){if(clock!==0||jpOwns)throw Error('normal warm is boot-only');return clips.warm(hold,W,H);},
@@ -211,15 +240,16 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     async prepare(dt) { if(jp?.active){await jp.prepare(dt);return;} await clips.prepare(dt); },
     frame(dt, F) {
       const t0 = performance.now(); clock += dt;stableResult=false;
-      if(choiceWrites(this))paintedResult=null;
+      if(choiceWrites(this)){paintedResult=null;resultHistory?.clearPublished();}
       const s = getState();
       if (jp?.claimed) {
+        if(resultHistory?.active){resultHistory.fallback('jp-owner',{includeBridge:true});gpuFrame=null;}
         jp.palace?.imageBackend?.setLegacyMode(choiceWrites(this));
         let v=jp.frame(dt);
         if(!jp.active&&lastJpSerial>=0){bridge();lastJpSerial=-1;}
         // 映像の最初のコマがまだ読めていない間は、前の映像の最後(失敗の灰色＋扉など)を出さず、通常の画面のままにする。
         if (jp.active && (jpOwns || v?.readyState>=2)) {
-          if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered)fadeLeft=0;
+          if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered){fadeLeft=0;releaseChoiceBridge();}if(resultHistory?.active){resultHistory.fallback('jp-serial-bridge',{includeBridge:false});gpuFrame=null;}
           if(!jpOwns){clips.suspend();jpOwns=true;}
           if(v?.gpuPalaceImage&&jp.layered&&!choiceWrites(this)){
             const w=jp.where(),backend=v.gpuPalaceImage;if(gpuFrame?.backend!==backend)materializeGpu('gpu-owner-change');backend.setFlash(w?.flash,w?.flashColor);
@@ -227,14 +257,14 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
           }
           const resultBackend=v?.gpuResultImage,rw=resultBackend?jp.where():null;
           // Preserve the existing 2D dim/fade/choice ownership at unsafe seams.
-          if(resultBackend&&fadeLeft<=0&&!rw?.dim&&!jp.transition&&!choiceWrites(this)){
+          if(resultBackend&&(fadeLeft<=0||choiceBridge)&&!rw?.dim&&!jp.transition&&!choiceWrites(this)){
             if(gpuFrame?.backend!==resultBackend)materializeGpu('gpu-owner-change');
-            resultBackend.setFlash(rw?.flash,rw?.flashColor);
-            gpuFrame={backend:resultBackend,published:false};stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
+            resultBackend.setFlash(rw?.flash,rw?.flashColor);if(choiceBridge)blend(dt);
+            gpuFrame=resultHistory?resultHistory.resultFrame(resultBackend):{backend:resultBackend,published:false};stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
           }
-          if(videoBackend&&fadeLeft<=0&&!choiceWrites(this)){
+          if(videoBackend&&(fadeLeft<=0||choiceBridge)&&!choiceWrites(this)){
             const image=jp.plainVideoSnapshot?.(v);
-            if(publishVideo(image,jp.where())){finishFrame(t0);return;}
+            if(publishVideo(image,jp.where(),dt)){finishFrame(t0);return;}
           }
           materializeGpu('jp-video-legacy');
           if(resultBackend)v=resultBackend.rawCanvas('legacy-result-owner-frame');
@@ -255,13 +285,15 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
           ctx.restore();blend(dt);if(cacheable){paintedResult={canvas:v,key};resultUploadRevision++;stableResult=true;}stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
         }
       }
-      if(gpuFrame?.owner!=='normal')materializeGpu('normal-return');invalidateResult();jpOwns=false;
+      if(resultHistory?.active)gpuFrame=null;else if(gpuFrame?.owner!=='normal')materializeGpu('normal-return');invalidateResult();jpOwns=false;
       normalN = clamp(s.lit ?? normalN, 0, 6);
       if (mode && clock >= mode.until) {bridge();mode = null;}
       // 液晶のcueが無いchain_*もonEventで確実に届く。cueはここでは映像を二重起動しない。
       if (s.phase === 'ChainChoice' && mode?.id !== 'chain_choice') temporary('chain_choice', { ...s.chain }, Infinity);
       clips.setIdle(`idle${normalN}`);
-      const videoEligible=!!videoBackend&&!videoFailed&&fadeLeft<=0&&!mode&&!(guard&&clock<guard.until)&&!choiceWrites(this);
+      if(resultHistory?.active&&(mode||guard&&clock<guard.until||choiceWrites(this))){resultHistory.fallback('normal-overlay-or-choice',{includeBridge:false});gpuFrame=null;}
+      const historyEligible=!!resultHistory?.active;
+      const videoEligible=historyEligible||!!videoBackend&&!videoFailed&&(fadeLeft<=0||choiceBridge)&&!mode&&!(guard&&clock<guard.until)&&!choiceWrites(this);
       if(!videoEligible)materializeGpu('normal-overlay-owner');
       const videoSnapshot=clips.frame(dt,videoEligible?null:hold,W,H);
       shotOn = !!clips.shot || clips.pending > 0;
@@ -269,8 +301,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       launchPulses = launchPulses.filter(t => clock - t < .8);
       if(videoEligible){
         videoSnapshot.overlay=ringOverlay();
-        if(publishVideo(videoSnapshot)){finishFrame(t0);return;}
-        materializeGpu('normal-video-fallback');drawClipSnapshot(videoSnapshot,hold,W,H);
+        if(publishVideo(videoSnapshot,null,dt)){if(historyEligible){fadeLeft=Math.max(0,fadeLeft-dt);resultHistory.afterRender(fadeLeft/.12);}finishFrame(t0);return;}
+        if(resultHistory?.active){resultHistory.fallback('normal-video-fallback',{includeBridge:false});gpuFrame=null;}materializeGpu('normal-video-fallback');drawClipSnapshot(videoSnapshot,hold,W,H);
       }
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.save(); ctx.translate(PX, PY); ctx.drawImage(held, 0, 0);
@@ -298,8 +330,9 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
           ring: Array.from({length:4}, () => [0,0,0]), zone: Array.from({length:8}, () => col.map(v => v*.2)) };
       }
     },
+    resultBoundaryDiagnostics(){return {...(resultHistory?.diagnostics()??{enabled:false}),pool:resultBoundaryGpu?.diagnostics?.()??null};},
     videoImageDiagnostics(){return {...videoStats,failures:[...videoStats.failures],backend:videoBackend?.diagnostics?.()??null};},
     diagnostics() { return clips.diagnostics().concat(jp?.diagnostics()??[]); },
-    dispose() { try{videoBackend?.dispose?.();}finally{try{clips.dispose();}finally{jp?.dispose();}} },
-  };
+    dispose() { try{releaseChoiceBridge();try{resultHistory?.dispose();}finally{videoBackend?.dispose?.();}}finally{try{clips.dispose();}finally{jp?.dispose();}} },
+  };surfaceOwner=api;return api;
 }
