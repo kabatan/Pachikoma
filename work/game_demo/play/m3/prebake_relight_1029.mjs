@@ -32,6 +32,25 @@ export async function installPrebakeRelight(hr,{m3,getPlate=()=>window.__play?.f
   const down=mat=>make(mat.fragmentShader.replaceAll('gl_FragCoord.xy','(gl_FragCoord.xy * 4.0)'),mat.uniforms);
   const bakeBack=down(hr.envBack),bakeFront=down(hr.envFront);
   const e=m3.man.arrays.E,c=m3.man.arrays.C;
+  // Keep native sampling coordinates, but rasterize only rows that can be nonzero.
+  // The proof is made from the actual uploaded source data once at installation.
+  // A changed texture/data/version invalidates it and uses the full field instead.
+  const proveZeroPrefix=texture=>{
+    const image=texture?.image,data=image?.data;
+    if(!texture?.isDataTexture||texture.flipY||image.width!==W||image.height!==H||
+      !(data instanceof Uint16Array||data instanceof Float32Array||data instanceof Uint8Array))return null;
+    const channels=data.length/(W*H);if(![1,3,4].includes(channels))return null;
+    let first=0;while(first<data.length&&data[first]===0)first++;
+    return {texture,image,data,version:texture.version,sourceVersion:texture.source.version,row:Math.floor(first/(W*channels))};
+  };
+  const envProof=pass=>['uA','uB'].map(k=>proveZeroPrefix(pass.material.uniforms[k].value));
+  const backProof=envProof(bakeBack),frontProof=envProof(bakeFront);
+  const proofCurrent=(proof,pass)=>proof.every((p,i)=>p&&pass.material.uniforms[i?'uB':'uA'].value===p.texture&&p.texture.image===p.image&&p.image.data===p.data&&p.texture.version===p.version&&p.texture.source.version===p.sourceVersion&&!p.texture.flipY);
+  const envRows=proof=>{if(!proof.every(Boolean))return H/S;const first=Math.min(...proof.map(p=>p.row));return first===H?0:Math.min(H/S,Math.ceil((H-first)/S)+1);};
+  const fieldRect=(top,bottom)=>{const y=Math.max(0,Math.floor((H-bottom)/S)-1),end=Math.min(H/S,Math.ceil((H-top)/S)+1);return {y,h:Math.max(0,end-y)};};
+  const rects={back:{y:0,h:envRows(backProof)},front:{y:0,h:envRows(frontProof)},zone:fieldRect(e.y,e.y+e.h),hole:fieldRect(c.y-194,c.y+64)};
+  let fieldCropEnabled=new URLSearchParams(globalThis.location?.search??'').get('fieldcrop')!=='0';
+  const fieldInitialized=new Set(),cropStats={draws:0,fullPixels:0,shadedPixels:0,initialClears:0,proofFallbacks:0,zeroReuses:0};
   const declarations=source.slice(0,source.indexOf('vec3 frameLit('));
   const bakeFields=make(declarations+`
 uniform int uPBLayer;
@@ -104,8 +123,27 @@ vec4 prebakeC(ivec2 p){
   const probePrevious=new Float32Array(16+hr.probes.sourceIndex.size*3);
   function probeChanged(){let i=0,dirty=!probeValid;const put=v=>{v=Math.fround(v??0);if(probePrevious[i]!==v){probePrevious[i]=v;dirty=true;}i++;};for(let n=0;n<8;n++){put(hr.frame.ea?.[n]);put(hr.frame.eb?.[n]);}for(const id of hr.probes.sourceIndex.keys()){const q=hr.frame.q?.[id],c=q?.rgb??q;put(c?.[0]);put(c?.[1]);put(c?.[2]);}probeValid=true;return dirty;}
   function invalidate(){backDirty.invalidate();frontDirty.invalidate();for(const d of fieldDirty)d.invalidate();probeValid=false;}
-  function drawField(target,pass,layer=0){r.setRenderTarget(target,layer);r.setViewport(0,0,target.width,target.height);r.render(pass.scene,hr.fsCam);stats.fieldUpdates++;}
-  const api={setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,...stats,fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',ballResolution:[W,H],ballSamples:4,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;r.domElement.removeEventListener('webglcontextrestored',invalidate);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  function drawField(target,pass,layer=0){
+    const key=pass===bakeBack?'back':pass===bakeFront?'front':layer===1?'zone':'hole';
+    const validProof=key==='back'?proofCurrent(backProof,pass):key==='front'?proofCurrent(frontProof,pass):true;
+    const rect=fieldCropEnabled&&validProof?rects[key]:null;
+    if(fieldCropEnabled&&!validProof)cropStats.proofFallbacks++;
+    stats.fieldUpdates++;cropStats.fullPixels+=target.width*target.height;
+    // A fully zero source needs neither another draw nor a framebuffer switch.
+    if(rect?.h===0&&fieldInitialized.has(key)){cropStats.zeroReuses++;return;}
+    r.setRenderTarget(target,layer);r.setViewport(0,0,target.width,target.height);r.setScissorTest(false);
+    if(rect&&!fieldInitialized.has(key)){r.setClearColor(0x000000,pass===bakeFields?1:0);r.clear(true,false,false);cropStats.initialClears++;}
+    if(rect?.h!==0){
+      if(rect){r.setScissor(0,rect.y,target.width,rect.h);r.setScissorTest(true);}
+      try{r.render(pass.scene,hr.fsCam);}finally{r.setScissorTest(false);}
+      cropStats.draws++;cropStats.shadedPixels+=target.width*(rect?rect.h:target.height);
+    }
+    // A fallback may paint outside the proof's region. Re-clear before using
+    // that proof again if its original source is restored later.
+    if(validProof)fieldInitialized.add(key);else fieldInitialized.delete(key);
+  }
+  const restored=()=>{fieldInitialized.clear();invalidate();};
+  const api={setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',ballResolution:[W,H],ballSamples:4,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
   hr.prebakeRelight=api;
   hr.render=function(){
     const plate=getPlate();
@@ -128,6 +166,6 @@ vec4 prebakeC(ivec2 p){
   hr.dispose=function(){api.dispose();return dispose.call(hr);};
   // Debug C/D readbacks materialize the reference HDR path on demand.
   hr.readLinear=function(...args){if(!enabled)return readLinear.apply(hr,args);try{legacy.call(hr);return readLinear.apply(hr,args);}finally{hr.render();}};
-  r.domElement.addEventListener('webglcontextrestored',invalidate);
+  r.domElement.addEventListener('webglcontextrestored',restored);
   return api;
 }
