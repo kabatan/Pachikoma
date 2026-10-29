@@ -49,9 +49,13 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   const note = (k, d = {}) => { S.events.push({ k, at: +S.clock.toFixed(2), ...d }); if (S.events.length > 200) S.events.shift(); log(k, d); };
 
   // ---- ゲームの出来事（規則 H の action 名。本体は controller.lastGameEvent）----
+  let baseOnRef = null, heldAnnounce = null;
   const off = controller.onAction((action) => {
     const e = controller.lastGameEvent ?? {};
-    if (action === 'meterReady') { meter.reset(); note('meterReady', { kind: e.kind }); }
+    if (action === 'chainAnnounce') {   // JP後の継続の告知（規則 H: ChainAnnounceSeconds）。専用の映像があれば lcd 側が受ける。無ければ normal_surface の仮カード
+      const p = { first: !!e.first, atRisk: e.atRisk ?? 0, rate: e.rate ?? '2/3', seconds: e.seconds ?? 2.5 };
+      heldAnnounce = p;   // 配当・継続成功の映像が終わって液晶が空いてから出す（frame で）
+    } else if (action === 'meterReady') { meter.reset(); note('meterReady', { kind: e.kind }); }
         else if (action === 'meterLand') { if (e.hit) meter.hit(e.lane); }
     else if (action === 'meterEnd') { note('meterEnd', { success: e.success, count: e.count }); if (e.success) meter.end(true); }
     else if (action === 'rouletteStart') {
@@ -103,8 +107,10 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   };
 
   // ---- 映像のイベント（lcd.onEvent を包む）----
-  const baseOn = lcd.onEvent.bind(lcd);
+  const baseOn = lcd.onEvent.bind(lcd); baseOnRef = baseOn;
+  let heldChoice = null;   // 告知中に届いた chain_choice（告知が終わって選択になるときに流す。最初の自動継続では捨てる）
   lcd.onEvent = (id, p = {}) => {
+    if (id === 'chain_choice' && controller.game.chainAnnouncing) { heldChoice = p; return true; }
     if (id === 'start') { mash?.reset(); S.normalT = 0; S.presses = 0; }   // プレイの始まり：うぱの促しの判定を最初から
     if (id === 'lamp6') {
       const handled = baseOn(id, p);
@@ -125,6 +131,9 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   const ofs = { offerT: 0 };
   lcd.frame = (dt, F) => {
     const r = base(dt, F);
+    if (heldAnnounce && !lcd.jp.claimed) { const p0 = heldAnnounce; heldAnnounce = null; S.announceOn = true; note('chain_announce', p0); baseOnRef('chain_announce', p0); }
+    if (S.announceOn && !controller.game.chainAnnouncing) { S.announceOn = false; heldAnnounce = null; }
+    if (heldChoice) { const g0 = controller.game; if (g0.phase !== 'ChainChoice') heldChoice = null; else if (!g0.chainAnnouncing) { const p0 = heldChoice; heldChoice = null; baseOn('chain_choice', p0); } }
     S.wall += dt; if (isNormal()) S.normalT += dt;
     S.choiceT = lcd.choiceV20?.active ? (S.choiceT ?? 0) + dt : 0;
     const g = controller.game, st = g.meterStatus, name = model.active ? model.name : null;

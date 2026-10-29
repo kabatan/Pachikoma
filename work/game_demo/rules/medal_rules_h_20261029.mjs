@@ -62,6 +62,10 @@ export class MedalRules extends GRules {
     this.ChainContinueNeedsAddAtZero = o.ChainContinueNeedsAddAtZero ?? false; // true: 配当後に残り0以下なら、継続の選択は「100円追加で継続」のみ。追加で時間・玉が入り、そのまま継続の連打へ。払わなければ確定
     // --- 賞の判定（10/30）。'wallet': 終了（精算）の瞬間の持ち玉 wallet だけで決める。'earnings': 従来（JPで得た玉 jackpotEarnings、500配当の確保でS）
     this.PrizeBasis = o.PrizeBasis ?? 'earnings';
+    // --- JP後の継続の告知（10/30）。ChainAnnounceSeconds>0: 継続の選択に入る前に告知を出す（その間は選択も確定も受けず、時計は止めない。選択の制限時間は告知のあとから）
+    //     ChainFirstAuto: その試合で最初の継続判断（JP直後）は選択を出さず、告知のあと自動で継続する。2回目以降は告知のあと選択画面
+    this.ChainAnnounceSeconds = o.ChainAnnounceSeconds ?? 0;
+    this.ChainFirstAuto = o.ChainFirstAuto ?? false;
     this.RuleVariant = 'H_20261029';
     this._hReady = true;
     this.validate();
@@ -117,7 +121,7 @@ export class MedalRules extends GRules {
       !laneOk(r.JpMeterByLane) || !setOk(r.ChainThresholdByHitSet) ||
       !isNum(r.DuplicateSixthLampClearUntil) || r.DuplicateSixthLampClearUntil < 0 || r.DuplicateSixthLampClearUntil > 1 ||
       !isNum(r.DuplicateRestartScaleAfterJp) || r.DuplicateRestartScaleAfterJp <= 0 || r.DuplicateRestartScaleAfterJp > 1 ||
-      typeof r.ChainContinueNeedsAddAtZero !== 'boolean' ||
+      typeof r.ChainContinueNeedsAddAtZero !== 'boolean' || typeof r.ChainFirstAuto !== 'boolean' || !isNum(r.ChainAnnounceSeconds) || r.ChainAnnounceSeconds < 0 || r.ChainAnnounceSeconds > 10 ||
       !posInt(r.JpMeterThreshold) || !isNum(r.JpMeterSeconds) || r.JpMeterSeconds <= 0 || !isNum(r.JpMeterIntroSeconds) || r.JpMeterIntroSeconds < 0 ||
       !posInt(r.ChainHitCount) || r.ChainHitCount > 6 || !['random', 'order'].includes(r.ChainHitLaneMode) ||
       !isNum(r.ChainIntroSeconds) || r.ChainIntroSeconds < 0 || typeof r.ChainDisplayProbability !== 'string' ||
@@ -408,6 +412,7 @@ export class MedalGame extends GGame {
       this.wallet += award; this.won += award; this.jackpotEarnings += award;
       if (award === 500) this.jackpotDreamHit = true;
       this.jackpotSuccesses++;
+      this._chainSerial = (this._chainSerial ?? 0) + 1;
       this.jackpotChain = { baseAward: award, pendingAward: 0, pendingDreamHit: false, stage: 0, choicePending: true, inChallenge: false };
     } else {
       chain = this.jackpotChain; chainBase = chain?.baseAward ?? 0;
@@ -422,7 +427,10 @@ export class MedalGame extends GGame {
   }
 
   // ---------- 継続 ----------
+  /** 継続の告知中（選択を出す前）。液晶は選択画面を出さず告知を出す。 */
+  get chainAnnouncing() { return this.phase === MedalPhase.ChainChoice && (this.announceLeft ?? 0) > 1e-9; }
   chooseChain(continueChain) {
+    if (this.chainAnnouncing) return false;   // 告知中は選べない（ボタンの押し残しで確定・継続が走らない）
     if (!continueChain) return super.chooseChain(false);
     if (!this.rules.R3Enabled || this.phase !== MedalPhase.ChainChoice || !this.jackpotChain?.choicePending) return false;
     if (this.endPending && !this.rules.ChainContinueNeedsAddAtZero) return false;   // （追加の仕組みでは、選択が出ている間は終了待ちを無視する）
@@ -460,6 +468,30 @@ export class MedalGame extends GGame {
       if (this.chooseChain(true)) { this.chainAdds = (this.chainAdds ?? 0) + 1; return; }
     }
     super._enterChainChoice();
+    const r = this.rules, chain = this.jackpotChain;
+    if (r.ChainAnnounceSeconds > 0 && this.phase === MedalPhase.ChainChoice && chain?.choicePending) {
+      const key = `${this._chainSerial ?? 0}:${chain.stage}`;
+      if (this._announcedKey !== key) {
+        this._announcedKey = key;
+        const first = chain.stage === 0 && r.ChainFirstAuto;
+        this.announceLeft = r.ChainAnnounceSeconds; this._announceFirst = first;
+        this._emit('chainAnnounce', { first, atRisk: first ? 0 : chain.pendingAward, rate: '2/3', seconds: r.ChainAnnounceSeconds, stage: chain.stage });
+      }
+    } else if (r.ChainFirstAuto && this.phase === MedalPhase.ChainChoice && chain?.choicePending && chain.stage === 0) {
+      this.chooseChain(true);   // 告知なしでも最初は選択を出さない
+    }
+  }
+  /** 告知の間は選択の制限時間を減らさない。告知が終わったら、最初の継続は自動で継続、2回目以降は選択画面へ。 */
+  _advanceChainChoice(seconds) {
+    if (this.phase === MedalPhase.ChainChoice && (this.announceLeft ?? 0) > 0) {
+      if (this.chainTooLate) { this.announceLeft = 0; return super._advanceChainChoice(seconds); }
+      this.announceLeft = Math.max(0, this.announceLeft - seconds);
+      if (this.announceLeft > 1e-9) return false;
+      this.announceLeft = 0; this.choiceLeft = this.rules.ChainChoiceSeconds;
+      if (this._announceFirst) return this.chooseChain(true);
+      return false;
+    }
+    return super._advanceChainChoice(seconds);
   }
   _pickChainTargets(count) {
     if (this.rules.ChainHitLaneMode === 'order') return [...this.rules.JackpotChainLaneOrder.slice(0, count)].sort((a, b) => a - b);

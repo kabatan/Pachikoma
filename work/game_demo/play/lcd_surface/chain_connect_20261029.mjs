@@ -9,7 +9,8 @@ export function attachChainConnect(lcd,{controller}) {
     if(game)game._advanceChainChoice=advance;
     game=controller.game;advance=game._advanceChainChoice;
     game._advanceChainChoice=function(seconds){
-      if(this.phase==='ChainChoice'&&!ready()&&!this.chainTooLate)return false;   // 時間切れ間近の確定は映像待ちで止めない
+      if(this.chainAnnouncing){if(!lcd.rulesH?.state?.announceOn&&!this.chainTooLate)return false;}   // H: 告知は液晶に出ている間だけ数える（配当・継続成功の映像が終わってから）。時計は止めない
+      else if(this.phase==='ChainChoice'&&!ready()&&!this.chainTooLate)return false;   // 時間切れ間近の確定は映像待ちで止めない
       return advance.call(this,seconds);
     };
   };
