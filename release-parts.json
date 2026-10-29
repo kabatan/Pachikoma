@@ -2,6 +2,36 @@
   "version": 1,
   "files": [
     {
+      "path": "work/effects/attract/prod_v4b/attract_wait_v4b_prod.mp4",
+      "bytes": 183324412,
+      "sha256": "187e42cd51402462275fac06647116d61ebc85411e98c5e4ae42e27466cc5cc6",
+      "parts": [
+        {
+          "path": "work/effects/attract/prod_v4b/attract_wait_v4b_prod.mp4.part00",
+          "bytes": 95000000
+        },
+        {
+          "path": "work/effects/attract/prod_v4b/attract_wait_v4b_prod.mp4.part01",
+          "bytes": 88324412
+        }
+      ]
+    },
+    {
+      "path": "work/effects/jp_teacher/09_timeup/prod/final/timeup_prod.mp4",
+      "bytes": 106657078,
+      "sha256": "67ef798a104bc602d826a9c1f34990d52a6e164d1b0c6c1cba24ed51c45eccde",
+      "parts": [
+        {
+          "path": "work/effects/jp_teacher/09_timeup/prod/final/timeup_prod.mp4.part00",
+          "bytes": 95000000
+        },
+        {
+          "path": "work/effects/jp_teacher/09_timeup/prod/final/timeup_prod.mp4.part01",
+          "bytes": 11657078
+        }
+      ]
+    },
+    {
       "path": "work/game_demo/play/lcd_surface/jp1029/production_20261028/ryugu_continuous_approved_color.mp4",
       "bytes": 189968970,
       "sha256": "871760c669408e69fd98e013f5e614f1cfa6d85dd483e56868eec2e863dcd522",

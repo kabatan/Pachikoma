@@ -13,7 +13,8 @@ import { EffectsBus } from './effects_bus.mjs';
 import { loadPlayConfig, loadPlayRules } from './config_g_20261028.mjs';
 import { prewarm } from './prewarm.mjs';
 import { createLauncherBody } from './launcher_body.mjs';
-import { CabinetSerial } from './cabinet_serial_g_20261028.mjs';
+import { CabinetSerial } from './cabinet_serial_r3_20261029.mjs';
+import { createLedStrip } from './led_strip_20261029.mjs';
 import { winSeconds, JACKPOT_SECONDS } from '../rules/medal_rules.mjs';
 
 async function main() {
@@ -76,10 +77,12 @@ const app = await createMedalApp(document.getElementById('stage'), {
 });
 const { ctrl, presenter } = app, effects = new EffectsBus();
 app.history?.setContext({ configName: config.name, stageDir: config.stageDir, rulesUrl: config.rules, seed });
-const cabinet = new CabinetSerial({ serial: navigator.serial, ctrl, button: document.getElementById('serial-connect'), status: document.getElementById('serial-status'), onInput: app.onInput });
+const cabinet = new CabinetSerial({ serial: navigator.serial, ctrl, button: document.getElementById('serial-connect'), status: document.getElementById('serial-status'), onInput: app.onInput, wake: () => { try { app.audio.unlock?.()?.catch?.(() => {}); } catch {} } });   // R3: 左右ボタンだけで進行(+ブラウザ音声の起こし)・LED帯の色もこの経路で送る
 await cabinet.init();
+const ledStrip = createLedStrip({ cabinet, getPhase: () => ctrl.game.phase, preview: q.get('ledpreview') === '1' }); window.__ledStrip = ledStrip.state;
 const howtoDur = await fetch(new URL('../../effects/spec/events.json', import.meta.url)).then(r => r.json()).then(j => j.events.find(e => e.id === 'howto')?.dur).catch(() => null);   // 説明の長さは演出の仕様(events.json)に従う
-ctrl.howtoSeconds = Number(q.get('howto') ?? (playRules.R3Enabled ? 8 : howtoDur ?? 5.2));
+const HOWTO_ENABLED = false;   // 10/29 遊び方(チュートリアル)は後で作り直す。コードは残し、true か ?howto=秒数 で戻る。
+ctrl.howtoSeconds = Number(q.get('howto') ?? (!HOWTO_ENABLED ? 0 : playRules.R3Enabled ? 8 : howtoDur ?? 5.2));
 if (playRules.R3Enabled) ctrl.howtoPanels = 3;   // 開始前のルール説明(時計に含めない・もう一度押すと飛ばせる)。?howto=0 で無効
 window.__effects = effects;
 if (q.get('effects_log') === '1') effects.on('*', e => console.log('[effects]', e));
@@ -112,6 +115,10 @@ if (q.get('audio') !== 'legacy') {
     bindBgmControls(r2Audio.engine, document.getElementById('audio-panel'));
     // 通常演出の録音BGM・実機風SE・玉の音。?pachi=0で従来の音
     if (q.get('pachi') !== '0') { try { window.__pachiSound = await (await import('../../audio/runtime/pachi_sound.mjs')).installPachiSound(r2Audio.engine); } catch (error) { console.error('[pachi-sound]', error); } }
+    if (q.get('normalsfx') !== '0') { try { window.__normalAudio = await (await import('../../audio/runtime/normal_audio_1029.mjs')).installNormalAudio1029(r2Audio.engine); } catch (error) { console.error('[normal-audio]', error); } }   // 通常時(JP前)の効果音。映像のフラッシュに合わせた新しい音。?normalsfx=0 で従来音
+    if (q.get('jpbgm') || q.get('jpaudio') === 'old') { try { window.__jpAudio = await (await import('../../audio/jp_proto_1029/runtime/jp_audio.mjs')).installJpAudio(r2Audio.engine, q.get('jpbgm') || 'A'); } catch (error) { console.error('[jp-audio]', error); } }   // 旧JP音(第1〜3版の試作)。?jpaudio=old または ?jpbgm=A|B|C のときだけ
+    else if (q.get('jpaudio') === 'v4') { try { window.__jpAudio = await (await import('../../audio/jp_proto_1029/runtime/jp_audio_v4.mjs')).installJpAudioV4(r2Audio.engine); } catch (error) { console.error('[jp-audio]', error); } }   // 第4版のJP音。?jpaudio=v4 のときだけ(既定は第5版)
+    else if (q.get('jpaudio') !== 'off') { try { window.__jpAudio = await (await import('../../audio/jp_proto_1029/runtime/jp_audio_v5.mjs')).installJpAudioV5(r2Audio.engine); } catch (error) { console.error('[jp-audio]', error); } }   // 既定のJP音(第5版)。?jpaudio=v4 で第4版、?jpaudio=off で無効
     const { VOICE_CREDITS } = await import('../../audio/runtime/voice_catalog.mjs');
     const voiceCredit = VOICE_CREDITS[r2Audio.engine.voiceProvider];
     document.getElementById('audio-credits').hidden = r2Audio.engine.voiceProvider === 'off' || !voiceCredit;
@@ -124,19 +131,29 @@ if (q.get('audio') !== 'legacy') {
 }
 const runtime = createRuntime({ ctrl, presenter, pa, log: app.log, effects });
 // 演出側(work/effects)の液晶・光の接続。?nofx で無効。演出側の1ファイルだけを読む。
+const lightState = { secondsLeft: Infinity, playing: false };   // R3: 囲いの電飾・LED帯の閃き用(残り秒数と遊技中か)
 let fxApi = null;
 if (!q.has('nofx')) {
   const { connectPlayEffects } = await import('../../effects/runtime/play_fx.mjs');
   // 動画液晶が既定。?lcd=legacyで旧Canvas液晶。m3ではpanelいっぱいに貼る
-  const lcd = q.get('lcd') !== 'legacy' ? await (await import('./lcd_surface/lcd_surface_production_20261028.mjs')).createLcdSurface({ manifestUrl: new URL(q.get('lcdclips') ?? './lcd_surface/ryugu1028/manifest.json', import.meta.url).href, jpManifestUrl: q.get('jpclips') === 'off' ? null : new URL(q.get('jpclips') ?? './lcd_surface/jp1029/manifest_production_20261028_wqhd_v2.json', import.meta.url).href, onJpCue: c => { if(c.kind==='hold'){const rank=app.rules.PrizeNames.indexOf(runtime.getPrize());runtime.setJpHold(true);return rank;} if(c.kind==='reveal'){runtime.setJpHold(false);} if(c.kind==='tray')runtime.awardToTray(c.count==='payout'?c.payout:c.count,{rate:c.rate,origin:'jp_reveal'}); if(c.kind==='snd')window.dispatchEvent(new CustomEvent('jp-scene-cue',{detail:c})); if(c.kind==='end'&&runtime.jpHold){runtime.setJpHold(false);runtime.releaseAwards({rate:24});} }, getState: () => ({ ...effects.contextSnapshot().state, phase: ctrl.game.phase, howtoT: ctrl.howto?.t, prize: ctrl.game.prize, score: ctrl.game.jackpotEarnings, chain: ctrl.game.chainStatus, rules: app.rules }) }) : null;   // 全穴JP・継続。文言/熱さは jp_direction_allholes_v1.json。
+  const lcd = q.get('lcd') !== 'legacy' ? await (await import('./lcd_surface/lcd_surface_confirm1029.mjs')).createLcdSurface({ manifestUrl: new URL(q.get('lcdclips') ?? './lcd_surface/ryugu1028/manifest.json', import.meta.url).href, jpManifestUrl: q.get('jpclips') === 'off' ? null : new URL(q.get('jpclips') ?? './lcd_surface/jp1029/manifest_confirm1029.json', import.meta.url).href, onJpCue: c => { if(c.kind==='hold'){const rank=app.rules.PrizeNames.indexOf(runtime.getPrize());runtime.setJpHold(true);return rank;} if(c.kind==='reveal'){runtime.setJpHold(false);} if(c.kind==='tray')runtime.awardToTray(c.count==='payout'?c.payout:c.count,{rate:c.rate,origin:'jp_reveal'}); if(c.kind==='snd')window.dispatchEvent(new CustomEvent('jp-scene-cue',{detail:c})); if(c.kind==='end'&&runtime.jpHold){runtime.setJpHold(false);runtime.releaseAwards({rate:24});} }, getState: () => ({ ...effects.contextSnapshot().state, phase: ctrl.game.phase, howtoT: ctrl.howto?.t, prize: ctrl.game.prize, score: ctrl.game.jackpotEarnings, chain: ctrl.game.chainStatus, rules: app.rules }) }) : null;   // 全穴JP・継続。文言/熱さは jp_direction_allholes_v1.json。
+  if(lcd?.production) await (await import('./lcd_surface/temp_cards_20261029.mjs')).attachTempCards(lcd);   // 仮カード(スタート/まだまだ/計数中/重複/耐えた)の本番演出
+  if(lcd?.production) await (await import('./lcd_surface/attract_surface_20261029.mjs')).attachAttractSurface(lcd,{getState:()=>({phase:ctrl.game.phase,howto:!!ctrl.howto})});
+  if(lcd?.production) await (await import('./lcd_surface/final_result_surface_20261029.mjs')).attachFinalResultSurface(lcd,{controller:ctrl});
+  if(lcd?.production) (await import('./lcd_surface/chain_connect_20261029.mjs')).attachChainConnect(lcd,{controller:ctrl});
+  if(lcd?.production) await (await import('./lcd_surface/choice_surface_v20_20261029.mjs')).attachChoiceSurface(lcd,{getState:()=>({phase:ctrl.game.phase}),controller:ctrl,canvas:document.getElementById('c'),onInput:app.onInput,unlock:()=>app.audio.unlock()});
+  if(M3 && lcd?.production && q.get('cabinetlights')!=='off') await (await import('../../effects/cabinet_light_script/cabinet_light_script_20261029.mjs')).attachCabinetLightScript(lcd,{getLamps:()=>ctrl.game.lamps,getState:()=>{const g=ctrl.game,p=g.phase;lightState.secondsLeft=g.secondsLeft;lightState.playing=p==='Ready'||p==='Flight'||p==='Effect';return lightState;}});
+  if(lcd?.production) (await import('./lcd_surface/timer_display_20261029.mjs')).attachTimerDisplay(lcd,{getState:()=>({phase:ctrl.game.phase,secondsLeft:ctrl.game.secondsLeft,offerLeft:ctrl.game.offerLeft,howto:!!ctrl.howto})});
+  if(lcd?.production) await (await import('./lcd_surface/timeup_surface_20261029.mjs')).attachTimeupSurface(lcd,{controller:ctrl,canvas:document.getElementById('c'),onInput:app.onInput,unlock:()=>app.audio.unlock()});
   // 新しいJP尺の音も起動時に作り、着地のフレームで長い音声バッファを生成しない。
   if(lcd?.jp && r2Audio){
     const {winPlan,createWinSound}=await import('../../audio/runtime/win_sound.mjs');const engine=r2Audio.engine;
-    const durations=new Set(Object.values(app.rules.FirstJackpotEffectSeconds??{}).flat());
+    const durations=new Set([...Object.values(app.rules.FirstJackpotEffectSeconds??{}).flat(),...(app.rules.JackpotEffectSeconds??[])]);   // 継続成功の通し尺も起動時に作る
     for(const duration of durations){const plan=winPlan({id:'jp',data:{duration}},engine.winTiming),key='jp:'+plan.duration;if(!engine.winCache.has(key))engine.winCache.set(key,createWinSound(engine.ctx,engine.buffers,engine.winTiming,plan));}
   }
   if (lcd && M3 && !q.has('m3lcdfit')) q.set('m3lcdfit', 'panel');
   if (lcd) window.__lcdSurface = lcd;
+  if (lcd?.production && r2Audio && q.get('afterjp') !== '0') { try { window.__afterJp = await (await import('../../audio/runtime/after_jp_sound_1029.mjs')).installAfterJpSound(r2Audio.engine, { lcd, controller: ctrl }); } catch (error) { console.error('[after-jp]', error); } }   // JP後(継続・確定・時間切れ・最終リザルト)の音。?afterjp=0 で無効
   fxApi = await connectPlayEffects({ hr, bus: effects, getSnapshot: () => effects.contextSnapshot(), lightingSources: pack.lighting.sources, rules: app.rules, lcdGain: Number(q.get('lcdgain') ?? 1), tray: q.has('notray') ? null : { ...runtime, get jpHold(){return runtime.jpHold;}, displayWallet: () => presenter.displayWallet() }, lcd, ownedFrontEarlyClip: M3, ownedBackEarlyClip: M3, ownedFrameSnapshot: M3 && !q.has('pack') && !q.has('fxjs') });
   app.overlay.fx.style.display = 'none';   // 旧ダミーの帯・カットイン・ルーレット・JPは液晶演出に置き換え
   if (!q.has('oldui')) app.overlay.setBare(true);   // 旧UI(上の帯・持ち玉・口の番号・キー表示・待機/時間切れ/結果の画面)は出さない。液晶と7セグが正式。?oldui で旧表示(デバッグ用)
@@ -144,13 +161,13 @@ if (!q.has('nofx')) {
 let m3 = null, m3Clock = 0;
 if (M3) { m3 = await (await import('./m3/m3_cabinet.mjs')).installM3Cabinet({ hr, fxApi, presenter, pa, q, getLamps: () => ctrl.game.lamps, getPrize: () => runtime.getPrize(), prizeNames: app.rules?.PrizeNames, ownedInitialEnvironment: M3 && !q.has('pack') ? hr.env : null }); pack.info.cabinet = { name: 'm3', ...m3.info }; window.__m3 = m3; }
 // 初回だけ重い処理(画像デコード・GPUアップロード・シェーダ)を遊技の前に済ませる。?prewarm=0 で無効
-if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi });
+if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi, rules: app.rules });
 window.__r2Audio = r2Audio;
 const stats = runtime.stats;
 const launcherArgs = M3 ? [(await import('./m3/launcher_body_m3.mjs')).createLauncherBody, { now: () => m3Clock, getLight: () => m3.state.k4 }] : [createLauncherBody, {}];
 const launcherBody = q.has('nolauncher') ? null : launcherArgs[0]({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) }, launcherArgs[1]);   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
-  cabinet.tick(performance.now());
+  cabinet.tick(performance.now()); ledStrip.update(performance.now());
   const s = pa.snapshot(); setAssemblyBalls(s); if (fxApi) fxApi.ballLights(s);   // 勝負中の玉をピンポイントで照らす(演出側)
   const lf = pack.lighting.frame(presenter.lightingInputs(), pa.tick); if (fxApi) { try { fxApi.applyLights(lf); } catch (e) { if (!window.__lightError) { window.__lightError = e.message; console.error('[lights]', e); } } }   // 演出の光(花びら・縁)が最終の書き手。範囲外などの異常は、その場の光だけ飛ばして遊技を止めない
   hr.setLightingFrame(lf);

@@ -1,0 +1,187 @@
+{
+ "v3_thunder": {
+  "anchor": 0.0,
+  "dur": 1.0,
+  "loop": false
+ },
+ "v3_thunder_flash": {
+  "anchor": 0.0,
+  "dur": 0.7,
+  "loop": false
+ },
+ "v3_pre_swell": {
+  "anchor": 1.4,
+  "dur": 1.4,
+  "loop": false
+ },
+ "v3_jp_entry": {
+  "anchor": 0.0,
+  "dur": 2.5,
+  "loop": false
+ },
+ "v3_kick": {
+  "anchor": 0.0,
+  "dur": 0.5,
+  "loop": false
+ },
+ "v3_snare": {
+  "anchor": 0.0,
+  "dur": 0.28,
+  "loop": false
+ },
+ "v3_hat": {
+  "anchor": 0.0,
+  "dur": 0.09,
+  "loop": false
+ },
+ "v3_roll_1bar": {
+  "anchor": 1.4088,
+  "dur": 1.489,
+  "loop": false
+ },
+ "v3_roll_2bar": {
+  "anchor": 2.8176,
+  "dur": 2.898,
+  "loop": false
+ },
+ "v3_siren_hi_bar": {
+  "anchor": 0.0,
+  "dur": 1.409,
+  "loop": true
+ },
+ "v3_siren_wail_bar": {
+  "anchor": 0.0,
+  "dur": 1.409,
+  "loop": true
+ },
+ "v3_chip_arp_hi": {
+  "anchor": 0.0,
+  "dur": 1.409,
+  "loop": true
+ },
+ "v3_chip_arp_hi2": {
+  "anchor": 0.0,
+  "dur": 1.409,
+  "loop": true
+ },
+ "v3_chip_arp_mid": {
+  "anchor": 0.0,
+  "dur": 1.409,
+  "loop": true
+ },
+ "v3_kyuin_burst": {
+  "anchor": 0.0,
+  "dur": 1.709,
+  "loop": false
+ },
+ "v3_hat16_bar": {
+  "anchor": 0.0,
+  "dur": 1.409,
+  "loop": true
+ },
+ "v3_ping_high": {
+  "anchor": 0.0,
+  "dur": 0.8,
+  "loop": false
+ },
+ "v3_chime_cascade": {
+  "anchor": 0.0,
+  "dur": 3.1,
+  "loop": false
+ },
+ "v3_mega_D": {
+  "anchor": 0.0,
+  "dur": 5.1,
+  "loop": false
+ },
+ "v3_mega_A": {
+  "anchor": 0.0,
+  "dur": 5.1,
+  "loop": false
+ },
+ "v3_mega_small": {
+  "anchor": 0.0,
+  "dur": 2.6,
+  "loop": false
+ },
+ "v3_fanfare_D": {
+  "anchor": 0.3522,
+  "dur": 4.0,
+  "loop": false
+ },
+ "v3_fanfare_A": {
+  "anchor": 0.3522,
+  "dur": 4.0,
+  "loop": false
+ },
+ "v3_stab_D": {
+  "anchor": 0.0,
+  "dur": 0.9,
+  "loop": false
+ },
+ "v3_stab_A": {
+  "anchor": 0.0,
+  "dur": 0.9,
+  "loop": false
+ },
+ "v3_siren_sweep": {
+  "anchor": 0.0,
+  "dur": 3.0,
+  "loop": false
+ },
+ "v3_riser_big_2bar": {
+  "anchor": 2.8176,
+  "dur": 2.818,
+  "loop": false
+ },
+ "v3_riser_big_1bar": {
+  "anchor": 1.4088,
+  "dur": 1.409,
+  "loop": false
+ },
+ "v3_coin_wall": {
+  "anchor": 0.0,
+  "dur": 8.0,
+  "loop": true
+ },
+ "v3_motor_clank": {
+  "anchor": 0.0,
+  "dur": 1.3,
+  "loop": false
+ },
+ "v3_end_hit": {
+  "anchor": 0.0,
+  "dur": 3.6,
+  "loop": false
+ },
+ "v4_bell_big": {
+  "anchor": 0.0,
+  "dur": 2.4,
+  "loop": false
+ },
+ "v4_sub_hit": {
+  "anchor": 0.0,
+  "dur": 0.9,
+  "loop": false
+ },
+ "v4_siren_one": {
+  "anchor": 0.55,
+  "dur": 0.6,
+  "loop": false
+ },
+ "v4_riser_short": {
+  "anchor": 0.8,
+  "dur": 0.8,
+  "loop": false
+ },
+ "v4_roll_short": {
+  "anchor": 0.8,
+  "dur": 0.8,
+  "loop": false
+ },
+ "v4_chime_run": {
+  "anchor": 0.0,
+  "dur": 1.3,
+  "loop": false
+ }
+}

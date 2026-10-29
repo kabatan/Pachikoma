@@ -1,0 +1,317 @@
+{
+ "hit_a_dronedrop": {
+  "anchor": 0.0,
+  "dur": 4.0,
+  "loop": false
+ },
+ "hit_b_swellboom": {
+  "anchor": 1.25,
+  "dur": 4.85,
+  "loop": false
+ },
+ "hit_c_revcym": {
+  "anchor": 1.35,
+  "dur": 4.35,
+  "loop": false
+ },
+ "hit_d_brassgrowl": {
+  "anchor": 0.04,
+  "dur": 4.6,
+  "loop": false
+ },
+ "hit_e_thunder": {
+  "anchor": 0.0,
+  "dur": 4.8,
+  "loop": false
+ },
+ "riser_1bar": {
+  "anchor": 1.4088,
+  "dur": 1.409,
+  "loop": false
+ },
+ "riser_2bar": {
+  "anchor": 2.8176,
+  "dur": 2.818,
+  "loop": false
+ },
+ "chance_slam": {
+  "anchor": 0.0,
+  "dur": 3.3,
+  "loop": false
+ },
+ "kyuin_a": {
+  "anchor": 0.0,
+  "dur": 1.2,
+  "loop": false
+ },
+ "kyuin_b": {
+  "anchor": 0.0,
+  "dur": 1.3,
+  "loop": false
+ },
+ "kyuin_c": {
+  "anchor": 0.0,
+  "dur": 1.4,
+  "loop": false
+ },
+ "alarm_siren": {
+  "anchor": 0.0,
+  "dur": 3.318,
+  "loop": false
+ },
+ "alarm_pulse": {
+  "anchor": 0.0,
+  "dur": 3.318,
+  "loop": false
+ },
+ "fanfare_stab": {
+  "anchor": 0.0,
+  "dur": 1.5,
+  "loop": false
+ },
+ "fanfare_paapaa": {
+  "anchor": 0.2641,
+  "dur": 2.8,
+  "loop": false
+ },
+ "fanfare_long": {
+  "anchor": 0.0,
+  "dur": 7.635,
+  "loop": false
+ },
+ "hold_blue": {
+  "anchor": 0.0,
+  "dur": 1.817,
+  "loop": false
+ },
+ "hold_red": {
+  "anchor": 0.0,
+  "dur": 2.2,
+  "loop": false
+ },
+ "hold_rainbow": {
+  "anchor": 0.0,
+  "dur": 3.3,
+  "loop": false
+ },
+ "cutin_slash": {
+  "anchor": 0.14,
+  "dur": 1.8,
+  "loop": false
+ },
+ "cutin_boom": {
+  "anchor": 0.0,
+  "dur": 2.4,
+  "loop": false
+ },
+ "rainbow_sting": {
+  "anchor": 0.85,
+  "dur": 4.4,
+  "loop": false
+ },
+ "gauge_charge_1bar": {
+  "anchor": 1.4088,
+  "dur": 1.409,
+  "loop": false
+ },
+ "gauge_charge_2bar": {
+  "anchor": 2.8176,
+  "dur": 2.818,
+  "loop": false
+ },
+ "charge_ding": {
+  "anchor": 0.0,
+  "dur": 2.1,
+  "loop": false
+ },
+ "tier_up_1": {
+  "anchor": 0.0,
+  "dur": 1.2,
+  "loop": false
+ },
+ "tier_up_2": {
+  "anchor": 0.0,
+  "dur": 1.4,
+  "loop": false
+ },
+ "tier_up_3": {
+  "anchor": 0.0,
+  "dur": 2.0,
+  "loop": false
+ },
+ "tension_pulse": {
+  "anchor": 0.0,
+  "dur": 2.818,
+  "loop": true
+ },
+ "aim_ping": {
+  "anchor": 0.0,
+  "dur": 0.9,
+  "loop": false
+ },
+ "tame_hit_ok": {
+  "anchor": 0.0,
+  "dur": 1.7,
+  "loop": false
+ },
+ "tame_miss": {
+  "anchor": 0.0,
+  "dur": 0.9,
+  "loop": false
+ },
+ "land_boom_D": {
+  "anchor": 0.0,
+  "dur": 3.6,
+  "loop": false
+ },
+ "land_boom_A": {
+  "anchor": 0.0,
+  "dur": 3.6,
+  "loop": false
+ },
+ "rush_slam3": {
+  "anchor": 0.0,
+  "dur": 4.2,
+  "loop": false
+ },
+ "rush_whoosh": {
+  "anchor": 0.5,
+  "dur": 2.1,
+  "loop": false
+ },
+ "bridge_text": {
+  "anchor": 0.0,
+  "dur": 2.6,
+  "loop": false
+ },
+ "go_hit": {
+  "anchor": 0.25,
+  "dur": 2.1,
+  "loop": false
+ },
+ "roulette_ticks_accel": {
+  "anchor": 0.0,
+  "dur": 2.6,
+  "loop": false
+ },
+ "roulette_ticks_steady": {
+  "anchor": 0.0,
+  "dur": 1.409,
+  "loop": true
+ },
+ "roulette_ticks_decel": {
+  "anchor": 2.65,
+  "dur": 3.22,
+  "loop": false
+ },
+ "roulette_lock": {
+  "anchor": 0.0,
+  "dur": 1.1,
+  "loop": false
+ },
+ "roulette_final_stop": {
+  "anchor": 0.0,
+  "dur": 4.0,
+  "loop": false
+ },
+ "payout_flow_a": {
+  "anchor": 0.0,
+  "dur": 4.6,
+  "loop": true
+ },
+ "payout_flow_b": {
+  "anchor": 0.0,
+  "dur": 4.6,
+  "loop": true
+ },
+ "coin_burst": {
+  "anchor": 0.0,
+  "dur": 1.8,
+  "loop": false
+ },
+ "fever_slam": {
+  "anchor": 0.0,
+  "dur": 3.8,
+  "loop": false
+ },
+ "reward_burst": {
+  "anchor": 0.5,
+  "dur": 3.0,
+  "loop": false
+ },
+ "reward_number_slam": {
+  "anchor": 0.0,
+  "dur": 2.5,
+  "loop": false
+ },
+ "upa_strobe_arp": {
+  "anchor": 0.0,
+  "dur": 2.4,
+  "loop": false
+ },
+ "chain_offer_ping": {
+  "anchor": 0.0,
+  "dur": 2.2,
+  "loop": false
+ },
+ "chain_continue_fanfare": {
+  "anchor": 1.3207,
+  "dur": 4.2,
+  "loop": false
+ },
+ "confirm_door_grind": {
+  "anchor": 0.0,
+  "dur": 3.2,
+  "loop": false
+ },
+ "confirm_treasure_burst": {
+  "anchor": 0.0,
+  "dur": 4.0,
+  "loop": false
+ },
+ "count_roll": {
+  "anchor": 0.0,
+  "dur": 2.2,
+  "loop": false
+ },
+ "total_final_ring": {
+  "anchor": 0.0,
+  "dur": 4.6,
+  "loop": false
+ },
+ "confirm_jingle_short": {
+  "anchor": 0.5,
+  "dur": 3.7,
+  "loop": false
+ },
+ "confirm_jingle_long": {
+  "anchor": 0.0,
+  "dur": 6.426,
+  "loop": false
+ },
+ "end_stinger": {
+  "anchor": 0.0,
+  "dur": 3.8,
+  "loop": false
+ },
+ "end_reverse_swell": {
+  "anchor": 1.4088,
+  "dur": 1.409,
+  "loop": false
+ },
+ "transition_whoosh": {
+  "anchor": 0.3,
+  "dur": 0.8,
+  "loop": false
+ },
+ "chance_title_riser": {
+  "anchor": 0.7,
+  "dur": 0.7,
+  "loop": false
+ },
+ "zap_flash": {
+  "anchor": 0.0,
+  "dur": 0.9,
+  "loop": false
+ }
+}

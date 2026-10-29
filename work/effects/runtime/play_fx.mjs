@@ -124,9 +124,9 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
     if (!qs.has('ebk')) adapter.bottomK = act.some((id) => id === 'result' || id === 'finish_count') ? Number(qs.get('ebkr') ?? .3) : 1;   // 結果の頭で皿の縁まで光らない(ディレクター: 囲いの内側のみ)
     const hot = act.some((id) => /^(roulette|ascend|challenge_|success|jp|fail|lamp[456]|warn10|timeup|add100|finish_count|result|attract|title|howto|ticket|start)/.test(id));
     const redHot = act.some((id) => /^(roulette|challenge_declare|challenge_flight)$/.test(id));
-    const list = wash && last ? wash.compute(last, clock, { ambientMin: redHot ? .8 : 0, red: redHot ? 1 : 0, navy: nl <= 3 && !hot ? 1 : 0, k: act.some((id) => id === 'jp' || id === 'success_big') ? .85 : act.includes('fail') ? .6 : act.includes('timeup') ? .45 : act.some((id) => id === 'lamp4' || id === 'lamp5' || id === 'lamp6') ? .7 : act.some((id) => id === 'result' || id === 'finish_count') ? .55 : 1, rainbow: act.includes('jp') ? Number(qs.get('jprb') ?? .85) : 0, sat: act.some((id) => id === 'result' || id === 'finish_count') ? Number(new URLSearchParams(location.search).get('sat') ?? 2.4) : act.includes('lamp6') ? 2.1 : act.includes('lamp5') ? 1.7 : act.includes('lamp4') ? 1.5 : 1 }) : [];   // 大成功・JPは液晶が主役。盤面の照射が液晶をかすませないよう半分に
+    const list = last?.m3?.reflections ? last.m3.reflections.slice() : wash && last ? wash.compute(last, clock, { ambientMin: redHot ? .8 : 0, red: redHot ? 1 : 0, navy: nl <= 3 && !hot ? 1 : 0, k: act.some((id) => id === 'jp' || id === 'success_big') ? .85 : act.includes('fail') ? .6 : act.includes('timeup') ? .45 : act.some((id) => id === 'lamp4' || id === 'lamp5' || id === 'lamp6') ? .7 : act.some((id) => id === 'result' || id === 'finish_count') ? .55 : 1, rainbow: act.includes('jp') ? Number(qs.get('jprb') ?? .85) : 0, sat: act.some((id) => id === 'result' || id === 'finish_count') ? Number(new URLSearchParams(location.search).get('sat') ?? 2.4) : act.includes('lamp6') ? 2.1 : act.includes('lamp5') ? 1.7 : act.includes('lamp4') ? 1.5 : 1 }) : [];   // 大成功・JPは液晶が主役。盤面の照射が液晶をかすませないよう半分に
     // 重複ルーレット: 針の位置(花びらの輪)に追従する赤いスポット
-    if (act.includes('roulette') && last && last.__needle != null) {
+    if (!last?.m3?.script1029 && act.includes('roulette') && last && last.__needle != null) {
       const th = last.__needle, P = fx.dir.pAng, G = geom.petals; let sx = 0, sy = 0, sw = 0;
       for (let i = 0; i < P.length; i++) { const d = Math.abs(P[i] - th), dd = Math.min(d, 1 - d), w = Math.exp(-Math.pow(dd / .05, 2)); sx += G[i].u * w; sy += G[i].v * w; sw += w; }
       if (sw > .01) list.push({ x: sx / sw * 1440, y: sy / sw * 2560, rgb: [1, .05, .07], radius: 460, gain: 3.4 });
@@ -186,7 +186,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
     try { adapter.setCabinet({ display: { digits: ballCountToDigits(Math.max(0, v), { blank: v < 0 }) } }); } catch (err) { console.warn('digits', err.message); }
   };
   // LCD板: 最初のフレームで中身ができてから作る
-  let plate = null, last = null;
+  let plate = null, last = null,uploadCanvas=null,uploadTexture=null,uploadRevision;
   const api = {
     get BL() { return BL; },
     get digitsShown() { return digitsShown; },
@@ -198,7 +198,14 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
       { const b = frameState.balls; if (prevBalls !== null && b < prevBalls && digitsOn) firedTotal += prevBalls - b; prevBalls = b; }
       clock += dt; driveDigits(ownedFrameSnapshot === true && typeof dt === 'number' ? frameState : null); if (!lcd) window.LCD.setState({ ballsShown: digitsShown }); last = fx.frame(dt);
       if (lcd) { lcd.frame(dt, last); lcd.applyLights?.(last); last.lcd = lcd.canvas; }
-      if (last.lcd) { if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain }); plate.tex.needsUpdate = true; }
+      if (last.lcd) {
+        if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain });
+        const choice=lcd?.choiceV20;
+        const revision=ownedFrameSnapshot===true&&lcd?.canvas===last.lcd&&!choice?.active&&!choice?.holding?lcd.uploadRevision:undefined;
+        const stable=Number.isSafeInteger(revision)&&revision>=0&&plate.tex.image===last.lcd;
+        if(!stable||uploadCanvas!==last.lcd||uploadTexture!==plate.tex||plate.tex.image!==last.lcd||uploadRevision!==revision)plate.tex.needsUpdate=true;
+        uploadCanvas=last.lcd;uploadTexture=plate.tex;uploadRevision=stable?revision:undefined;
+      }
       return last;
     },
     // play の draw 内で、hr.setLightingFrame の直前に1回だけ呼ぶ(光の最終の書き手)。光層の source_id との対応が付いたものだけ書き換える

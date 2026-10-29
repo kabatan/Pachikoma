@@ -133,7 +133,7 @@ function finalShader(lut, man) {
   return /* glsl */`
 uniform highp sampler2D uC, uD; uniform int uView; uniform int uUseLut; uniform float uDither;
 uniform highp sampler2DArray uMA, uMC, uMD, uME, uMF, uMT;
-uniform float uK[8]; uniform vec3 uKc[8]; uniform float uK4, uRecolor[8];
+uniform float uK[8]; uniform vec3 uKc[8]; uniform float uK4, uRecolor[8], uScriptTint;
 uniform vec3 uHole[7], uPil[7]; uniform vec2 uHoleX[7], uPilX[7];
 uniform float uSeg[28]; uniform vec3 uSegC; uniform float uMet[5];
 uniform vec3 uWash[8], uRing[4], uZone[8]; uniform float uWashGain, uZoneGain, uGlass, uGlassK;
@@ -264,7 +264,18 @@ void main() {
     float kk = (ra.x * uK[0] + ra.y * uK[1] + ra.z * uK[2] + ra.w * uK[3] + rb.x * uK[4] + rb.y * uK[5] + rb.z * uK[6] + rb.w * uK[7]) / wsum;
     vec3 col = (ra.x * uK[0] * uKc[0] + ra.y * uK[1] * uKc[1] + ra.z * uK[2] * uKc[2] + ra.w * uK[3] * uKc[3] + rb.x * uK[4] * uKc[4] + rb.y * uK[5] * uKc[5] + rb.z * uK[6] * uKc[6] + rb.w * uK[7] * uKc[7]) / max(kk * wsum, 1e-4);
     float rc = (ra.x * uRecolor[0] + ra.y * uRecolor[1] + ra.z * uRecolor[2] + ra.w * uRecolor[3] + rb.x * uRecolor[4] + rb.y * uRecolor[5] + rb.z * uRecolor[6] + rb.w * uRecolor[7]) / wsum;
-    if (f0.a > 0.001) o = mix(o, uBW == 1 ? frameLitBW(f0.rgb, uvA, kk, col) : frameLit(f0.rgb, texture(uMA, vec3(uvA, 1.0)).rgb, kk, col, rc), f0.a);
+    if (f0.a > 0.001) {
+      vec3 f4 = texture(uMA, vec3(uvA, 1.0)).rgb;
+      vec3 lit = uBW == 1 ? frameLitBW(f0.rgb, uvA, kk, col) : frameLit(f0.rgb, f4, kk, col, rc);
+      // 案B：頭・エラはF4の明るさ模様を濃く染める。区画を増やさず銀のしわを抑える。
+      if (uScriptTint > 0.0) {
+        vec3 l4 = s2l(f4); float pattern = max(l4.r, max(l4.g, l4.b));
+        vec3 hue = mix(col, vec3(1.0), pow(pattern, 16.0) * 0.12);
+        vec3 dyed = l2s(mix(s2l(f0.rgb), pattern * hue * kk, min(1.0, kk * 4.0)));
+        lit = mix(lit, dyed, (ra.x + ra.y) / wsum);
+      }
+      o = mix(o, lit, f0.a);
+    }
     // 得点表示板：消灯の絵 ＋ 点ける区画（線形の光）
     vec2 ud = (px - vec2(${D.x}, ${D.y})) / vec2(${D.width}.0, ${D.height}.0);
     if (ud.x > 0.0 && ud.y > 0.0 && ud.x < 1.0 && ud.y < 1.0) {
@@ -303,6 +314,21 @@ function lcdShader() {
   };
 }
 
+// Only complete owned script rows can replace every legacy region output.
+function regionNumbers(a,n) {
+  if(a?.length!==n)return false;
+  for(let i=0;i<n;i++)if(!Number.isFinite(a[i]))return false;
+  return true;
+}
+function regionTriples(a,n) {
+  if(a?.length!==n)return false;
+  for(let i=0;i<n;i++)if(!regionNumbers(a[i],3))return false;
+  return true;
+}
+function completeScriptRegions(s) {
+  return s?.script1029===true&&regionNumbers(s.K,8)&&regionNumbers(s.recolor,8)&&regionTriples(s.Kc,8)&&regionTriples(s.wash,8)&&regionTriples(s.zone,8)&&regionTriples(s.ring,4);
+}
+
 export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLamps = null, getPrize = null, prizeNames = null, ownedInitialEnvironment = null, packUrl = new URL('./pack1026/manifest.json', import.meta.url).href, q = new URLSearchParams() }) {
   const t0 = performance.now();
   const man = await (await fetch(packUrl)).json();
@@ -319,7 +345,7 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
   const v3 = (n) => Array.from({ length: n }, () => new THREE.Vector3());
   Object.assign(fm.uniforms, {
     uMA: { value: tA }, uMC: { value: tC }, uMD: { value: tD }, uME: { value: tE }, uMF: { value: tF }, uMT: { value: tT },
-    uK: { value: new Array(8).fill(0) }, uKc: { value: v3(8) }, uK4: { value: 0 }, uRecolor: { value: new Array(8).fill(0) },
+    uK: { value: new Array(8).fill(0) }, uKc: { value: v3(8) }, uK4: { value: 0 }, uRecolor: { value: new Array(8).fill(0) }, uScriptTint: { value: 0 },
     uHole: { value: v3(7) }, uPil: { value: v3(7) },
     uHoleX: { value: C.holes.map(h => new THREE.Vector2(h.x, h.x + h.w)) }, uPilX: { value: C.pillars.map(p => new THREE.Vector2(p.x, p.x + p.w)) },
     uSeg: { value: new Array(28).fill(0) }, uSegC: { value: new THREE.Vector3(...man.arrays.D.digit_on) }, uMet: { value: new Array(5).fill(0) },
@@ -413,6 +439,8 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
     const F = fxApi?.frameData;
     if (!F || !F.petal) return;
     const A = F.ambient ?? 1, act = F.active || [];
+    // Complete 1029 script rows overwrite all these region outputs below.
+    if (!(U.uScriptTint && completeScriptRegions(F.m3))) {
     for (let i = 0; i < geom.edge.length; i++) { const c = adapter.edgeColor(F, i, clock); ec[i * 3] = c[0]; ec[i * 3 + 1] = c[1]; ec[i * 3 + 2] = c[2]; }
     let ksum = 0;
     for (let r = 0; r < 8; r++) {
@@ -433,6 +461,7 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
       U.uRecolor.value[r] = Math.min(1, dp * 2.5);
     }
     st.k4 = ksum / 8; U.uK4.value = Math.min(1, st.k4); U.uGlass.value = Math.min(1, st.k4);
+    }
     // 縁の帯（zone、窓の縁の bz）：ふだんの演出の色はここと囲いの 4 灯・枠で出す（弱め）。盤の中（wash）は山場の閃きだけ（NOTES §5 の表）
     const jpOn = act.includes('jp');
     if (wash && !F.m3) {
@@ -469,9 +498,11 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
     st.flash = +fl.toFixed(2);
     // 1026: 試作14の動画と同じフレームの光（8区画・縁・盤面）。
     // 穴のLEDはこの後、実物理の灯と着地だけで駆動する。
+    U.uScriptTint.value = F.m3?.script1029 ? 1 : 0;
     if (F.m3) {
       for (let r = 0; r < 8; r++) {
         U.uK.value[r] = F.m3.K[r]; U.uKc.value[r].set(...F.m3.Kc[r]);
+        if (F.m3.recolor) U.uRecolor.value[r] = F.m3.recolor[r];
         U.uWash.value[r].set(...F.m3.wash[r]); U.uZone.value[r].set(...F.m3.zone[r]);
       }
       for (let r = 0; r < 4; r++) U.uRing.value[r].set(...F.m3.ring[r]);
@@ -511,13 +542,13 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
       U.uPil.value[j].set(w, w, w);
     }
     // 得点表示板：7 セグ（setCabinet の桁）とメーター（演出の seg.meter）
-    for (let i = 0; i < 28; i++) U.uSeg.value[i] = digits[i] * A;
+    for (let i = 0; i < 28; i++) U.uSeg.value[i] = digits[i] * (F.m3?.displayGain ?? A);
     if (segRGB) { const m = Math.max(...segRGB, 1e-5); U.uSegC.value.set(segRGB[0] / m, segRGB[1] / m, segRGB[2] / m); }
     const met = F.seg?.meter || [0, 0, 0, 0, 0];
     // メーター：今の賞（JP の配当の合計で決まる。C＝1 段目 … SS＝5 段目）まで点ける。演出のメーターの流しはその上に
     const prizeRank = getPrize && prizeNames ? prizeNames.indexOf(getPrize()) : 0;
     const rank = Math.min(prizeRank,F.m3?.meterLimit??5);
-    for (let i = 0; i < 5; i++) U.uMet.value[i] = Math.max(Math.max(0, met[i]), i < rank ? 0.9 : 0) * A;
+    for (let i = 0; i < 5; i++) U.uMet.value[i] = Math.max(Math.max(0, met[i]), i < rank ? 0.9 : 0) * (F.m3?.meterGain ?? A);
     st.lastF = F; st.k = [...U.uK.value].map(v => +v.toFixed(2)); st.wash = U.uWash.value.map(v => +Math.max(v.x, v.y, v.z).toFixed(2)); st.pocket = Array.from(F.pocket, v => +v.toFixed(1));
   }
   hr.rtMain.resolveDepthBuffer = false;

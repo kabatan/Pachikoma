@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "file": "timeup_prod.mp4",
+  "width": 1152,
+  "height": 1268,
+  "fps": 30,
+  "duration": 30,
+  "frames": 900,
+  "score_start": 48000,
+  "score_step_per_frame": 379.375,
+  "score_clock": "absolute_frame",
+  "background_period": 32,
+  "right_period": 210,
+  "offer_seconds": 30,
+  "loop": false
+}

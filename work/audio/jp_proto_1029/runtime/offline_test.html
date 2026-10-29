@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8"><title>jp_audio offline test</title>
+<pre id="o">running…</pre>
+<script type="module">
+import { installJpAudio } from './jp_audio.mjs';
+const out = document.getElementById('o'); const R = {};
+try {
+  const SR = 48000, DUR = 64;
+  const ctx = new OfflineAudioContext(2, SR * DUR, SR);
+  const mix = ctx.createGain(); mix.connect(ctx.destination);
+  // 通常BGMの代役(定常の440Hz)。userGainを通す=実エンジンと同じ位置
+  const osc = ctx.createOscillator(); osc.frequency.value = 440; const ug = ctx.createGain(); ug.gain.value = 1; osc.connect(ug).connect(mix); osc.start();
+  const engine = { ctx, mix, win: ctx.createGain(), bgm: { userGain: ug, volume: 1, enabled: true, muted: false, jpPlan: null, setVolume(v) { this.volume = v; } } };
+  const tl = await (await fetch('../tmp/timeline.json')).json();
+  const api = await installJpAudio(engine, new URLSearchParams(location.search).get('v') || 'A');
+  const sc = Object.fromEntries(tl.scenes.map(s => [s.name, s.t0]));
+  const seq = tl.scenes.filter(s => !['idle5', 'lamp6', 'jp_intro_lightning', 'chain_offer2', 'jp_gold_d4'].includes(s.name)).map(s => [s.t0, s.name]);
+  const endAt = +(new URLSearchParams(location.search).get('end') || 38.2667);
+  const events = seq.filter(([t]) => t < endAt).concat([[endAt, '__end']]);
+  const run = async i => {
+    if (i >= events.length) return;
+    const [t, name] = events[i];
+    await ctx.suspend(Math.floor((t - .05) * SR / 128) * 128 / SR).then(() => { if (name === '__end') api.end(); else api.trigger(name); ctx.resume(); });
+    // 次のsuspendは render 中に登録する必要があるため、先に全部登録する
+  };
+  // OfflineAudioContext の suspend は render 開始前に全て登録しておく
+  const sus = events.map(([t, name]) => ctx.suspend(Math.floor((t - .05) * SR / 128) * 128 / SR).then(() => { if (name === '__end') api.end(); else api.trigger(name); ctx.resume(); }));
+  const buf = await ctx.startRendering();
+  const L = buf.getChannelData(0), Rr = buf.getChannelData(1);
+  const rms = (a, b) => { let s = 0; const i0 = Math.floor(a * SR), i1 = Math.floor(b * SR); for (let i = i0; i < i1; i++) s += L[i] * L[i]; return 10 * Math.log10(s / (i1 - i0) + 1e-20); };
+  R.rms_before_dark = rms(3.9, 3.99); R.rms_4p00_4p03 = rms(4.0, 4.03); R.rms_4p1_4p5 = rms(4.1, 4.5); R.rms_5_6 = rms(5.0, 6.0); R.rms_6p4_6p8 = rms(6.4, 6.79); R.rms_6p8_7p3 = rms(6.8, 7.3); R.rms_after_end = rms(endAt + 4, endAt + 6);
+  let pk = 0; for (let i = 0; i < L.length; i++) pk = Math.max(pk, Math.abs(L[i]), Math.abs(Rr[i])); R.peak_dB = 20 * Math.log10(pk);
+  R.log = api.log.slice(0, 80).map(x => x.join(' '));
+  R.state = { inJp: api.state.inJp };
+} catch (e) { R.error = String(e && e.stack || e); }
+out.textContent = JSON.stringify(R, null, 1); window.__R = R;
+</script>

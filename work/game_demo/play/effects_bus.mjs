@@ -130,8 +130,11 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
     const readyAmbient = g.phase === 'Ready' && !presenter.reveal && !Object.values(presenter.fx).some(Boolean);
     if (readyAmbient && !ambient) send('ambient');
     ambient = readyAmbient;
-    const due = pending.filter(p => p.at <= clock + 1e-9); pending = pending.filter(p => p.at > clock + 1e-9);
-    for (const p of due) send(p.id, p.data);
+    // Most physics ticks have no delayed cue; avoid two empty arrays per sync.
+    if (pending.length) {
+      const due = pending.filter(p => p.at <= clock + 1e-9); pending = pending.filter(p => p.at > clock + 1e-9);
+      for (const p of due) send(p.id, p.data);
+    }
   }
   let ambient = false, landing = null, jpFlight = null;
   function physics(e) {

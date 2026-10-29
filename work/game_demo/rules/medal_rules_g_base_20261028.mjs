@@ -48,6 +48,8 @@ export class MedalRules {
     this.InitialSeconds = o.InitialSeconds ?? 100;
     this.ExtraSeconds = o.ExtraSeconds ?? 50;
     this.ContinueSeconds = o.ContinueSeconds ?? 10;
+    this.ChainChoiceSeconds = o.ChainChoiceSeconds ?? 12;
+    this.ChainContinueMinSeconds = o.ChainContinueMinSeconds ?? 7;   // 残りがこれ未満なら継続を出さず確定へ直行(時計は止めない)
     this.Awards = o.Awards ?? [0, 1, 2, 3, 10, 25, 60];
     this.ResetWeights = o.ResetWeights ?? [80, 15, 4, 1];
     this.ResetWeightsByLamps = o.ResetWeightsByLamps ?? null;
@@ -75,6 +77,7 @@ export class MedalRules {
       !Number.isInteger(r.HighLampDuplicateProtectionCount) || r.HighLampDuplicateProtectionCount < 0 || r.HighLampDuplicateProtectionCount > 5 ||
       !Number.isFinite(r.ChallengePrepareSeconds) || r.ChallengePrepareSeconds < 0 || r.ChallengePrepareSeconds > 5 ||
       !Number.isFinite(r.ChallengeAimSpeed) || r.ChallengeAimSpeed <= 0 || r.ChallengeAimSpeed > 1 ||
+      !Number.isFinite(r.ChainChoiceSeconds) || r.ChainChoiceSeconds <= 0 ||
       !Number.isFinite(r.EndGraceSeconds) || r.EndGraceSeconds < 0 || r.EndGraceSeconds > 5 ||
       (r.ExtraLoanBalls !== null && (!Number.isInteger(r.ExtraLoanBalls) || r.ExtraLoanBalls < 5)) ||
       typeof r.ClockStopOnReset !== 'boolean' || typeof r.ClockStopOnJackpot !== 'boolean' || typeof r.ClockStartsAfterLoan !== 'boolean' ||
@@ -131,7 +134,7 @@ export class MedalGame {
     this.chainAttempts = 0; this.chainSuccesses = 0; this.chainFailures = 0;
     this.chainBanked = 0; this.chainLost = 0;
     this.jackpotChain = null; this._resumeAfterLoan = null;
-    this.secondsLeft = 0; this.offerLeft = 0; this.effectLeft = 0;
+    this.secondsLeft = 0; this.offerLeft = 0; this.effectLeft = 0; this.choiceLeft = 0;
     this.clockStopBudgetUsed = 0; this.clockStoppedSeconds = 0;
     this.receipt = null; this.shot = null; this.endReason = '';
     this.challengeIntent = null; this.endPending = false; this.endGraceLeft = 0;
@@ -270,6 +273,7 @@ export class MedalGame {
     if (!this.rules.R3Enabled || this.phase !== MedalPhase.ChainChoice || !this.jackpotChain?.choicePending) return false;
     const chain = this.jackpotChain;
     if (!continueChain) {
+      this.choiceLeft = 0;
       this.jackpotChain = null;
       if (chain.pendingAward > 0) {
         const before = this.lamps, walletBefore = this.wallet;
@@ -288,6 +292,7 @@ export class MedalGame {
     if (this.secondsLeft <= 0 || this.endPending || this.wallet <= 0) return false;
     const lampCount = this.rules.JackpotChainLamps[Math.min(chain.stage, this.rules.JackpotChainLamps.length - 1)];
     this._lamps = new Set(Array.from({ length: lampCount }, (_, index) => index + 1));
+    this.choiceLeft = 0;
     chain.choicePending = false; chain.inChallenge = true;
     this.armed = true; this.phase = MedalPhase.Ready;
     const prepare = this.rules.R2Enabled && this.rules.PrepareForcedChallenge ? this.rules.ChallengePrepareSeconds : 0;
@@ -295,6 +300,7 @@ export class MedalGame {
     return true;
   }
   _bankChainAward() {
+    this.choiceLeft = 0;
     const chain = this.jackpotChain;
     this.jackpotChain = null;
     if (!chain?.pendingAward) return 0;
@@ -387,6 +393,9 @@ export class MedalGame {
       if (firstJpSeconds != null) duration = firstJpSeconds;
       this._lamps.clear(); this.armed = false; this.challengeIntent = null;
       if (this.rules.R3Enabled) { this.firstProtection = true; this.highLampDuplicateProtectionLeft = 0; }
+    } else if (this.rules.R3Enabled && this.jackpotChain?.choicePending && !this._lamps.has(lane) && this.lampCount >= 5) {
+      // 継続の選択が保留されている間は6灯目を点けない(6灯の勝負・JP導入を始めない)。選択が済んでから集める。
+      kind = MedalEvent.Protected; duration = 0.45;
     } else if (!this._lamps.has(lane) && (!this.rules.ContinuousFire || this.lampCount < 6)) {
       this._lamps.add(lane);
       kind = MedalEvent.Fresh; duration = 0.45;
@@ -457,6 +466,21 @@ export class MedalGame {
     if (duration > 0) this._resetDisplays.push({ receiptId: receipt.id, slot, startedAt: this._displayClock, expiresAt: this._displayClock + duration });
   }
 
+  get chainTooLate() { return this.rules.R3Enabled && this.secondsLeft < (this.rules.ChainContinueMinSeconds ?? 0); }
+  _enterChainChoice() {
+    if (this.phase !== MedalPhase.ChainChoice) this.choiceLeft = this.rules.ChainChoiceSeconds;
+    this.phase = MedalPhase.ChainChoice;
+    // 続ける時間が残っていない: 選択画面を出さず、そのまま確定する。
+    if (this.chainTooLate) this.chooseChain(false);
+  }
+  _advanceChainChoice(seconds) {
+    if (this.phase !== MedalPhase.ChainChoice) return false;
+    if (this.chainTooLate) return this.chooseChain(false);
+    this.choiceLeft = Math.max(0, this.choiceLeft - seconds);
+    if (this.choiceLeft > 1e-9) return false;
+    return this.chooseChain(false);
+  }
+
   advance(seconds) {
     if (!Number.isFinite(seconds) || seconds < 0) throw new RangeError('seconds');
     this._displayClock += seconds;
@@ -477,7 +501,8 @@ export class MedalGame {
       const used = Math.min(seconds, this.effectLeft);   // 払い出し中は残り時間を減らさない
       this.effectLeft -= used; seconds -= used;
       if (this.effectLeft <= 0) {
-        this.phase = this._resumeAfterLoan ?? MedalPhase.Ready;
+        if (this._resumeAfterLoan === MedalPhase.ChainChoice) this._enterChainChoice();
+        else this.phase = this._resumeAfterLoan ?? MedalPhase.Ready;
         this._resumeAfterLoan = null;
       }
       if (seconds <= 0) return;
@@ -493,12 +518,14 @@ export class MedalGame {
     if (budgeted) this.clockStopBudgetUsed += paused;
     this.clockStoppedSeconds += paused;
     this.secondsLeft = Math.max(0, this.secondsLeft - (seconds - paused));
+    if (this._advanceChainChoice(seconds)) return;
     this._prepareChallenge();
     if (this.phase === MedalPhase.Flight) return; // 最後の1球は期限・玉切れでも必ず着地まで待つ
     if (this.phase === MedalPhase.Effect) {
       this.effectLeft = Math.max(0, this.effectLeft - seconds);
       if (this.effectLeft > 0) return;
-      this.phase = this.rules.R3Enabled && this.jackpotChain?.choicePending ? MedalPhase.ChainChoice : MedalPhase.Ready;
+      if (this.rules.R3Enabled && this.jackpotChain?.choicePending) this._enterChainChoice();
+      else this.phase = MedalPhase.Ready;
     }
     if (this.overlap) {
       // 待たされていた着地を1つずつ反映する(反映するとまた演出に入る)。盤上に玉がある間は終了判定をしない。
@@ -527,8 +554,11 @@ export class MedalGame {
     this._settlementLeft = Math.max(0,this._settlementLeft-seconds);
     this.effectLeft = Math.max(this._settlementLeft,Math.max(0,this.effectLeft-seconds));
     if (this.challengeIntent) {this.challengeIntent.stage='ready';this.challengeIntent.left=0;}
-    if (this.phase !== MedalPhase.ChainChoice) this.phase = this.effectLeft > 1e-9 ? MedalPhase.Effect :
-      this.jackpotChain?.choicePending ? MedalPhase.ChainChoice : MedalPhase.Ready;
+    if (this.phase === MedalPhase.ChainChoice) {
+      if (this._advanceChainChoice(seconds)) return;
+    } else if (this.effectLeft > 1e-9) this.phase = MedalPhase.Effect;
+    else if (this.jackpotChain?.choicePending) this._enterChainChoice();
+    else this.phase = MedalPhase.Ready;
     if (this.shots.length || this._settlementLeft > 1e-9) return;
     if (this.wallet > 0 && this.secondsLeft > 0) {this.endPending=false;this.endGraceLeft=0;return;}
     if (!this.endPending) {this.endPending=true;this.endGraceLeft=this.rules.EndGraceSeconds;}

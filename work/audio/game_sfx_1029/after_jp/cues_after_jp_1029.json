@@ -1,0 +1,761 @@
+{
+ "version": 1,
+ "note": "JP後の音の対応表。runtime(after_jp_sound_1029.mjs)とミキサー(tools/mix_preview.py)が共有する。sample は このファイルからの相対パス。db は dB、at は秒、dur/fade で尾を切る。",
+ "bank": {
+  "mega_A": "../../jp_proto_1029/sfx_v3/v3_mega_A.wav",
+  "mega_small": "../../jp_proto_1029/sfx_v3/v3_mega_small.wav",
+  "fanfare_A": "../../jp_proto_1029/sfx_v3/v3_fanfare_A.wav",
+  "stab_A": "../../jp_proto_1029/sfx_v3/v3_stab_A.wav",
+  "chime_cascade": "../../jp_proto_1029/sfx_v3/v3_chime_cascade.wav",
+  "ping_high": "../../jp_proto_1029/sfx_v3/v3_ping_high.wav",
+  "motor_clank": "../../jp_proto_1029/sfx_v3/v3_motor_clank.wav",
+  "bell_big": "../../jp_proto_1029/sfx_v4/v4_bell_big.wav",
+  "sub_hit": "../../jp_proto_1029/sfx_v4/v4_sub_hit.wav",
+  "chime_run": "../../jp_proto_1029/sfx_v4/v4_chime_run.wav",
+  "riser_short": "../../jp_proto_1029/sfx_v4/v4_riser_short.wav",
+  "kyuin_a": "../../jp_proto_1029/sfx/kyuin_a.wav",
+  "kyuin_b": "../../jp_proto_1029/sfx/kyuin_b.wav",
+  "kyuin_c": "../../jp_proto_1029/sfx/kyuin_c.wav",
+  "chain_offer_ping": "../../jp_proto_1029/sfx/chain_offer_ping.wav",
+  "chain_continue_fanfare": "../../jp_proto_1029/sfx/chain_continue_fanfare.wav",
+  "tier_up_1": "../../jp_proto_1029/sfx/tier_up_1.wav",
+  "tier_up_2": "../../jp_proto_1029/sfx/tier_up_2.wav",
+  "tier_up_3": "../../jp_proto_1029/sfx/tier_up_3.wav",
+  "tension_pulse": "../../jp_proto_1029/sfx/tension_pulse.wav",
+  "tame_hit_ok": "../../jp_proto_1029/sfx/tame_hit_ok.wav",
+  "tame_miss": "../../jp_proto_1029/sfx/tame_miss.wav",
+  "land_boom_A": "../../jp_proto_1029/sfx/land_boom_A.wav",
+  "coin_burst": "../../jp_proto_1029/sfx/coin_burst.wav",
+  "confirm_door_grind": "../../jp_proto_1029/sfx/confirm_door_grind.wav",
+  "confirm_treasure_burst": "../../jp_proto_1029/sfx/confirm_treasure_burst.wav",
+  "total_final_ring": "../../jp_proto_1029/sfx/total_final_ring.wav",
+  "transition_whoosh": "../../jp_proto_1029/sfx/transition_whoosh.wav",
+  "go_hit": "../../jp_proto_1029/sfx/go_hit.wav"
+ },
+ "new": [
+  "ch_pick_stop",
+  "ch_pick_go",
+  "ch_pick_neutral",
+  "ch_in",
+  "ch_tick_soft",
+  "ch_tick_mid",
+  "ch_tick_hard",
+  "ch_time_zero",
+  "ch_commit_go",
+  "ch_commit_stop",
+  "fail_gray",
+  "fail_hit",
+  "offer_burst",
+  "success_arp",
+  "spin_54f",
+  "spin_short",
+  "digit_lock0",
+  "digit_lock1",
+  "digit_lock2",
+  "digit_lock3",
+  "total_slam",
+  "chain_n_slam",
+  "upa_hop",
+  "timeup_slam",
+  "off_tick",
+  "off_tick5",
+  "add_coin",
+  "add_sparkle",
+  "add_resume",
+  "end_cadence",
+  "res_frame",
+  "res_total",
+  "res_meter",
+  "res_ding0",
+  "res_ding1",
+  "res_ding2",
+  "res_ding3",
+  "res_medal0",
+  "res_medal1",
+  "res_medal2",
+  "res_medal3",
+  "res_medal4",
+  "res_info0",
+  "res_info1",
+  "res_info2"
+ ],
+ "macros": {
+  "XL": [
+   [
+    "mega_A",
+    6.5,
+    0,
+    2.4,
+    0.4
+   ],
+   [
+    "fanfare_A",
+    5.5,
+    0,
+    2.0,
+    0.4
+   ],
+   [
+    "chime_cascade",
+    -2
+   ],
+   [
+    "ping_high",
+    3
+   ],
+   [
+    "kyuin_b",
+    1
+   ],
+   [
+    "bell_big",
+    -2
+   ],
+   [
+    "sub_hit",
+    5
+   ]
+  ],
+  "L": [
+   [
+    "mega_small",
+    1,
+    0,
+    1.3,
+    0.3
+   ],
+   [
+    "stab_A",
+    -2
+   ],
+   [
+    "kyuin_b",
+    -4
+   ],
+   [
+    "ping_high",
+    -2
+   ],
+   [
+    "sub_hit",
+    -1
+   ],
+   [
+    "bell_big",
+    -11,
+    0,
+    1.0,
+    0.5
+   ]
+  ],
+  "M": [
+   [
+    "stab_A",
+    -13
+   ],
+   [
+    "ping_high",
+    -12
+   ],
+   [
+    "sub_hit",
+    -11
+   ]
+  ],
+  "S": [
+   [
+    "ping_high",
+    -14
+   ]
+  ],
+  "tier1": [
+   [
+    "tier_up_1",
+    -3
+   ],
+   [
+    "stab_A",
+    -14
+   ],
+   [
+    "ping_high",
+    -13
+   ],
+   [
+    "sub_hit",
+    -12
+   ],
+   [
+    "chime_run",
+    -14
+   ]
+  ],
+  "tier2": [
+   [
+    "tier_up_2",
+    -3
+   ],
+   [
+    "stab_A",
+    -12
+   ],
+   [
+    "ping_high",
+    -11
+   ],
+   [
+    "sub_hit",
+    -10
+   ],
+   [
+    "chime_run",
+    -12
+   ]
+  ],
+  "iree": [
+   [
+    "stab_A",
+    -4
+   ],
+   [
+    "sub_hit",
+    -3
+   ],
+   [
+    "bell_big",
+    -12
+   ],
+   [
+    "ping_high",
+    -6
+   ],
+   [
+    "kyuin_a",
+    -8
+   ]
+  ],
+  "offer1": [
+   [
+    "chain_continue_fanfare",
+    -2,
+    0,
+    3.2,
+    0.5
+   ],
+   [
+    "offer_burst",
+    -3
+   ],
+   [
+    "chain_offer_ping",
+    -4
+   ],
+   [
+    "XL",
+    0
+   ]
+  ],
+  "offer2": [
+   [
+    "success_arp",
+    -4
+   ],
+   [
+    "chain_offer_ping",
+    -3
+   ],
+   [
+    "L",
+    0
+   ]
+  ],
+  "land": [
+   [
+    "land_boom_A",
+    -4
+   ],
+   [
+    "coin_burst",
+    -6
+   ],
+   [
+    "XL",
+    0
+   ]
+  ],
+  "treasure": [
+   [
+    "confirm_treasure_burst",
+    -1.5
+   ],
+   [
+    "coin_burst",
+    -6
+   ],
+   [
+    "XL",
+    0
+   ]
+  ],
+  "total_final": [
+   [
+    "total_slam",
+    -2
+   ],
+   [
+    "total_final_ring",
+    -2
+   ],
+   [
+    "coin_burst",
+    -5
+   ],
+   [
+    "XL",
+    0
+   ]
+  ],
+  "fail": [
+   [
+    "fail_hit",
+    -1
+   ],
+   [
+    "fail_gray",
+    -2
+   ]
+  ]
+ },
+ "duck": {
+  "XL": [
+   6,
+   0.25,
+   0.8
+  ],
+  "L": [
+   3.5,
+   0.15,
+   0.5
+  ],
+  "treasure": [
+   7,
+   0.3,
+   0.8
+  ],
+  "total_final": [
+   8,
+   0.3,
+   0.9
+  ],
+  "fail": [
+   5,
+   0.3,
+   0.9
+  ]
+ },
+ "scenes": {
+  "chain_offer@first": [
+   {
+    "f": 0,
+    "m": "offer1"
+   }
+  ],
+  "chain_offer@chain": [
+   {
+    "f": 0,
+    "m": "offer2"
+   }
+  ],
+  "chain_jp_aim": [
+   {
+    "f": 0,
+    "m": "M"
+   },
+   {
+    "f": 0,
+    "s": "kyuin_c",
+    "db": -6
+   }
+  ],
+  "chain_fly_in": [
+   {
+    "f": 0,
+    "m": "L"
+   },
+   {
+    "f": 0,
+    "s": "riser_short",
+    "db": -18
+   },
+   {
+    "f": 0,
+    "s": "motor_clank",
+    "db": -10
+   }
+  ],
+  "chain_fly_t1": [
+   {
+    "f": 0,
+    "m": "tier1"
+   }
+  ],
+  "chain_fly_t2": [
+   {
+    "f": 0,
+    "m": "tier2"
+   }
+  ],
+  "chain_fly_t3": [
+   {
+    "f": 0,
+    "m": "tier1"
+   },
+   {
+    "f": 0,
+    "s": "tier_up_3",
+    "db": -3
+   },
+   {
+    "f": 0,
+    "m": "L"
+   },
+   {
+    "f": 0,
+    "s": "tension_pulse",
+    "db": -12,
+    "dur": 4.0,
+    "fade": 0.3,
+    "stopOnScene": true
+   },
+   {
+    "f": 8,
+    "m": "iree"
+   }
+  ],
+  "chain_tame_hit": [
+   {
+    "f": 0,
+    "s": "tame_hit_ok",
+    "db": 0
+   },
+   {
+    "f": 0,
+    "m": "M"
+   }
+  ],
+  "chain_tame_miss": [
+   {
+    "f": 0,
+    "s": "tame_miss",
+    "db": -2
+   }
+  ],
+  "chain_jp_land": [
+   {
+    "f": 0,
+    "m": "land"
+   }
+  ],
+  "chain_jp_gold": [
+   {
+    "f": 0,
+    "m": "land"
+   }
+  ],
+  "chain_confirm": [
+   {
+    "f": 18,
+    "s": "confirm_door_grind",
+    "db": -6,
+    "dur": 2.2,
+    "fade": 0.12
+   },
+   {
+    "f": 84,
+    "m": "treasure"
+   },
+   {
+    "f": 84,
+    "s": "chain_n_slam",
+    "db": 0,
+    "ifChain": true
+   },
+   {
+    "f": 96,
+    "s": "res_total",
+    "db": -3
+   },
+   {
+    "f": 102,
+    "s": "spin_54f",
+    "db": -6
+   },
+   {
+    "f": 156,
+    "m": "total_final"
+   },
+   {
+    "f": 156,
+    "s": "upa_hop",
+    "db": -12
+   },
+   {
+    "f": 176,
+    "s": "upa_hop",
+    "db": -14
+   },
+   {
+    "f": 196,
+    "s": "upa_hop",
+    "db": -16
+   }
+  ],
+  "fail_chain": [
+   {
+    "f": 40,
+    "m": "fail"
+   },
+   {
+    "f": 78,
+    "s": "res_info0",
+    "db": -12,
+    "rate": 0.7
+   }
+  ],
+  "fail_first": [
+   {
+    "f": 40,
+    "m": "fail"
+   },
+   {
+    "f": 78,
+    "s": "res_info0",
+    "db": -12,
+    "rate": 0.7
+   }
+  ]
+ },
+ "choice": {
+  "in": [
+   [
+    "ch_in",
+    -8
+   ]
+  ],
+  "pick_left": [
+   [
+    "ch_pick_stop",
+    2
+   ]
+  ],
+  "pick_right": [
+   [
+    "ch_pick_go",
+    2
+   ]
+  ],
+  "pick_neutral": [
+   [
+    "ch_pick_neutral",
+    -4
+   ]
+  ],
+  "commit_left": [
+   [
+    "ch_commit_stop",
+    -1
+   ]
+  ],
+  "commit_right": [
+   [
+    "ch_commit_go",
+    -1
+   ],
+   [
+    "L",
+    -3
+   ]
+  ],
+  "tick": {
+   "10": [
+    "ch_tick_soft",
+    -6
+   ],
+   "5": [
+    "ch_tick_mid",
+    -3
+   ],
+   "3": [
+    "ch_tick_hard",
+    -1
+   ],
+   "0": [
+    "ch_time_zero",
+    0
+   ]
+  }
+ },
+ "timeup": {
+  "enter": [
+   [
+    "timeup_slam",
+    -1
+   ]
+  ],
+  "tick10": [
+   "off_tick",
+   0
+  ],
+  "tick5": [
+   "off_tick5",
+   -3
+  ],
+  "staffwait": [
+   [
+    "add_coin",
+    -1
+   ],
+   [
+    "ch_pick_go",
+    -8
+   ]
+  ],
+  "resume": [
+   [
+    "add_sparkle",
+    -2
+   ],
+   [
+    "add_resume",
+    -1
+   ],
+   [
+    "M",
+    0
+   ]
+  ],
+  "end": [
+   [
+    "end_cadence",
+    -2
+   ]
+  ]
+ },
+ "result": {
+  "frames": [
+   {
+    "f": 40,
+    "s": "res_frame",
+    "db": -3
+   },
+   {
+    "f": 96,
+    "s": "res_total",
+    "db": -3
+   },
+   {
+    "f": 102,
+    "s": "spin_54f",
+    "db": -6
+   },
+   {
+    "f": 156,
+    "m": "total_final"
+   },
+   {
+    "f": 160,
+    "s": "res_meter",
+    "db": -16,
+    "dur": 1.8,
+    "fade": 0.1
+   },
+   {
+    "f": 214,
+    "s": "MEDAL",
+    "db": -1
+   },
+   {
+    "f": 222,
+    "s": "res_info0",
+    "db": -8
+   },
+   {
+    "f": 228,
+    "s": "res_info1",
+    "db": -8
+   },
+   {
+    "f": 230,
+    "s": "res_info2",
+    "db": -8
+   },
+   {
+    "f": 292,
+    "s": "ch_pick_neutral",
+    "db": -12
+   }
+  ],
+  "meterFrames": [
+   160,
+   214
+  ]
+ },
+ "gainTrim": 0.0,
+ "pulses": {
+  "chain_offer@first": {
+   "every": 2.2,
+   "from": 1.4,
+   "max": 5,
+   "items": [
+    [
+     "chime_run",
+     -15
+    ]
+   ]
+  },
+  "chain_offer@chain": {
+   "every": 2.2,
+   "from": 1.4,
+   "max": 5,
+   "items": [
+    [
+     "chime_run",
+     -15
+    ]
+   ]
+  },
+  "continue": {
+   "every": 2.4,
+   "from": 1.6,
+   "max": 40,
+   "items": [
+    [
+     "res_info1",
+     -9
+    ],
+    [
+     "res_info2",
+     -9,
+     0.14
+    ]
+   ]
+  },
+  "staffwait": {
+   "every": 3.0,
+   "from": 2.0,
+   "max": 200,
+   "items": [
+    [
+     "res_info1",
+     -13
+    ],
+    [
+     "res_info2",
+     -13,
+     0.14
+    ]
+   ]
+  }
+ },
+ "bankTrim": -12
+}

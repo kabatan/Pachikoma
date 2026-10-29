@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "canvas": [
+    1152,
+    1268
+  ],
+  "box": [
+    992,
+    1150,
+    170,
+    215
+  ],
+  "rect": {
+    "x": 800,
+    "y": 950,
+    "width": 352,
+    "height": 318
+  },
+  "values": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "draw_order": [
+    "video",
+    "patch_state",
+    "digit_state_value"
+  ],
+  "alpha": "straight RGBA, standard source-over; common across states for patch and individually for each digit value",
+  "notes": "Digits include exact original texture, outline, shadow, glow and final grade. Digit alpha is a state-specific residual against patched background. Double digits fit the original 170px width at unchanged 215px height.",
+  "states": {
+    "neutral": {
+      "patch": "neutral_patch.png",
+      "digits": {
+        "0": "neutral_00.png",
+        "1": "neutral_01.png",
+        "2": "neutral_02.png",
+        "3": "neutral_03.png",
+        "4": "neutral_04.png",
+        "5": "neutral_05.png",
+        "6": "neutral_06.png",
+        "7": "neutral_07.png",
+        "8": "neutral_08.png",
+        "9": "neutral_09.png",
+        "10": "neutral_10.png",
+        "11": "neutral_11.png",
+        "12": "neutral_12.png"
+      },
+      "source8_comparison": {
+        "mean_abs_255": 0.22512039915621548,
+        "p99_abs_255": 0.4945382429194076
+      },
+      "background": "neutral_background.png",
+      "final_source8_comparison": {
+        "mean_abs_255": 0.2785496413707733,
+        "p99_abs_255": 0.8470657467842102,
+        "max_abs_255": 1.3921617269515991
+      }
+    },
+    "left": {
+      "patch": "left_patch.png",
+      "digits": {
+        "0": "left_00.png",
+        "1": "left_01.png",
+        "2": "left_02.png",
+        "3": "left_03.png",
+        "4": "left_04.png",
+        "5": "left_05.png",
+        "6": "left_06.png",
+        "7": "left_07.png",
+        "8": "left_08.png",
+        "9": "left_09.png",
+        "10": "left_10.png",
+        "11": "left_11.png",
+        "12": "left_12.png"
+      },
+      "source8_comparison": {
+        "mean_abs_255": 0.23186423843614784,
+        "p99_abs_255": 0.4946190131124058
+      },
+      "background": "left_background.png",
+      "final_source8_comparison": {
+        "mean_abs_255": 0.28479111194610596,
+        "p99_abs_255": 0.8745116591453552,
+        "max_abs_255": 1.3607981204986572
+      }
+    },
+    "right": {
+      "patch": "right_patch.png",
+      "digits": {
+        "0": "right_00.png",
+        "1": "right_01.png",
+        "2": "right_02.png",
+        "3": "right_03.png",
+        "4": "right_04.png",
+        "5": "right_05.png",
+        "6": "right_06.png",
+        "7": "right_07.png",
+        "8": "right_08.png",
+        "9": "right_09.png",
+        "10": "right_10.png",
+        "11": "right_11.png",
+        "12": "right_12.png"
+      },
+      "source8_comparison": {
+        "mean_abs_255": 0.22552523014936804,
+        "p99_abs_255": 0.49447195989065007
+      },
+      "background": "right_background.png",
+      "final_source8_comparison": {
+        "mean_abs_255": 0.27944499254226685,
+        "p99_abs_255": 0.8627451062202454,
+        "max_abs_255": 1.4274466037750244
+      }
+    }
+  },
+  "common_alpha": {
+    "patch": "identical across all three states",
+    "digits": "identical across states for each value; different values have different alpha",
+    "transition": "Mix RGB of state patches at identical coordinates, then apply the common patch alpha once. Mix RGB of the same digit value across states, then apply its common alpha once.",
+    "capture": "State snapshot should contain the patch but omit the digit. The patch-only snapshot already has the baked 8 removed."
+  }
+}

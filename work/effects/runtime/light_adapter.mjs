@@ -7,7 +7,15 @@
  * 対応のない source_id は触らない(従来の LightingDriver の値がそのまま残る)。
  */
 const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-const hsv = (h, s, v) => { const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s); return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][((i % 6) + 6) % 6]; };
+const hsv = (h, s, v) => {
+  const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  // Only the selected RGB triple escapes; do not allocate the other five.
+  switch (((i % 6) + 6) % 6) {
+    case 0: return [v, t, p]; case 1: return [q, v, p];
+    case 2: return [p, v, t]; case 3: return [p, q, v];
+    case 4: return [t, p, v]; case 5: return [v, p, q];
+  }
+};
 const toLin = (c) => (c <= .04045 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4));
 
 /** 合成後の7穴×RGBを、色の比率を保ったまま各口の最大成分が上限(筐体側は0..8を超えると例外)以下になるよう縮める。上限以下の値は変えない */

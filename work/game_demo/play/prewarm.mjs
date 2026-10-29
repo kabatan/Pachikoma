@@ -141,7 +141,21 @@ export async function prewarm(ctx) {
   const out = { ms: {} };
   const t0 = now();
   const LCD = window.LCD;
-  try { await warmRenderer(ctx); out.ms.renderer = Math.round(now() - t0); } catch (e) { out.renderer_error = e.message; console.warn('[prewarm] renderer', e); }
+  const production=window.__lcdSurface;
+  if(production?.production){
+    out.production={};
+    const jobs=[
+      ['timer',()=>production.timerDisplay?.prewarm?.({secondsMax:ctx.rules?.InitialSeconds,offerMax:ctx.rules?.ContinueSeconds})],
+      ['normal',()=>production.warm?.()],
+      ['jpRush',()=>production.warmJpRush?.()],
+      ['palace',()=>production.jp?.palace?.warm?.()],
+      ['choice',()=>production.choiceV20?.warm?.()],
+      ['result',()=>production.jp?.warmResults?.()],
+    ];
+    for(const [name,run]of jobs){const start=now();try{out.production[name]={result:await run(),ms:now()-start};}catch(e){out.production[name]={error:e.message,ms:now()-start};console.warn('[prewarm]',name,e.message);}await tick();}
+  }
+  const rendererAt=now();
+  try { await warmRenderer(ctx); out.ms.renderer = Math.round(now() - rendererAt); } catch (e) { out.renderer_error = e.message; console.warn('[prewarm] renderer', e); }
   if (LCD?.ready) {
     const t1 = now();
     try { out.lcd = await warmLcd(LCD); } catch (e) { out.lcd_error = e.message; console.warn('[prewarm] lcd', e); }

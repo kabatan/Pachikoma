@@ -1,0 +1,112 @@
+{
+ "v5_s_blip_1": {
+  "anchor": 0.0,
+  "dur": 0.11,
+  "tier": "S"
+ },
+ "v5_s_blip_2": {
+  "anchor": 0.0,
+  "dur": 0.11,
+  "tier": "S"
+ },
+ "v5_s_blip_3": {
+  "anchor": 0.0,
+  "dur": 0.11,
+  "tier": "S"
+ },
+ "v5_s_blip_4": {
+  "anchor": 0.0,
+  "dur": 0.11,
+  "tier": "S"
+ },
+ "v5_s_blip_5": {
+  "anchor": 0.0,
+  "dur": 0.11,
+  "tier": "S"
+ },
+ "v5_s_tick": {
+  "anchor": 0.0,
+  "dur": 0.05,
+  "tier": "S"
+ },
+ "v5_s_drop": {
+  "anchor": 0.0,
+  "dur": 0.12,
+  "tier": "S"
+ },
+ "v5_s_coin": {
+  "anchor": 0.0,
+  "dur": 0.3,
+  "tier": "S"
+ },
+ "v5_s_arp": {
+  "anchor": 0.0,
+  "dur": 0.248,
+  "tier": "S"
+ },
+ "v5_m_clang_lo": {
+  "anchor": 0.4,
+  "dur": 2.2,
+  "tier": "M"
+ },
+ "v5_m_clang_D": {
+  "anchor": 0.3,
+  "dur": 1.7,
+  "tier": "M"
+ },
+ "v5_m_clang_Fs": {
+  "anchor": 0.3,
+  "dur": 1.7,
+  "tier": "M"
+ },
+ "v5_m_clang_A": {
+  "anchor": 0.28,
+  "dur": 1.58,
+  "tier": "M"
+ },
+ "v5_m_clang_hi": {
+  "anchor": 0.22,
+  "dur": 1.32,
+  "tier": "M"
+ },
+ "v5_m_clang_A3": {
+  "anchor": 0.3,
+  "dur": 1.8,
+  "tier": "M"
+ },
+ "v5_l_stab_D": {
+  "anchor": 0.0,
+  "dur": 0.6,
+  "tier": "L"
+ },
+ "v5_l_chord_D": {
+  "anchor": 0.0,
+  "dur": 1.5,
+  "tier": "L"
+ },
+ "v5_l_stab_A": {
+  "anchor": 0.0,
+  "dur": 0.6,
+  "tier": "L"
+ },
+ "v5_l_chord_A": {
+  "anchor": 0.0,
+  "dur": 1.5,
+  "tier": "L"
+ },
+ "v5_l_impact": {
+  "anchor": 0.0,
+  "dur": 1.7,
+  "tier": "L"
+ },
+ "v5_l_impact_s": {
+  "anchor": 0.0,
+  "dur": 0.9,
+  "tier": "L"
+ },
+ "v5_jp_win": {
+  "anchor": 0.0,
+  "dur": 8.6,
+  "tier": "XL"
+ }
+}

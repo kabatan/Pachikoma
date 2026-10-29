@@ -1,0 +1,152 @@
+{
+ "source": "work/effects/jp_teacher/08_chain/v3/src/letters8.py",
+ "font": "/home/kabatan/work/パチコマ/work/effects/jp_film/fonts/ofl/ZenOldMincho-Black.ttf",
+ "AI": false,
+ "plates": {
+  "start_main": {
+   "text": "スタート！",
+   "pal": "rainbow",
+   "size": [
+    1362,
+    453
+   ]
+  },
+  "start_sub": {
+   "text": "ランプを６つ集めよう",
+   "pal": "rainbow",
+   "size": [
+    1306,
+    205
+   ]
+  },
+  "count_main": {
+   "text": "計数中",
+   "pal": "rainbow",
+   "size": [
+    1198,
+    472
+   ]
+  },
+  "count_jp": {
+   "text": "ＪＰの合計",
+   "pal": "silver",
+   "size": [
+    987,
+    282
+   ]
+  },
+  "more_main": {
+   "text": "まだまだ！",
+   "pal": "rainbow",
+   "size": [
+    1356,
+    431
+   ]
+  },
+  "more_sub": {
+   "text": "続きを楽しもう！",
+   "pal": "rainbow",
+   "size": [
+    1236,
+    269
+   ]
+  },
+  "guard_main": {
+   "text": "耐えた！",
+   "pal": "rainbow",
+   "size": [
+    923,
+    369
+   ]
+  },
+  "dup_main": {
+   "text": "重複！",
+   "pal": "silver",
+   "size": [
+    947,
+    477
+   ]
+  },
+  "dup_sub": {
+   "text": "ランプが消えた…",
+   "pal": "silver",
+   "size": [
+    1137,
+    204
+   ]
+  }
+ },
+ "digits": {
+  "cell": [
+   312,
+   302
+  ],
+  "meta": {
+   "0": {
+    "x": 0,
+    "w": 312,
+    "adv": 225
+   },
+   "1": {
+    "x": 312,
+    "w": 312,
+    "adv": 195
+   },
+   "2": {
+    "x": 624,
+    "w": 312,
+    "adv": 219
+   },
+   "3": {
+    "x": 936,
+    "w": 312,
+    "adv": 221
+   },
+   "4": {
+    "x": 1248,
+    "w": 312,
+    "adv": 239
+   },
+   "5": {
+    "x": 1560,
+    "w": 312,
+    "adv": 219
+   },
+   "6": {
+    "x": 1872,
+    "w": 312,
+    "adv": 225
+   },
+   "7": {
+    "x": 2184,
+    "w": 312,
+    "adv": 219
+   },
+   "8": {
+    "x": 2496,
+    "w": 312,
+    "adv": 227
+   },
+   "9": {
+    "x": 2808,
+    "w": 312,
+    "adv": 225
+   },
+   "＋": {
+    "x": 3120,
+    "w": 312,
+    "adv": 299
+   },
+   "玉": {
+    "x": 3432,
+    "w": 312,
+    "adv": 312
+   },
+   "秒": {
+    "x": 3744,
+    "w": 312,
+    "adv": 300
+   }
+  }
+ }
+}

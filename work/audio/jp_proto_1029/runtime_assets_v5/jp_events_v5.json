@@ -1,0 +1,1309 @@
+{
+ "version": 5,
+ "recipes": {
+  "S": {
+   "layers": [
+    [
+     "v5_s_blip_{blip}",
+     -15,
+     {}
+    ]
+   ],
+   "defaults": {
+    "blip": 3
+   }
+  },
+  "Stick": {
+   "layers": [
+    [
+     "v5_s_tick",
+     -14,
+     {}
+    ]
+   ]
+  },
+  "Sdrop": {
+   "layers": [
+    [
+     "v5_s_drop",
+     -19,
+     {}
+    ]
+   ]
+  },
+  "Scoin": {
+   "layers": [
+    [
+     "v5_s_coin",
+     -22,
+     {}
+    ]
+   ]
+  },
+  "Sarp": {
+   "layers": [
+    [
+     "v5_s_arp",
+     -21,
+     {}
+    ]
+   ]
+  },
+  "Sflash": {
+   "layers": [
+    [
+     "transition_whoosh",
+     -16,
+     {}
+    ],
+    [
+     "v5_s_tick",
+     -16,
+     {}
+    ]
+   ]
+  },
+  "M": {
+   "layers": [
+    [
+     "v5_m_clang_{clang}",
+     -10,
+     {}
+    ]
+   ],
+   "duck": [
+    3.5,
+    0.15,
+    0.5,
+    0.04
+   ],
+   "defaults": {
+    "clang": "D"
+   }
+  },
+  "M2": {
+   "layers": [
+    [
+     "v5_m_clang_{clang}",
+     -8,
+     {}
+    ],
+    [
+     "v5_m_clang_{clang2}",
+     -14,
+     {}
+    ]
+   ],
+   "duck": [
+    5,
+    0.2,
+    0.6,
+    0.05
+   ],
+   "defaults": {
+    "clang": "lo",
+    "clang2": "hi"
+   }
+  },
+  "L1": {
+   "layers": [
+    [
+     "v5_l_stab_{root}",
+     -1,
+     {}
+    ],
+    [
+     "v5_l_impact_s",
+     0,
+     {}
+    ],
+    [
+     "v4_riser_short",
+     -13,
+     {
+      "if": "riser"
+     }
+    ]
+   ],
+   "duck": [
+    6,
+    0.25,
+    0.8,
+    0.06
+   ],
+   "defaults": {
+    "root": "D"
+   }
+  },
+  "L2": {
+   "layers": [
+    [
+     "v5_l_chord_{root}",
+     -1,
+     {}
+    ],
+    [
+     "v5_l_impact",
+     -1,
+     {}
+    ],
+    [
+     "v4_riser_short",
+     -12,
+     {
+      "if": "riser"
+     }
+    ]
+   ],
+   "duck": [
+    8,
+    0.35,
+    1.0,
+    0.1
+   ],
+   "defaults": {
+    "root": "D"
+   }
+  },
+  "L3": {
+   "layers": [
+    [
+     "v5_l_stab_{root}",
+     0,
+     {}
+    ],
+    [
+     "v5_l_chord_{root}",
+     -2,
+     {
+      "delay": 0.2
+     }
+    ],
+    [
+     "v5_l_impact",
+     1,
+     {}
+    ],
+    [
+     "v5_l_impact_s",
+     -1,
+     {
+      "delay": 0.2
+     }
+    ]
+   ],
+   "duck": [
+    10,
+    0.5,
+    1.2,
+    0.1
+   ],
+   "defaults": {
+    "root": "D"
+   }
+  },
+  "XL": {
+   "layers": [
+    [
+     "v5_jp_win",
+     7,
+     {}
+    ]
+   ],
+   "duck": [
+    0,
+    0,
+    0,
+    0
+   ]
+  }
+ },
+ "gap": {
+  "len": 0.22,
+  "depth": 60,
+  "ramp": 0.03
+ },
+ "post": {
+  "depth": 15,
+  "hold": 3.0,
+  "release": 1.8
+ },
+ "events": [
+  {
+   "frame": 234,
+   "label": "場面転換(神社の背景へ)",
+   "scene": "jp_chance_d*",
+   "off": 0,
+   "do": [
+    [
+     "Sflash",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 239,
+   "label": "JPチャンス題字(白い閃光→題字)",
+   "scene": "jp_chance_d*",
+   "off": 5,
+   "do": [
+    [
+     "L1",
+     {
+      "root": "D",
+      "riser": 1
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 250,
+   "label": "題字の艶 掃引1",
+   "scene": "jp_chance_d*",
+   "off": 16,
+   "do": [
+    [
+     "S",
+     {
+      "blip": 4,
+      "g": -2
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 254,
+   "label": "題字の艶 掃引2",
+   "scene": "jp_chance_d*",
+   "off": 20,
+   "do": [
+    [
+     "S",
+     {
+      "blip": 5,
+      "g": -3
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 296,
+   "label": "4のリールが現れる",
+   "scene": "jp_chance_d*",
+   "off": 62,
+   "do": [
+    [
+     "Scoin",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 316,
+   "label": "「4を狙え!!」文字が落ちる",
+   "scene": "jp_chance_d*",
+   "off": 82,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "D",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 324,
+   "label": "狙え 文字の火花",
+   "scene": "jp_chance_d*",
+   "off": 90,
+   "do": [
+    [
+     "S",
+     {
+      "blip": 5,
+      "g": -4
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 474,
+   "label": "「勝負!!」閃光(玉の発射)",
+   "scene": "fly_in_d*",
+   "off": 0,
+   "do": [
+    [
+     "M2",
+     {
+      "clang": "lo",
+      "clang2": "D",
+      "g": 0
+     }
+    ],
+    [
+     "A",
+     "v4_riser_short",
+     -18,
+     {}
+    ],
+    [
+     "A",
+     "v3_motor_clank",
+     -12,
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 484,
+   "label": "「勝負!!」青い衝撃で落ち着く",
+   "scene": "fly_in_d*",
+   "off": 10,
+   "do": [
+    [
+     "Sdrop",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 551,
+   "label": "熱さ段階1(青い衝撃)",
+   "scene": "fly_t1_d*",
+   "off": 0,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "D",
+      "g": -3
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 567,
+   "label": "熱さ段階2(「4に入れぇ」の枠が落ちる)",
+   "scene": "fly_t2_d*",
+   "off": 0,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "Fs",
+      "g": 0
+     }
+    ],
+    [
+     "S",
+     {
+      "blip": 4,
+      "g": -3
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 598,
+   "label": "熱さ段階3(黄色い爆発)",
+   "scene": "fly_t3_d*",
+   "off": 0,
+   "do": [
+    [
+     "M2",
+     {
+      "clang": "A",
+      "clang2": "hi",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 606,
+   "label": "「入れ!!」文字が落ちる",
+   "scene": "fly_t3_d*",
+   "off": 8,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "A",
+      "g": 1
+     }
+    ],
+    [
+     "S",
+     {
+      "blip": 5,
+      "g": -4
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 624,
+   "label": "溜め成功(青い閃光)",
+   "scene": "tame_hit_d*",
+   "off": 0,
+   "do": [
+    [
+     "Stick",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 632,
+   "label": "着地(白い閃光・JP確定)=JP成功",
+   "scene": "jp_land_d*",
+   "off": 0,
+   "do": [
+    [
+     "XL",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 636,
+   "label": "4-4-4 揃いの衝撃",
+   "scene": "jp_land_d*",
+   "off": 4,
+   "do": [
+    [
+     "Sarp",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 646,
+   "label": "白い閃光(ラッシュへ)",
+   "scene": "jp_land_d*",
+   "off": 14,
+   "do": [
+    [
+     "Sflash",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 650,
+   "label": "虹の放射(ラッシュ突入)",
+   "scene": "jp_rush",
+   "off": 1,
+   "do": [
+    [
+     "M2",
+     {
+      "clang": "lo",
+      "clang2": "hi",
+      "g": 0
+     }
+    ],
+    [
+     "A",
+     "rush_whoosh",
+     -8,
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 655,
+   "label": "放射の中の稲妻",
+   "scene": "jp_rush",
+   "off": 6,
+   "do": [
+    [
+     "Stick",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 660,
+   "label": "金の「超」",
+   "scene": "jp_rush",
+   "off": 11,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "A",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 665,
+   "label": "ラッシュ題字 1撃",
+   "scene": "jp_rush",
+   "off": 16,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "D",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 670,
+   "label": "ラッシュ題字 2撃",
+   "scene": "jp_rush",
+   "off": 21,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "Fs",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 675,
+   "label": "ラッシュ題字 3撃(RUSH)",
+   "scene": "jp_rush",
+   "off": 26,
+   "do": [
+    [
+     "M2",
+     {
+      "clang": "A",
+      "clang2": "hi",
+      "g": 1
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 682,
+   "label": "「超つくこまRUSH」全体",
+   "scene": "jp_rush",
+   "off": 33,
+   "do": [
+    [
+     "Scoin",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 724,
+   "label": "黄色い閃光(配当ルーレットへ)",
+   "scene": "jp_bridge",
+   "off": 15,
+   "do": [
+    [
+     "Sflash",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 728,
+   "label": "「配当ルーレット!!」題字",
+   "scene": "jp_bridge",
+   "off": 19,
+   "do": [
+    [
+     "M2",
+     {
+      "clang": "Fs",
+      "clang2": "hi",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 768,
+   "label": "「GO!!」",
+   "scene": "jp_bridge",
+   "off": 59,
+   "do": [
+    [
+     "M2",
+     {
+      "clang": "lo",
+      "clang2": "A",
+      "g": 1
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 787,
+   "label": "ルーレット回転開始",
+   "scene": "roulette_*",
+   "off": 0,
+   "do": [
+    [
+     "Stick",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 890,
+   "label": "桁がそろう(ロック)",
+   "scene": "roulette_*",
+   "off": -30,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "A",
+      "g": 0
+     }
+    ],
+    [
+     "A",
+     "roulette_lock",
+     -6,
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "stop"
+  },
+  {
+   "frame": 920,
+   "label": "ルーレット最終停止(紫の閃光)",
+   "scene": "roulette_*",
+   "off": 0,
+   "do": [
+    [
+     "L1",
+     {
+      "root": "D"
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "stop"
+  },
+  {
+   "frame": 924,
+   "label": "「1」が拡大(金の粒)",
+   "scene": "roulette_*",
+   "off": 4,
+   "do": [
+    [
+     "S",
+     {
+      "blip": 4,
+      "g": -2
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "stop"
+  },
+  {
+   "frame": 928,
+   "label": "「1」金の粒 2",
+   "scene": "roulette_*",
+   "off": 8,
+   "do": [
+    [
+     "S",
+     {
+      "blip": 5,
+      "g": -4
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "stop"
+  },
+  {
+   "frame": 948,
+   "label": "配当画面の導入(うぱの明滅)",
+   "scene": "reward_*",
+   "off": 3,
+   "do": [
+    [
+     "Sarp",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 972,
+   "label": "「FEVER」最初の字",
+   "scene": "reward_*",
+   "off": 27,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "Fs",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 982,
+   "label": "「FEVER」のV アップ",
+   "scene": "reward_*",
+   "off": 37,
+   "do": [
+    [
+     "M2",
+     {
+      "clang": "A",
+      "clang2": "hi",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 991,
+   "label": "白い光の爆発",
+   "scene": "reward_*",
+   "off": 46,
+   "do": [
+    [
+     "L1",
+     {
+      "root": "D"
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1000,
+   "label": "「OVER」の叩きつけ",
+   "scene": "reward_*",
+   "off": 55,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "D",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1054,
+   "label": "配当数字(100 OVER FEVER)が確定",
+   "scene": "reward_*",
+   "off": 109,
+   "do": [
+    [
+     "L2",
+     {
+      "root": "D"
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1084,
+   "label": "配当画面の閃光1",
+   "scene": "reward_*",
+   "off": 139,
+   "do": [
+    [
+     "Scoin",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1108,
+   "label": "配当画面の閃光2",
+   "scene": "reward_*",
+   "off": 163,
+   "do": [
+    [
+     "S",
+     {
+      "blip": 4,
+      "g": -2
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1132,
+   "label": "配当画面の閃光3",
+   "scene": "reward_*",
+   "off": 187,
+   "do": [
+    [
+     "Scoin",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1148,
+   "label": "場面転換(継続の選択へ)",
+   "scene": "chain_offer",
+   "off": 0,
+   "do": [
+    [
+     "Sflash",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1152,
+   "label": "「継続できるよ!」",
+   "scene": "chain_offer",
+   "off": 4,
+   "do": [
+    [
+     "L2",
+     {
+      "root": "A",
+      "riser": 1
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1196,
+   "label": "「狙え!!」(継続の狙い)",
+   "scene": "chain_jp_aim_d*",
+   "off": 0,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "A3",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1286,
+   "label": "「勝負!!」閃光(継続の発射)",
+   "scene": "chain_fly_in_d*",
+   "off": 0,
+   "do": [
+    [
+     "M2",
+     {
+      "clang": "lo",
+      "clang2": "A",
+      "g": 0
+     }
+    ],
+    [
+     "A",
+     "v4_riser_short",
+     -18,
+     {}
+    ],
+    [
+     "A",
+     "v3_motor_clank",
+     -12,
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1290,
+   "label": "「勝負!!」青い衝撃",
+   "scene": "chain_fly_in_d*",
+   "off": 4,
+   "do": [
+    [
+     "Sdrop",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1358,
+   "label": "熱さ段階1(青い衝撃)",
+   "scene": "chain_fly_t1_d*",
+   "off": 0,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "A3",
+      "g": -3
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1374,
+   "label": "熱さ段階2(枠が落ちる)",
+   "scene": "chain_fly_t2_d*",
+   "off": 0,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "A",
+      "g": 0
+     }
+    ],
+    [
+     "S",
+     {
+      "blip": 4,
+      "g": -3
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1406,
+   "label": "熱さ段階3(黄色い爆発)",
+   "scene": "chain_fly_t3_d*",
+   "off": 0,
+   "do": [
+    [
+     "M2",
+     {
+      "clang": "A",
+      "clang2": "hi",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1414,
+   "label": "「入れ!!」文字が落ちる",
+   "scene": "chain_fly_t3_d*",
+   "off": 8,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "hi",
+      "g": 1
+     }
+    ],
+    [
+     "S",
+     {
+      "blip": 5,
+      "g": -4
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1432,
+   "label": "溜め成功(青い閃光)",
+   "scene": "chain_tame_hit_d*",
+   "off": 0,
+   "do": [
+    [
+     "Stick",
+     {}
+    ],
+    [
+     "S",
+     {
+      "blip": 5,
+      "g": -4
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1440,
+   "label": "着地(継続)",
+   "scene": "chain_jp_land_d*",
+   "off": 0,
+   "do": [
+    [
+     "L3",
+     {
+      "root": "A"
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1444,
+   "label": "4-4-4 揃いの衝撃",
+   "scene": "chain_jp_land_d*",
+   "off": 4,
+   "do": [
+    [
+     "Sarp",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1454,
+   "label": "白い閃光(さらに継続へ)",
+   "scene": "chain_jp_land_d*",
+   "off": 14,
+   "do": [
+    [
+     "Sflash",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1462,
+   "label": "「継続できるよ!」(2回目)",
+   "scene": "chain_offer2",
+   "off": 5,
+   "do": [
+    [
+     "L2",
+     {
+      "root": "A",
+      "riser": 1
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1505,
+   "label": "場面転換(確定の扉)",
+   "scene": "chain_confirm",
+   "off": 0,
+   "do": [
+    [
+     "Sflash",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1544,
+   "label": "扉が動き出す",
+   "scene": "chain_confirm",
+   "off": 39,
+   "do": [
+    [
+     "A",
+     "confirm_door_grind",
+     -8,
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1550,
+   "label": "扉が開き財宝があふれる(確定)",
+   "scene": "chain_confirm",
+   "off": 45,
+   "do": [
+    [
+     "L3",
+     {
+      "root": "A"
+     }
+    ],
+    [
+     "A",
+     "coin_burst",
+     -8,
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1590,
+   "label": "「連×03」",
+   "scene": "chain_confirm",
+   "off": 85,
+   "do": [
+    [
+     "M",
+     {
+      "clang": "D",
+      "g": 0
+     }
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1602,
+   "label": "TOTAL 表示",
+   "scene": "chain_confirm",
+   "off": 97,
+   "do": [
+    [
+     "Stick",
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1604,
+   "label": "合計カウントアップ(〜1660)",
+   "scene": "chain_confirm",
+   "off": 99,
+   "do": [
+    [
+     "A",
+     "count_roll",
+     -8,
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  },
+  {
+   "frame": 1661,
+   "label": "合計確定(金の玉)",
+   "scene": "chain_confirm",
+   "off": 156,
+   "do": [
+    [
+     "L3",
+     {
+      "root": "A",
+      "g": 1
+     }
+    ],
+    [
+     "A",
+     "coin_burst",
+     -7,
+     {}
+    ]
+   ],
+   "intro": false,
+   "ref": "scene"
+  }
+ ]
+}

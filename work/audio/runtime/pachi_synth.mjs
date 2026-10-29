@@ -91,16 +91,27 @@ function fftInPlace(re, im, inverse = false) {
 export function bandProfile(chs, sr) {
   const len = chs[0].length; let N = 1024; while (N < len * 2) N <<= 1;
   const re = new Float64Array(N), im = new Float64Array(N); for (let i = 0; i < len; i++) { let s = 0; for (const c of chs) s += c[i]; re[i] = s / chs.length; }
-  fftInPlace(re, im); const e = new Float64Array(EDGES.length - 1);
+  fftInPlace(re, im); return spectrumProfile(re, im, N, sr);
+}
+function spectrumProfile(re, im, N, sr) {
+  const e = new Float64Array(EDGES.length - 1);
   for (let k = 1; k < N / 2; k++) { const f = k * sr / N; for (let b = 0; b < e.length; b++) if (f >= EDGES[b] && f < EDGES[b + 1]) { e[b] += re[k] * re[k] + im[k] * im[k]; break; } }
   const tot = e.reduce((a, b) => a + b) || 1; return Array.from(e, v => 10 * Math.log10(v / tot + 1e-12));
 }
+
 export function matchEQ(chs, sr, target, { maxBoost = 14, maxCut = 24, passes = 2, strength = 1 } = {}) {
   const len = chs[0].length; let N = 1024; while (N < len * 2) N <<= 1;
   const centers = Array.from({ length: EDGES.length - 1 }, (_, i) => Math.sqrt(EDGES[i] * EDGES[i + 1]));
   let work = chs.map(c => Float32Array.from(c));
   for (let p = 0; p < passes; p++) {
-    const cur = bandProfile(work, sr), gains = centers.map((_, b) => cur[b] < -55 ? 0 : clamp((target[b] - cur[b]) * strength, -maxCut, maxBoost));
+    // bandProfile and filtering have identical forward inputs for finite mono
+    // data except negative zero (0 + -0 in the original profile becomes +0).
+    let mono = null;
+    if (work.length === 1) {
+      let safe = true; for (let i = 0; i < len; i++) { const v = work[0][i]; if (!Number.isFinite(v) || Object.is(v, -0)) { safe = false; break; } }
+      if (safe) { const re = new Float64Array(N), im = new Float64Array(N); re.set(work[0]); fftInPlace(re, im); mono = { re, im }; }
+    }
+    const cur = mono ? spectrumProfile(mono.re, mono.im, N, sr) : bandProfile(work, sr), gains = centers.map((_, b) => cur[b] < -55 ? 0 : clamp((target[b] - cur[b]) * strength, -maxCut, maxBoost));
     const curve = new Float64Array(N / 2 + 1);
     for (let k = 0; k <= N / 2; k++) {
       const f = Math.max(k * sr / N, 1e-3); let g;
@@ -109,9 +120,9 @@ export function matchEQ(chs, sr, target, { maxBoost = 14, maxCut = 24, passes = 
       curve[k] = 10 ** (g / 20);
     }
     work = work.map(c => {
-      const re = new Float64Array(N), im = new Float64Array(N); re.set(c); fftInPlace(re, im);
+      const re = mono ? mono.re : new Float64Array(N), im = mono ? mono.im : new Float64Array(N); if (!mono) { re.set(c); fftInPlace(re, im); }
       for (let k = 0; k <= N / 2; k++) { re[k] *= curve[k]; im[k] *= curve[k]; if (k > 0 && k < N / 2) { re[N - k] *= curve[k]; im[N - k] *= curve[k]; } }
-      fftInPlace(re, im, true); return Float32Array.from(re.subarray(0, len), v => v / N);
+      fftInPlace(re, im, true); const out = new Float32Array(len); for (let i = 0; i < len; i++) out[i] = re[i] / N; return out;
     });
   }
   return work;
@@ -428,3 +439,59 @@ export function pachiContact(contact, sr = 48000) {
   return o;
 }
 export function pachiPayout(count, sr = 48000) { const [L, R] = payoutBuffer(sr, count); return [L, R]; }
+
+
+// Boot-only exact click prefixes. The full-contact AudioBuffer cache remains separate.
+export async function preparePachiContact(sr = 48000, { yield: yieldControl = () => new Promise(resolve => setTimeout(resolve, 0)), maxBytes = 160 * 1024 * 1024, isDisposed = () => false } = {}) {
+  const seeds = new Set();
+  for (let v = 0; v < 7; v++) for (let speed = 1; speed <= 50; speed++) for (let impulse = 0; impulse <= 100; impulse++) seeds.add(1000 + v * 97 + speed * 13 + impulse * 2);
+  const orderedSeeds = [...seeds].sort((a, b) => a - b), materials = Object.keys(SOFT), bank = new Map();
+  const limit = Number.isFinite(maxBytes) && maxBytes >= 0 ? Math.min(maxBytes, 160 * 1024 * 1024) : 0;
+  const stats = { sampleRate: sr, seedCount: orderedSeeds.length, ready: false, entries: 0, bytes: 0, maxBytes: limit, buildMs: 0, disposed: false, cancelled: false, hits: 0, fallbacks: 0 };
+  const dispose = () => { bank.clear(); stats.ready = false; stats.disposed = true; stats.entries = 0; stats.bytes = 0; };
+  const fallback = (contact, rate) => { stats.fallbacks++; return pachiContact(contact, rate); };
+  const synth = (contact, rate = sr) => {
+    if (!stats.ready || stats.disposed || rate !== sr || !contact || typeof contact !== 'object') return fallback(contact, rate);
+    // Only owned quantized data fields may use the seed-only bank. Arbitrary calls keep the original path.
+    const md = Object.getOwnPropertyDescriptor(contact, 'material'), sd = Object.getOwnPropertyDescriptor(contact, 'speed'), id = Object.getOwnPropertyDescriptor(contact, 'impulse'), vd = Object.getOwnPropertyDescriptor(contact, 'variant');
+    if (!md || !sd || !id || !vd || !('value' in md) || !('value' in sd) || !('value' in id) || !('value' in vd)) return fallback(contact, rate);
+    const material = md.value, qs = sd.value, qi = id.value, qv = vd.value;
+    if (!bank.has(material) || !Number.isFinite(qs) || qs < .1 || qs > 5 || qs !== Math.round(qs * 10) / 10 || !Number.isFinite(qi) || qi < 0 || qi > .05 || qi !== Math.round(qi * 2000) / 2000 || !Number.isInteger(qv) || qv < 0 || qv > 6) return fallback(contact, rate);
+    const p = SOFT[material], speed = clamp(Number(qs) || .05, .02, 5), impulse = clamp(Number(qi) || 0, 0, .05);
+    const amp = .6 * clamp(.12 * Math.sqrt(speed) + Math.sqrt(impulse) * 1.7, .03, .6), v = qv % 7;
+    const seed = 1000 + v * 97 + Math.round(speed * 10) * 13 + Math.round(impulse * 4000), prefix = bank.get(material).get(seed);
+    if (!prefix) return fallback(contact, rate);
+    stats.hits++; const o = prefix.slice();
+    // 当たった強さと変種で、ペンタトニックの音を選ぶ(強いほど高く)
+    const lo = p.note[0], hi = p.note[1], idx = Math.min(hi, lo + Math.floor(((v * 3 + Math.floor(speed * 2.5)) % (hi - lo + 1)))), m = PENTA[idx] - (p.low ? 36 : 0);
+    plink(o, sr, 0, m, { gain: p.plink, tau: p.ptau * (m > 90 ? .7 : 1), upper: p.upper ?? .28 });
+    soften(o, sr, p.lp);
+    let top = 0; for (const s of o) top = Math.max(top, Math.abs(s)); const g = top ? amp / top : 0;
+    for (let i = 0; i < o.length; i++) o[i] = Math.tanh(o[i] * g * 1.3) * .82;
+    const fade = Math.round(.01 * sr); for (let i = 0; i < fade; i++) o[o.length - 1 - i] *= i / fade;
+    return o;
+  };
+  const api = { synth, dispose, stats };
+  if (!Number.isInteger(sr) || sr <= 0) { stats.skipped = 'sample-rate'; return api; }
+  const requiredBytes = materials.reduce((sum, material) => sum + Math.ceil(sr * SOFT[material].len) * 4 * orderedSeeds.length, 0);
+  stats.requiredBytes = requiredBytes;
+  if (requiredBytes > limit) { stats.skipped = 'budget'; return api; }
+  const started = performance.now();
+  try {
+    for (const material of materials) {
+      const p = SOFT[material], entries = new Map(); bank.set(material, entries);
+      for (const seed of orderedSeeds) {
+        if (isDisposed()) { stats.cancelled = true; dispose(); stats.buildMs = performance.now() - started; return api; }
+        const r = rng(seed), o = track(sr, p.len), click = track(sr, p.len);
+        burst(click, sr, 0, r, { gain: 1, tau: p.tau * (.85 + .3 * r()), len: p.len });
+        const [c] = matchEQ([click], sr, p.target.map(b => b + (r() - .5) * 3), { maxBoost: 20, maxCut: 30 });
+        let pk = 0; for (const s of c) pk = Math.max(pk, Math.abs(s)); for (let i = 0; i < c.length; i++) o[i] += c[i] / (pk || 1) * p.click;
+        entries.set(seed, o); stats.entries++; stats.bytes += o.byteLength;
+        if (stats.entries % 8 === 0) await yieldControl();
+      }
+    }
+    if (isDisposed()) { stats.cancelled = true; dispose(); }
+    else stats.ready = true;
+    stats.buildMs = performance.now() - started; return api;
+  } catch (error) { dispose(); throw error; }
+}

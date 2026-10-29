@@ -1,3 +1,4 @@
+import {warmPausedVideo,withRestored2D} from './startup_warm.mjs';
 // A bounded decoder pool. Requests are retained in order; the old clip keeps
 // moving until the next first frame is decoded, then both move through a fade.
 export function createClipPlayer({base, files, onError, record = () => {}}) {
@@ -36,6 +37,16 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
     request(name) {if(!files[name])return;const r={name,wall:performance.now()};queue.push(r);emit('request',{name,queue:queue.length});load(queue[0].name,true);},
     setIdle(name) {if(files[name]&&idleName!==name){idleName=name;load(name);}},
     prefetch(names) {for(const n of names)if(files[n])load(n);},
+    async warm(ctx,w,h) {
+      if(clock!==0||queue.length||incoming)throw Error('normal warm is boot-only');
+      const existing=pool.filter(s=>s!==current); // Never interrupt the running idle phase.
+      for(const s of existing)await s.promise;
+      return withRestored2D(ctx,async()=>{
+        const results=[];
+        for(const s of existing)results.push({name:s.name,...await warmPausedVideo(s.v,v=>ctx.drawImage(v,0,0,w,h))});
+        return results;
+      });
+    },
     frame(dt,ctx,w,h) {
       clock+=dt;
       const ended=current && (manual?current.time>=current.v.duration:current.v.ended);
