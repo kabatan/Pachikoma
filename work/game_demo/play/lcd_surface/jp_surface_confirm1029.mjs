@@ -208,7 +208,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   const load=(slot,name,recordLoad=true)=>{
     if(!name||!man.scenes[name])return Promise.resolve();
     if(slot.name===name)return slot.promise??Promise.resolve();
-    slot.cancel?.();slot.v.pause();slot.name=name;slot.ready=false;
+    slot.cancel?.();slot.v.pause();slot.name=name;slot.generation=(slot.generation??0)+1;slot.ready=false;
     const at=performance.now(),report=recordLoad?record:()=>{};report('load',{name});
     slot.promise=new Promise(resolve=>{
       const cleanup=()=>{clearTimeout(timer);slot.v.removeEventListener('loadeddata',done);slot.v.removeEventListener('error',bad);slot.cancel=null;};
@@ -307,6 +307,15 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     frame(dt){palace.advance(dt);sync();if(man.scenes[model.name]?.offer){const waiting=getState().phase!=='ChainChoice';const v=offer.frame(palace.video,model.time,waiting);model.update(waiting?0:dt);sync();return v;}stuckWatch(dt);const kind=sResult();if(!kind)blockedFor=0;if(kind&&compositor){const first=kind==='confirm'?84:64;const f=Math.min(man.scenes[model.name].frames-1,Math.floor((current?.v.currentTime??model.time)*man.fps+1e-6));compositor.prefetch(kind,Math.max(first,f));if(f>=first&&!compositor.ready(kind,f)&&(blockedFor+=dt)<1.5){blockedResult=current;if(current&&!current.v.paused)current.v.pause();return visible?.ready&&Math.floor((visible.v.currentTime??0)*man.fps)<first?visible.v:compositor.canvas;}}
       blockedFor=compositor&&kind&&!compositor.ready(kind,Math.max(0,Math.floor((current?.v.currentTime??model.time)*man.fps)))?blockedFor:0;if(blockedResult){blockedResult=null;if(model.active&&!manual&&current?.ready&&model.delay<=0&&current.v.paused&&!current.v.ended)current.v.play().catch(()=>{});}
       const oldTime=model.time;model.update(current?.ready||model.delay>0?dt:0,manual||model.delay>0?null:current?.ready?current.v.currentTime:model.time);if(current&&model.active&&model.serial===serial&&model.time<oldTime){current.v.currentTime=model.time;if(!manual)current.v.play().catch(()=>{});}sync();if(previous){fade=Math.min(1,fade+Math.min(dt,1/30)/.12);if(fade>=1){previous.v.pause();record('end',{name:previous.name,reason:'crossfade',time:previous.v.currentTime});previous=null;}}if(model.active&&visible?.ready&&man.scenes[visible.name]?.layered){const prior=previous&&man.scenes[previous.name]?.layered?previous.v:null;const vs=man.scenes[visible.name],lf=visible.name===model.name?model.lastF:Math.floor(visible.v.currentTime*man.fps);return palace.render(visible.v,prior,1-fade,visible.name,lf,center&&vs.center?center.stateFor(vs.source_frames[Math.max(0,Math.min(vs.frames-1,lf))],vs,dt):null,!!vs.black_bg);}palace.hidden();if(sResult()&&compositor){const f=Math.min(man.scenes[model.name].frames-1,Math.floor((visible?.v.currentTime??model.time)*man.fps+1e-6));const result=compositor.render(sResult(),f,Math.max(0,Math.round(model.earnings??0)),model.resultChain??1);if(result){result.readyState=4;return result;}}return visible?.ready?visible.v:null;},
+    // Read-only image contract: frame(dt) above is the sole timeline/video owner.
+    // Use the actual return/visible source, not a requested scene or pending slot.
+    plainVideoSnapshot(video){
+      const scene=man.scenes[model.name],shown=man.scenes[visible?.name],old=man.scenes[previous?.name];
+      if(!model.active||model.delay>0||!scene||scene.layered||scene.offer||sResult()||digits||model.where()?.dim||!visible?.ready||video!==visible.v||shown?.layered||shown?.offer||shown?.result_kind||previous&&(old?.layered||old?.offer||old?.result_kind))return null;
+      const layer=(s,alpha)=>({video:s.v,name:s.name,generation:s.generation??0,alpha,time:s.v.currentTime,drawable:s.v.readyState>=2});
+      const layers=[layer(visible,1)];if(previous?.v.readyState>=2)layers.push(layer(previous,1-fade));
+      return {owner:'jp-plain',generation:model.serial,serial:model.serial,manual,layers};
+    },
     get layered(){return !!man.scenes[model.name]?.layered;},get palace(){return palace;},
     // Light script follows the decoded image actually being presented, even while the next clip loads.
     get lightingCurrent(){return model.active&&model.delay<=0&&visible?.ready?{name:visible.name,time:visible.v.currentTime}:null;},

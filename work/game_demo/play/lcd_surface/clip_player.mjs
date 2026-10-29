@@ -1,9 +1,14 @@
 import {warmPausedVideo,withRestored2D} from './startup_warm.mjs';
+// Pure replay of the draw instructions collected by the unchanged player tick.
+// Snapshot capture/render must never advance queue, clock, media or fade.
+export function drawClipSnapshot(snapshot,ctx,w,h) {
+  for(const layer of snapshot.layers){ctx.globalAlpha=layer.alpha;ctx.drawImage(layer.video,0,0,w,h);ctx.globalAlpha=1;}
+}
 // A bounded decoder pool. Requests are retained in order; the old clip keeps
 // moving until the next first frame is decoded, then both move through a fade.
 export function createClipPlayer({base, files, onError, record = () => {}}) {
   const pool = [], queue = [], fadeSeconds = .12;
-  let current = null, incoming = null, idleName = 'idle0', fade = 0, manual = false, seq = 0, clock = 0;
+  let current = null, incoming = null, idleName = 'idle0', fade = 0, manual = false, seq = 0, clock = 0, generation = 0;
   const emit = (kind, data) => record({kind, at: clock, wall: performance.now(), ...data});
   function make() {
     const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto';
@@ -14,7 +19,7 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
     if (s) {s.used = ++seq; return s;}
     s = pool.length < 6 ? make() : pool.filter(x => x !== current && x !== incoming && x.name !== queue[0]?.name && x.name !== idleName).sort((a,b)=>a.used-b.used)[0];
     if (!s) return null;
-    s.cancel?.(); s.v.pause(); s.name = name; s.ready = false; s.time = 0; s.used = ++seq;
+    s.cancel?.(); s.v.pause(); s.name = name; s.generation = ++generation; s.ready = false; s.time = 0; s.used = ++seq;
     const started = performance.now(); emit('load', {name});
     s.promise = new Promise(resolve => {
       let timer;
@@ -48,6 +53,8 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
       });
     },
     frame(dt,ctx,w,h) {
+      const snapshot={owner:'normal',generation:0,serial:0,manual,layers:[]};
+      const draw=(s,alpha)=>{const layer={video:s.v,name:s.name,generation:s.generation,alpha,time:s.v.currentTime,drawable:true};snapshot.layers.push(layer);if(ctx){ctx.globalAlpha=alpha;ctx.drawImage(s.v,0,0,w,h);ctx.globalAlpha=1;}};
       clock+=dt;
       const ended=current && (manual?current.time>=current.v.duration:current.v.ended);
       if(!incoming) {
@@ -55,13 +62,14 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
         if(target){const s=load(target,!!req);if(s?.ready && s!==current){if(req)queue.shift();start(s,req);}else if(s?.failed){if(req)queue.shift();emit('error',{name:target});}}
       }
       run(current);run(incoming);
-      if(current?.ready && current.v.readyState>=2)ctx.drawImage(current.v,0,0,w,h);
+      if(current?.ready && current.v.readyState>=2)draw(current,1);
       if(incoming?.ready && !incoming.v.seeking && incoming.v.readyState>=2){
         // The decoder owns realtime. Do not skip a new clip's opening on a slow frame.
-        fade+=Math.min(dt,1/30);ctx.globalAlpha=Math.min(1,fade/fadeSeconds);ctx.drawImage(incoming.v,0,0,w,h);ctx.globalAlpha=1;
+        fade+=Math.min(dt,1/30);draw(incoming,Math.min(1,fade/fadeSeconds));
         if(fade>=fadeSeconds){end(current,ended?'ended':'crossfade');current=incoming;incoming=null;emit('transition',{name:current.name,seconds:fade});if(queue[0])load(queue[0].name,true);}
       }
       if(manual){if(current)current.time+=dt;if(incoming)incoming.time+=dt;}
+      return snapshot;
     },
     get name(){return current?.name;},get time(){return manual?current?.time??0:current?.v.currentTime??0;},get shot(){return current && !current.name.startsWith('idle');},
     get pending(){return queue.length;},

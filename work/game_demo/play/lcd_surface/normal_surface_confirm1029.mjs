@@ -1,5 +1,5 @@
 import {withRestored2D} from './startup_warm.mjs';
-import {createClipPlayer} from './clip_player.mjs';
+import {createClipPlayer,drawClipSnapshot} from './clip_player.mjs';
 import {createJpSurface,jpEffectSeconds,chainEffectSeconds} from './jp_surface_confirm1029.mjs';
 // 通常演出：本番動画。最初のJPは指定manifestへ委譲し、継続の既存表示を保持する。
 // jp_filmのmanifest/映像は一切読み込まない。規則を止めたり書き換えたりしない。
@@ -19,7 +19,7 @@ export function normalClipFor(id, p, variant = 0) {
   return null;
 }
 
-export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory = null, resultImageFactory = null }) {
+export async function createProductionLcd({ manifestUrl, man, getState, jpManifestUrl, onJpCue, palaceImageFactory = null, resultImageFactory = null, videoImageFactory = null }) {
   const base = new URL('.', manifestUrl);
   const canvas = document.createElement('canvas'); canvas.width = 1240; canvas.height = 1510;
   const ctx = canvas.getContext('2d', { alpha: false });
@@ -37,6 +37,25 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   hold.fillStyle = '#052a57'; hold.fillRect(0, 0, W, H);
   const stats = { lifecycle: [], frames: 0, played: [], errors: [], switches: 0, maxDrawMs: 0, placeholders: [] };
   const fail = (message) => { stats.errors.push(message); console.error('[normal1026]', message); };
+  // One exclusive normal/plain-JP backend. Existing players keep media ownership.
+  let videoBackend=null,videoFailed=false,ringCanvas=null,ringCtx=null;
+  const videoStats={requested:!!videoImageFactory,mode:'legacy',frames:0,fallbacks:0,failures:[]};
+  if(videoImageFactory)try{
+    videoBackend=await videoImageFactory({width:canvas.width,height:canvas.height,visible:{x:PX,y:PY,w:W,h:H}});
+    if(!videoBackend?.render||!videoBackend?.compose||!videoBackend?.setFlash||!videoBackend?.setHudCanvas||!videoBackend?.materializeTo)throw Error('Invalid video image factory API');
+    videoStats.mode='injected';
+  }catch(error){try{videoBackend?.dispose?.();}catch{}videoBackend=null;videoStats.mode='factory-fallback';videoStats.failures.push(String(error?.message??error));}
+  const publishVideo=(snapshot,w=null)=>{
+    if(!videoBackend||videoFailed||!snapshot||!snapshot.layers.length||snapshot.layers[0].alpha!==1||snapshot.layers.some(l=>!l.drawable||l.video.videoWidth!==W||l.video.videoHeight!==H))return false;
+    if(gpuFrame&&gpuFrame.backend!==videoBackend)materializeGpu('video-owner-entry');
+    try{
+      const output=videoBackend.render(snapshot);
+      if(!output){videoStats.fallbacks++;const d=videoBackend.diagnostics?.();if(d?.failed){videoFailed=true;videoStats.mode='render-fallback';videoStats.failures.push(String(d.reason??'GPU video image failed'));}return false;}
+      videoBackend.setFlash(w?.flash,w?.flashColor);gpuFrame={backend:videoBackend,published:false,owner:snapshot.owner};videoStats.frames++;return true;
+    }catch(error){videoFailed=true;videoStats.failures.push(String(error?.message??error));videoStats.mode='render-fallback';return false;}
+  };
+  const finishFrame=t0=>{stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);};
+
   const clips = createClipPlayer({base, files:man.files, onError:fail, record:e=>{stats.lifecycle.push(e);if(stats.lifecycle.length>2000)stats.lifecycle.shift();}});
   const shown = {get name(){return clips.name;},get time(){return clips.time;}};
   const jp = jpManifestUrl ? await createJpSurface({manifestUrl:jpManifestUrl,palaceImageFactory,resultImageFactory,onCue:onJpCue,getState,log:n=>stats.played.push([+clock.toFixed(3),n])}).catch(e=>{stats.errors.push('JP: '+e.message);console.warn('[jp1029]',e.message);return null;}) : null;
@@ -116,6 +135,20 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       case 'reset_fallback': card('重複！', ['ランプが消えた… もう一度！'], '#ffb0ba'); break;
     }
   }
+  function drawLaunchRings(ctx, ages=launchPulses.map(at=>(clock-at)/.8)) {
+      for (const a of ages) {
+        ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = .32 * (1-a)**1.4;
+        ctx.strokeStyle = '#adf6ff'; ctx.lineWidth = 9*(1-a)+2;
+        ctx.beginPath(); ctx.ellipse(W/2, 300, 30+410*(1-(1-a)**3), 18+240*(1-(1-a)**3), 0, 0, 2*Math.PI); ctx.stroke(); ctx.restore();
+      }
+  }
+  function ringOverlay() {
+    if(!launchPulses.length)return null;
+    if(!ringCanvas){ringCanvas=document.createElement('canvas');ringCanvas.width=912;ringCanvas.height=552;ringCtx=ringCanvas.getContext('2d');}
+    const ages=Object.freeze(launchPulses.map(at=>(clock-at)/.8));
+    ringCtx.clearRect(0,0,912,552);ringCtx.save();ringCtx.translate(-120,-24);drawLaunchRings(ringCtx,ages);ringCtx.restore();
+    return {canvas:ringCanvas,x:120,y:24,width:912,height:552,blend:'screen',revision:clock,replay:target=>drawLaunchRings(target,ages)};
+  }
   function onEvent(id, p = {}) {
     invalidateResult();
     lastEvent = { id, p, at: clock };
@@ -171,6 +204,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     },
     onEvent, setCards(c) { cards = c; },
     get gpuPanelSource(){return gpuFrame;},
+    get videoImageBackend(){return videoBackend;},
     materializeGpuLcd(reason='consumer',force=false){return materializeGpu(reason,force);},
     async warm(){if(clock!==0||jpOwns)throw Error('normal warm is boot-only');return clips.warm(hold,W,H);},
     setManual(on) { manual = !!on; clips.setManual(on); jp?.setManual(on); },
@@ -188,15 +222,21 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
           if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered)fadeLeft=0;
           if(!jpOwns){clips.suspend();jpOwns=true;}
           if(v?.gpuPalaceImage&&jp.layered&&!choiceWrites(this)){
-            const w=jp.where(),backend=v.gpuPalaceImage;backend.setFlash(w?.flash,w?.flashColor);
+            const w=jp.where(),backend=v.gpuPalaceImage;if(gpuFrame?.backend!==backend)materializeGpu('gpu-owner-change');backend.setFlash(w?.flash,w?.flashColor);
             gpuFrame={backend,published:false};stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
           }
           const resultBackend=v?.gpuResultImage,rw=resultBackend?jp.where():null;
           // Preserve the existing 2D dim/fade/choice ownership at unsafe seams.
           if(resultBackend&&fadeLeft<=0&&!rw?.dim&&!jp.transition&&!choiceWrites(this)){
+            if(gpuFrame?.backend!==resultBackend)materializeGpu('gpu-owner-change');
             resultBackend.setFlash(rw?.flash,rw?.flashColor);
             gpuFrame={backend:resultBackend,published:false};stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
           }
+          if(videoBackend&&fadeLeft<=0&&!choiceWrites(this)){
+            const image=jp.plainVideoSnapshot?.(v);
+            if(publishVideo(image,jp.where())){finishFrame(t0);return;}
+          }
+          materializeGpu('jp-video-legacy');
           if(resultBackend)v=resultBackend.rawCanvas('legacy-result-owner-frame');
           if(v?.gpuPalaceImage)v=v.gpuPalaceImage.rawCanvas('legacy-owner-frame');
           gpuFrame=null;
@@ -215,24 +255,27 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
           ctx.restore();blend(dt);if(cacheable){paintedResult={canvas:v,key};resultUploadRevision++;stableResult=true;}stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
         }
       }
-      materializeGpu('normal-return');invalidateResult();jpOwns=false;
+      if(gpuFrame?.owner!=='normal')materializeGpu('normal-return');invalidateResult();jpOwns=false;
       normalN = clamp(s.lit ?? normalN, 0, 6);
       if (mode && clock >= mode.until) {bridge();mode = null;}
       // 液晶のcueが無いchain_*もonEventで確実に届く。cueはここでは映像を二重起動しない。
       if (s.phase === 'ChainChoice' && mode?.id !== 'chain_choice') temporary('chain_choice', { ...s.chain }, Infinity);
       clips.setIdle(`idle${normalN}`);
-      clips.frame(dt, hold, W, H);
+      const videoEligible=!!videoBackend&&!videoFailed&&fadeLeft<=0&&!mode&&!(guard&&clock<guard.until)&&!choiceWrites(this);
+      if(!videoEligible)materializeGpu('normal-overlay-owner');
+      const videoSnapshot=clips.frame(dt,videoEligible?null:hold,W,H);
       shotOn = !!clips.shot || clips.pending > 0;
+      // Keep the original pulse lifetime and render equations; only its target changes.
+      launchPulses = launchPulses.filter(t => clock - t < .8);
+      if(videoEligible){
+        videoSnapshot.overlay=ringOverlay();
+        if(publishVideo(videoSnapshot)){finishFrame(t0);return;}
+        materializeGpu('normal-video-fallback');drawClipSnapshot(videoSnapshot,hold,W,H);
+      }
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.save(); ctx.translate(PX, PY); ctx.drawImage(held, 0, 0);
       // 固定SHOTSの偽の軌道を焼かず、実際の発射で水面の光輪を出す。
-      launchPulses = launchPulses.filter(t => clock - t < .8);
-      for (const at of launchPulses) {
-        const a = (clock - at) / .8;
-        ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = .32 * (1-a)**1.4;
-        ctx.strokeStyle = '#adf6ff'; ctx.lineWidth = 9*(1-a)+2;
-        ctx.beginPath(); ctx.ellipse(W/2, 300, 30+410*(1-(1-a)**3), 18+240*(1-(1-a)**3), 0, 0, 2*Math.PI); ctx.stroke(); ctx.restore();
-      }
+      drawLaunchRings(ctx);
       if (mode) drawTemporary(s);
       if (guard && clock < guard.until && !mode) {
         const k = 1 - (clock - guard.at) / 1.1;
@@ -255,7 +298,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
           ring: Array.from({length:4}, () => [0,0,0]), zone: Array.from({length:8}, () => col.map(v => v*.2)) };
       }
     },
+    videoImageDiagnostics(){return {...videoStats,failures:[...videoStats.failures],backend:videoBackend?.diagnostics?.()??null};},
     diagnostics() { return clips.diagnostics().concat(jp?.diagnostics()??[]); },
-    dispose() { clips.dispose(); jp?.dispose(); },
+    dispose() { try{videoBackend?.dispose?.();}finally{try{clips.dispose();}finally{jp?.dispose();}} },
   };
 }
