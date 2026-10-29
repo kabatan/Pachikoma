@@ -56,7 +56,8 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
     if (category) seen.add(category);
     return bus.emit(id, { state: { first: { [category]: first } }, data: { ...data, first } });
   };
-  const reset = () => { jpFlight = null; game = ctrl.game; seen = new Set(); levels = new Set(); shots = new Map(); pending = []; receiptSeen = -1; chainTry = 0; choiceSent = null; warned = false; started = false; resultSent = false; };
+  let chainDeferred = false;
+  const reset = () => { chainDeferred = false; jpFlight = null; game = ctrl.game; seen = new Set(); levels = new Set(); shots = new Map(); pending = []; receiptSeen = -1; chainTry = 0; choiceSent = null; warned = false; started = false; resultSent = false; };
   const offAction = ctrl.onAction(action => {
     const g = ctrl.game;
     if (action === 'howto') { reset(); send('howto', { seconds: ctrl.howtoSeconds }); }
@@ -70,7 +71,8 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
       if (g.shot.chain) chainTry = chainStage;
       shots.set(g.shot.id, { shotId: g.shot.id, aim: ctrl.lockedAim, dir: ctrl.aimDir, challenge: g.shot.challenge, chain: !!g.shot.chain, chainStage, lamps: [...g.shot.lamps] });
     }
-    if (action === 'chainContinue' && g.chainStatus) { const c = g.chainStatus; send('chain_continue', { chain: c.successes, lamps: g.lampCount, pending: c.pendingAward, base: c.baseAward }); }   // 灯がL個まとめて点く
+    if (action === 'chainContinue' && g.chainStatus) { const c = g.chainStatus; if (g.phase === 'StaffWait') chainDeferred = true; else send('chain_continue', { chain: c.successes, lamps: g.lampCount, pending: c.pendingAward, base: c.baseAward }); }   // 灯がL個まとめて点く。H: 時計0で追加の確認待ち(StaffWait)なら、追加が済んで継続の連打が始まる時に出す
+    if (action === 'meterReady' && chainDeferred && ctrl.lastGameEvent?.kind === 'chain' && g.chainStatus) { chainDeferred = false; const c = g.chainStatus; send('chain_continue', { chain: c.successes, lamps: g.lampCount, pending: c.pendingAward, base: c.baseAward }); }
     if (action === 'reset') { reset(); phase = g.phase; send('attract'); }
     sync();
   });

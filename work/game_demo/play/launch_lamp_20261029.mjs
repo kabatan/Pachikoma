@@ -10,7 +10,7 @@
 // 音(全部とても小さい・声なし): 押しが受け付けられない(hold/closed 中)ときの「コッ」、hold が解けた「ピッ・ピ」、
 // 規則側が盤上の通常球を取り消した(数えない・手持ちへ戻した)ときの「シュッ」。engine.sfx へ入れるので音量つまみ・消音に従う。
 // 規則・物理・演出には触らない。読むだけ(ctrl.game / ctrl.inputLog / ctrl.fireBuffer)。
-const PLAYING = new Set(['Ready', 'Flight', 'Effect', 'ChainChoice', 'Continue', 'StaffWait']);
+const PLAYING = new Set(['Ready', 'Flight', 'Effect', 'ChainChoice', 'Continue', 'StaffWait', 'Meter', 'Roulette']);   // Meter/Roulette: H(連打メーター・ルーレット)の局面。G では現れない
 export const LAMP_COLORS = { hold: '#ffa200', queued: '#ffc400', closed: '#ff1f1f', void: '#2f8dff', go: '#3dff72' };
 
 /** 純粋関数: いまの状態名。extraHold: 液晶の都合で発射の押しを捨てている間(継続の選択から勝負の映像へ切り替わる瞬間)。 */

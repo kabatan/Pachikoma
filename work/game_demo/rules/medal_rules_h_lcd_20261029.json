@@ -1,0 +1,260 @@
+{
+  "R2Enabled": true,
+  "R3Enabled": true,
+  "ContinuousFire": true,
+  "MaxExtraCredits": null,
+  "JackpotChainLamps": [
+    6
+  ],
+  "RapidFire": false,
+  "MaxInFlight": 3,
+  "FireInterval": 0.6,
+  "ResetWhileShooting": true,
+  "ClockStopOnReset": false,
+  "ResetVisualSecondsByLamps": [
+    0,
+    1.5,
+    3,
+    3,
+    4.5,
+    6
+  ],
+  "ClockStopOnJackpot": false,
+  "ClockStopBudget": 10,
+  "ClockStopBudgetIncludesJackpot": false,
+  "ResetEffectSeconds": 1.4,
+  "ResetEffectSecondsSingle": 0.5,
+  "ResetEffectSecondsByLamps": [
+    0,
+    0.5,
+    0.5,
+    0.5,
+    4.5,
+    6
+  ],
+  "JackpotEffectSeconds": [
+    6.3,
+    6.6,
+    7.7,
+    8.7,
+    11
+  ],
+  "LoanBalls": 80,
+  "ExtraLoanBalls": 10,
+  "InitialSeconds": 72,
+  "ExtraSeconds": 22,
+  "ContinueSeconds": 30,
+  "Awards": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "ResetWeights": [
+    90,
+    8,
+    2,
+    0
+  ],
+  "ResetWeightsByLamps": [
+    null,
+    null,
+    null,
+    null,
+    [
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      0,
+      0,
+      0
+    ],
+    null
+  ],
+  "HighLampDuplicateProtectionCount": 2,
+  "JackpotAwards": [
+    30,
+    40,
+    100,
+    200,
+    500
+  ],
+  "JackpotWeights": [
+    750000,
+    241000,
+    5500,
+    3498.8,
+    1.2
+  ],
+  "PrizeThresholds": [
+    0,
+    40,
+    80,
+    160,
+    500
+  ],
+  "PrizeNames": [
+    "参加賞",
+    "C賞",
+    "B賞",
+    "A賞",
+    "S賞"
+  ],
+  "ClockStartsAfterLoan": true,
+  "ChallengePrepareSeconds": 0.6,
+  "ChallengeAimSpeed": 0.5,
+  "PrepareForcedChallenge": true,
+  "EndGraceSeconds": 1.5,
+  "JackpotChainLaneOrder": [
+    7,
+    5,
+    3,
+    6,
+    2,
+    1,
+    4
+  ],
+  "JpMeterThreshold": 4,
+  "JpMeterSeconds": 12,
+  "JpMeterIntroSeconds": 4.5,
+  "ChainHitCount": 3,
+  "ChainHitLaneMode": "random",
+  "ChainIntroSeconds": 1.2,
+  "ChainDisplayProbability": "2/3",
+  "ChainMeterByStage": [
+    {
+      "Threshold": 5,
+      "Seconds": 8
+    }
+  ],
+  "MeterMaxInFlight": 3,
+  "MeterFireInterval": 0.6,
+  "MeterAimSpeed": 1,
+  "MeterSettleSeconds": 4,
+  "ClockStopOnMeter": false,
+  "ClockStopOnRoulette": false,
+  "RouletteAutoStopSeconds": 8,
+  "RouletteStopAcceptAfter": 1.5,
+  "RouletteSlideSeconds": 1.2,
+  "RouletteResultSeconds": [
+    3.5,
+    3.8,
+    4.5,
+    5.5,
+    7
+  ],
+  "DuplicateBasis": "fraction",
+  "DuplicateExtension": "natural",
+  "DuplicateSegments": [
+    {
+      "Until": 0.6,
+      "ResetWeights": [
+        50,
+        30,
+        15,
+        5
+      ],
+      "HighLampDuplicateProtectionCount": 0
+    },
+    {
+      "Until": 0.8,
+      "ResetWeights": [
+        100,
+        0,
+        0,
+        0
+      ],
+      "HighLampDuplicateProtectionCount": 2
+    },
+    {
+      "Until": null,
+      "ResetWeights": [
+        100,
+        0,
+        0,
+        0
+      ],
+      "HighLampDuplicateProtectionCount": 3
+    }
+  ],
+  "JpMeterByLane": {
+    "1": {
+      "Seconds": 14,
+      "Threshold": 3
+    },
+    "2": {
+      "Seconds": 12,
+      "Threshold": 4
+    },
+    "3": {
+      "Seconds": 12,
+      "Threshold": 4
+    },
+    "4": {
+      "Seconds": 10,
+      "Threshold": 2
+    },
+    "5": {
+      "Seconds": 14,
+      "Threshold": 4
+    },
+    "6": {
+      "Seconds": 14,
+      "Threshold": 3
+    },
+    "7": {
+      "Seconds": 12,
+      "Threshold": 5
+    }
+  },
+  "ChainThresholdByHitSet": {
+    "123": 5,
+    "124": 4,
+    "125": 5,
+    "126": 4,
+    "127": 6,
+    "134": 4,
+    "135": 5,
+    "136": 4,
+    "137": 6,
+    "145": 4,
+    "146": 3,
+    "147": 4,
+    "156": 4,
+    "157": 5,
+    "167": 5,
+    "234": 5,
+    "235": 6,
+    "236": 5,
+    "237": 7,
+    "245": 4,
+    "246": 4,
+    "247": 5,
+    "256": 5,
+    "257": 6,
+    "267": 6,
+    "345": 5,
+    "346": 4,
+    "347": 5,
+    "356": 5,
+    "357": 6,
+    "367": 6,
+    "456": 4,
+    "457": 5,
+    "467": 4,
+    "567": 5
+  },
+  "DuplicateSixthLampClearUntil": 0.4,
+  "DuplicateRestartScaleAfterJp": 0.42,
+  "ChainContinueMinSeconds": 0,
+  "ChainContinueNeedsAddAtZero": true,
+  "RuleVariant": "H_20261029",
+  "RouletteStartDelaySeconds": 5.8
+}

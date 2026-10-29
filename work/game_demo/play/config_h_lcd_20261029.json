@@ -1,0 +1,13 @@
+{
+  "name": "H 連打メーター版・液晶接続用の秒数（導入4.5・ルーレット開始待ち5.8）",
+  "stageDir": "work/game_demo/physics/boards/F_natural_wide_return_v1_g_20261028",
+  "jitter": {
+    "x_mm": 0.5,
+    "vx_pct": 3,
+    "vy_pct": 0
+  },
+  "rules": "work/game_demo/rules/medal_rules_h_lcd_20261029.json",
+  "seed": null,
+  "rulesModule": "work/game_demo/rules/medal_rules_h_20261029.mjs",
+  "naturalBoardMotion": true
+}

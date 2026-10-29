@@ -1,6 +1,6 @@
 // Shared production HUD. Values are read directly from the rule state, never counted here.
 const PX=34,PY=28,SPRITE_LIMIT=104;
-const VISIBLE=new Set(['Ready','Flight','Effect','ChainChoice','Continue','StaffWait','Fault']);
+const VISIBLE=new Set(['Ready','Flight','Effect','ChainChoice','Continue','StaffWait','Fault','Meter','Roulette']);   // Meter/Roulette: H の局面(時計は止めない)。G では現れない
 export function timerValues(s){
   if(!VISIBLE.has(s.phase)||s.howto||!Number.isFinite(s.secondsLeft))return null;
   const seconds=Math.max(0,s.secondsLeft),offer=s.phase==='Continue'&&Number.isFinite(s.offerLeft)?Math.max(0,s.offerLeft):null;

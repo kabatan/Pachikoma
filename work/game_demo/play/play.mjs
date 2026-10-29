@@ -4,13 +4,13 @@ import RAPIER from '../physics/node_modules/@dimforge/rapier3d-compat/dist/rapie
 import { installRigidSyncGuard } from '../physics/rigid_sync_guard.mjs';
 import { PhysicsAdapter, RAPID_SUPPLY } from '../physics/adapter.mjs';
 import { attachTrayVisual } from '../physics/tray_visual.mjs';
-import { createMedalApp } from '../ui/demo_host_g_20261028.mjs';
+import { createMedalApp } from '../ui/demo_host_h_20261029.mjs';   // G／従来の規則はそのまま(同じ配線)。?rules=h のときだけ H の操作・規則
 import { HybridRenderer } from '../web/src/hybrid_renderer.mjs';
 import { Gen } from '../web/src/dummy.mjs';
 import { connectLayerPack, connectAssemblyBalls } from './render_bridge.mjs';
 import { createRuntime } from './runtime.mjs';
 import { EffectsBus } from './effects_bus.mjs';
-import { loadPlayConfig, loadPlayRules } from './config_g_20261028.mjs';
+import { loadPlayConfig, loadPlayRules } from './config_h_20261029.mjs';   // 既定は G の読み込みに渡す。?rules=h のときだけ H の設定(config_h_20261029.json)
 import { prewarm } from './prewarm.mjs';
 import { createLauncherBody } from './launcher_body.mjs';
 import { CabinetSerial } from './cabinet_serial_r3_20261029.mjs';
@@ -72,11 +72,17 @@ if (initialEnvironment) {
   }
   initialEnvironment = null; // r2/未置換slotは保持し、捕捉した旧envへの参照だけを解放
 }
+// H(?rules=h): 連打中の無料の球(shot.free)。持ち玉は減らさないので、物理側の玉の台帳を合わせるため、撃つ前に予備球を1つ補給し、盤から消えた(外れて返らない)ときは取り消す。既定(G)では shot.free が無く何も起きない
+const freeShotIds = new Set();
 const app = await createMedalApp(document.getElementById('stage'), {
-  hooks: { launchBall(shot, aim, dir) { pa.setAim(aim, dir); pa.launch(shot.id); }, cancelFlights() { pa.reset(); }, canReset() { return app.presenter.count.done; } },
+  hooks: { launchBall(shot, aim, dir) { if (shot.free && !pa.isWorkerProxy) { pa.stock++; freeShotIds.add(shot.id); } pa.setAim(aim, dir); pa.launch(shot.id); }, cancelFlights() { freeShotIds.clear(); pa.reset(); }, canReset() { return app.presenter.count.done; } },
   rulesUrl: config.rules, seed, quiet: q.has('quiet'), music: false, log: !q.has('nolog'), human: !q.has('nolog') && !q.has('qa') && !q.has('manual'), manual: true,
 });
 const { ctrl, presenter } = app, effects = new EffectsBus();
+if (playRules.RuleVariant === 'H_20261029') {   // 無料の球が盤の外へ落ちた(lost)ときは、物理側が予備球に戻すので、その1球を取り消す(規則側は無料なので返金しない)
+  const landing0 = ctrl.landing.bind(ctrl);
+  ctrl.landing = (shotId, lane, reached = true) => { if (freeShotIds.delete(shotId) && !reached && !pa.isWorkerProxy) pa.stock = Math.max(0, pa.stock - 1); return landing0(shotId, lane, reached); };
+}
 app.history?.setContext({ configName: config.name, stageDir: config.stageDir, rulesUrl: config.rules, seed });
 const cabinet = new CabinetSerial({ serial: navigator.serial, ctrl, button: document.getElementById('serial-connect'), status: document.getElementById('serial-status'), onInput: app.onInput, wake: () => { try { app.audio.unlock?.()?.catch?.(() => {}); } catch {} } });   // R3: 左右ボタンだけで進行(+ブラウザ音声の起こし)・LED帯の色もこの経路で送る
 await cabinet.init();
@@ -162,7 +168,8 @@ if (!q.has('nofx')) {
   if(lcd?.production) (await import('./lcd_surface/chain_connect_20261029.mjs')).attachChainConnect(lcd,{controller:ctrl});
   const choiceImageFactory = M3 && q.get('choicegpu') !== '0' ? async o => (await import('./lcd_surface/choice_gpu_image_1029.mjs')).createChoiceGpuImage({...o, renderer:hr.renderer, THREE:await import('../web/vendor/three/three.module.js')}) : null;
   if(lcd?.production) await (await import('./lcd_surface/choice_surface_v20_20261029.mjs')).attachChoiceSurface(lcd,{choiceImageFactory,getState:()=>({phase:ctrl.game.phase}),controller:ctrl,canvas:document.getElementById('c'),onInput:app.onInput,unlock:()=>app.audio.unlock()});
-  if(M3 && lcd?.production && q.get('cabinetlights')!=='off') await (await import('../../effects/cabinet_light_script/cabinet_light_script_20261029.mjs')).attachCabinetLightScript(lcd,{getLamps:()=>ctrl.game.lamps,getState:()=>{const g=ctrl.game,p=g.phase;lightState.secondsLeft=g.secondsLeft;lightState.playing=p==='Ready'||p==='Flight'||p==='Effect';return lightState;}});
+  if(lcd?.production && ctrl.game.rules.RuleVariant === 'H_20261029') await (await import('./lcd_surface/rules_h_20261029.mjs')).attachRulesH(lcd, { controller: ctrl, style: q.get('meter') ?? undefined, hint: q.get('hint') === '0' ? null : Object.fromEntries([...q].filter(([k]) => k.startsWith('hint_')).map(([k, v]) => [k.slice(5), Number.isNaN(+v) ? v : +v])) });   // 新ルールH(連打メーター・ボタンで止めるルーレット)の液晶。?rules=h のときだけ
+  if(M3 && lcd?.production && q.get('cabinetlights')!=='off') await (await import('../../effects/cabinet_light_script/cabinet_light_script_20261029.mjs')).attachCabinetLightScript(lcd,{getLamps:()=>ctrl.game.lamps,getState:()=>{const g=ctrl.game,p=g.phase;lightState.secondsLeft=g.secondsLeft;lightState.playing=p==='Ready'||p==='Flight'||p==='Effect'||p==='Meter'||p==='Roulette';return lightState;}});
   if(lcd?.production) (await import('./lcd_surface/timer_display_20261029.mjs')).attachTimerDisplay(lcd,{getState:()=>({phase:ctrl.game.phase,secondsLeft:ctrl.game.secondsLeft,offerLeft:ctrl.game.offerLeft,howto:!!ctrl.howto})});
   if(lcd?.production) await (await import('./lcd_surface/timeup_surface_20261029.mjs')).attachTimeupSurface(lcd,{controller:ctrl,canvas:document.getElementById('c'),onInput:app.onInput,unlock:()=>app.audio.unlock()});
   // 新しいJP尺の音も起動時に作り、着地のフレームで長い音声バッファを生成しない。

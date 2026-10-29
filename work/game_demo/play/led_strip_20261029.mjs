@@ -1,6 +1,6 @@
 // Drives the monitor-surround RGB strip from the cabinet light script (window.__cabinetLightScript.strip, same flash layer as the 3D cabinet).
 // Called once per rendered frame; allocation-free apart from the tiny serial line (<= 50/s, only on change). ?ledpreview=1 shows a swatch.
-const FALLBACK = { Attract: [.1, .25, 1], Ready: [1, .1, .5], Flight: [1, .1, .5], Effect: [1, .1, .5], Continue: [1, .5, .05], StaffWait: [1, .5, .05], ChainChoice: [1, .5, .05], Result: [1, .5, .05], Fault: [1, .02, .03] };
+const FALLBACK = { Attract: [.1, .25, 1], Ready: [1, .1, .5], Flight: [1, .1, .5], Effect: [1, .1, .5], Meter: [1, .1, .5], Roulette: [1, .1, .5], Continue: [1, .5, .05], StaffWait: [1, .5, .05], ChainChoice: [1, .5, .05], Result: [1, .5, .05], Fault: [1, .02, .03] };
 
 export function createLedStrip({ cabinet, getScript = () => globalThis.__cabinetLightScript, getPhase = () => 'Attract', preview = false, doc = globalThis.document } = {}) {
   const state = { r: 0, g: 0, b: 0, source: 'none', frames: 0 };
