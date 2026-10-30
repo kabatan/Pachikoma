@@ -231,7 +231,14 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
         const gpu=lcd?.gpuPanelSource,covered=((choice?.active||choice?.holding)&&gpu?.owner!=='choice')||lcd?.attractSurface?.active||(lcd?.finalResultSurface?.active&&gpu?.owner!=='final-result')||lcd?.timeupSurface?.active;
         if(gpu&&!covered){
           const texture=gpu.backend.compose();
-          if(texture){plate.mat.uniforms.uT.value=texture;gpu.published=true;uploadRevision=undefined;return last;}
+          if(texture){
+            let outTex=texture;
+            {   // 初見向けの重ね描き(ナイス！等)は、GPU の映像の上に小さい層で重ねる(液晶 canvas へ落とさない)。?ftsplit=0 で従来
+              const fl=!lcd?.displayRecoveryActive&&!lcd?.splitBroken?lcd?.firstTimer?.splitLayers?.():null;
+              if(fl){try{const t2=(splitComp??=createSplitCompositor(THREE,hr.renderer)).compose([{tex:texture,w:1240,h:1510,ax:0,ay:0,x:0,y:0,rot:0,sc:1,alpha:1,add:false},...fl]);if(t2){outTex=t2;window.__ftSplitTexture=t2;}}catch(e){lcd.splitBroken=true;console.warn('[lcdsplit] 重ね描きの合成に失敗。従来へ戻します',e);}}
+            }
+            plate.mat.uniforms.uT.value=outTex;gpu.published=true;uploadRevision=undefined;return last;
+          }
           lcd.materializeGpuLcd?.('compose-failed',true);
         }
         plate.mat.uniforms.uT.value=plate.tex;

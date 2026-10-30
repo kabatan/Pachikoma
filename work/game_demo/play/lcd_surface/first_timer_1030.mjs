@@ -9,6 +9,8 @@
 // 避ける枠（液晶 1152x1268）：上端 y52〜122・右下の残り時間。
 import { telop } from './hint_h_20261029.mjs';
 import * as fx from './first_timer_fx_1030.mjs';
+import * as THREE from '../../web/vendor/three/three.module.js';
+import { layerTexture } from './lcd_split_1030.mjs';
 
 const PX = 34, PY = 28, W = 1152, H = 1268;
 const easeOut = (x) => 1 - (1 - Math.min(1, Math.max(0, x))) ** 3;
@@ -31,9 +33,12 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
   if (!lcd?.production || lcd.firstTimer) return lcd;
   const qs = new URLSearchParams(globalThis.location?.search ?? '');
   const on = (n) => { const v = qs.get('ft' + n); return v !== '0' && v !== 'off'; };
+  const SPLIT_ON = qs.get('ftsplit') !== '0';
+  const sp = { on: false, fail: false, cAdd: null, cOver: null, tcAdd: null, tcOver: null };
   const F = { 1: on(1), 2: on(2), 3: on(3), 4: on(4), 5: on(5) };
   if (!Object.values(F).some(Boolean)) return lcd;
-  const ctx = lcd.canvas.getContext('2d');
+  const mainCtx = lcd.canvas.getContext('2d');
+  let ctx = mainCtx, ctxA = mainCtx;   // ctx: 通常の重ね描き先 / ctxA: 加算(lighter)の光の描き先。?ftsplit の層重ねでは別々の透明 canvas
   const base = new URL('./rules_h_assets/', import.meta.url);
   const [upa, ...gem] = await Promise.all([img(new URL('upa_source.png', base).href), ...['1', '2', '3', '4', '5', '6', '7'].map((k) => img(new URL(`gem_${k}.png`, base).href))]);
   const S = { clock: 0, startAt: -1, pressed: false, promptDone: false, prompt: null, praised: false, praise: null, five: null, dupDone: false, dup: null, near: null, sweepAt: -99, events: [] };
@@ -90,10 +95,10 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
   // ---- 重ね描き ----
   const drawPraise = (u) => {
     const a = clamp(u / 0.05) * clamp((FT.praise - u) / 0.2), sc = 1 + 0.5 * (1 - easeOut(u / 0.16)) ** 2 + 0.025 * Math.sin(u * 30);
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctxA.save(); ctxA.globalCompositeOperation = 'lighter';
     const hues = ['255,120,160', '255,210,90', '120,230,255', '190,150,255'];
-    for (let k = 0; k < 12; k++) { const ang = k / 12 * 6.283 + 0.4, r = 120 + 560 * easeOut(u / 0.7) * (0.6 + 0.4 * ((k * 7) % 5) / 4); glow(ctx, 576 + Math.cos(ang) * r, 560 + Math.sin(ang) * r * 0.7, 46 + (k % 3) * 14, hues[k % 4], 0.8 * a * (1 - u / FT.praise * 0.4)); }
-    glow(ctx, 576, 560, 560, '255,240,200', 0.5 * a); ctx.restore();
+    for (let k = 0; k < 12; k++) { const ang = k / 12 * 6.283 + 0.4, r = 120 + 560 * easeOut(u / 0.7) * (0.6 + 0.4 * ((k * 7) % 5) / 4); glow(ctxA, 576 + Math.cos(ang) * r, 560 + Math.sin(ang) * r * 0.7, 46 + (k % 3) * 14, hues[k % 4], 0.8 * a * (1 - u / FT.praise * 0.4)); }
+    glow(ctxA, 576, 560, 560, '255,240,200', 0.5 * a); ctxA.restore();
     dim(ctx, 576, 580, 5.5, 2.0, a);
     ctx.save(); ctx.globalAlpha = a; ctx.translate(576 + Math.sin(u * 90) * 6 * Math.exp(-u * 8), 640); ctx.scale(sc, sc); telop(ctx, 'ナイス！', 0, 0, 240, { glow: 'rgba(255,90,180,.95)' }); ctx.restore();
     if (u < 0.12) { ctx.fillStyle = `rgba(255,255,255,${0.45 * (1 - u / 0.12) ** 2})`; ctx.fillRect(0, 0, W, H); }
@@ -144,7 +149,19 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
     S.clock += dt;
     if (!hooked && lcd.cabinetLightScript) { lcd.cabinetLightScript.holeOverlay = holeFn; hooked = true; }
     const g = game();
-    ctx.save(); ctx.translate(PX, PY); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+    // 重ね描きは、GPU の映像経路のままなら小さい層(透明 canvas 2 枚)で重ねる。そうでなければ従来どおり液晶 canvas へ(?ftsplit=0 で常に従来)
+    const gpu = lcd.gpuPanelSource, choice = lcd.choiceV20;
+    const covered = ((choice?.active || choice?.holding) && gpu?.owner !== 'choice') || lcd.attractSurface?.active || (lcd.finalResultSurface?.active && gpu?.owner !== 'final-result') || lcd.timeupSurface?.active;
+    const viaGpu = SPLIT_ON && !sp.fail && !lcd.splitBroken && !lcd.displayRecoveryActive && gpu?.owner === 'normal' && !covered && !lcd.attractSurface?.directActive;
+    sp.on = false;
+    if (viaGpu) {
+      try {
+        if (!sp.cOver) { for (const k of ['cAdd', 'cOver']) { const c = document.createElement('canvas'); c.width = W; c.height = H; sp[k] = c; sp['t' + k] = layerTexture(THREE, c); } }
+        sp.cAdd.getContext('2d').clearRect(0, 0, W, H); sp.cOver.getContext('2d').clearRect(0, 0, W, H);
+        ctx = sp.cOver.getContext('2d'); ctxA = sp.cAdd.getContext('2d'); sp.on = true;
+      } catch (e) { sp.fail = true; console.warn('[first-timer] 分割描画を止めて従来へ戻します', e); ctx = ctxA = mainCtx; }
+    } else { ctx = ctxA = mainCtx; }
+    ctx.save(); if (!sp.on) { ctx.translate(PX, PY); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); }
     if (S.praise) {   // 囲いを虹色に（cue）と字
       const u = S.clock - S.praise.at;
       if (u >= FT.praise) { S.praise = null; lcd.cabinetLightScript?.cue?.(null); } else { lcd.cabinetLightScript?.cue?.('first_lamp', u); drawPraise(u); }
@@ -184,13 +201,16 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
       }
     }
     ctx.restore();
+    if (sp.on) { sp.tcAdd.needsUpdate = true; sp.tcOver.needsUpdate = true; }
+    ctx = ctxA = mainCtx;
     return r;
   };
   // 毎フレーム変わる重ね描きがあるので、液晶面の「更新なし」判定を外す（他の attach と同じ作法）
   const rev = Object.getOwnPropertyDescriptor(lcd, 'uploadRevision')?.get;
   if (rev) Object.defineProperty(lcd, 'uploadRevision', { configurable: true, enumerable: true, get: () => (activeNow() ? undefined : rev.call(lcd)) });
   const nearMiss = ({ rem = 1, kind = 'jp' } = {}) => { if (!F[1]) return; S.near = { rem: clamp(Math.round(rem), 1, 7), kind, armed: S.clock, seen: false, start: -1 }; note('nearArm', { rem, kind }); };
-  lcd.overlayHold = activeNow;   // normal_surface が見る：重ね描き中はGPUの映像経路を使わない
-  lcd.firstTimer = { state: S, flags: F, nearMiss, holeFn, FT, dispose() { if (lcd.overlayHold === activeNow) lcd.overlayHold = null; controller.dispatch = dispatch0; lcd.onEvent = base0; lcd.frame = frame0; if (lcd.cabinetLightScript?.holeOverlay === holeFn) lcd.cabinetLightScript.holeOverlay = null; } };
+  const splitLayers = () => (sp.on && !sp.fail && activeNow() ? [{ tex: sp.tcAdd, w: W, h: H, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 1, add: true }, { tex: sp.tcOver, w: W, h: H, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 1, add: false }] : null);
+  lcd.overlayHold = () => (SPLIT_ON && !sp.fail && !lcd.splitBroken ? false : activeNow());   // normal_surface が見る：重ね描き中はGPUの映像経路を使わない
+  lcd.firstTimer = { splitLayers, state: S, flags: F, nearMiss, holeFn, FT, dispose() { lcd.overlayHold = null; controller.dispatch = dispatch0; lcd.onEvent = base0; lcd.frame = frame0; if (lcd.cabinetLightScript?.holeOverlay === holeFn) lcd.cabinetLightScript.holeOverlay = null; } };
   return lcd;
 }
