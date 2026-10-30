@@ -11,7 +11,7 @@
 const STATES_OLD = ['L', 'E', 'R1', 'R2'], STATES_ANIM = ['A0', 'A1', 'A2', 'A3', 'R1', 'R2'], LIGHTS = ['0', '4'];   // ANIM：爪の開き 0・.35・.7・1、R1・R2 は反動（10/30 射出アニメ。球は絵に入れずゲームの 3D の球）
 const T_R1 = 0.05, T_R2 = 0.06;
 export function createLauncherBody({ stage, canvas, camera, xRange }, opts = {}) {
-  const W = canvas.width, H = canvas.height;   // 1440×2560（canvas 内部座標）
+  const W = 1440, H = 2560;   // 1440×2560（canvas 内部座標。10/30 表示実寸描画で canvas の画素数が変わっても絵の座標は元の大きさ）
   // opts.getPose()：射出アニメ（play/launcher_motion_1030.mjs）の爪の絵の名前。渡されたときだけ、球なしの絵（launcher_sprites_anim1）を使う
   const ANIM = typeof opts.getPose === 'function', STATES = ANIM ? STATES_ANIM : STATES_OLD;
   const base = opts.assetBase ?? new URL(ANIM ? '../../../upa_frame3d/m3/integration/launcher_sprites_anim1/' : '../../../upa_frame3d/m3/integration/launcher_sprites/', import.meta.url).href;

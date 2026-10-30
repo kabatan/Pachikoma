@@ -70,6 +70,7 @@ export class CabinetSerial extends GSerial {
     if (this.ctrl.phase !== 'StaffWait') this.pendingCancel = false;
     if (message.type === 'release') {
       this.down[message.name] = -Infinity;
+      this.ctrl.pressUp?.('cabinet:' + message.name);   // 説明の長押しスキップ(tutSkip)
       if (message.name === 'FIRE' && this.pendingCancel) { this.pendingCancel = false; if (this.ctrl.phase === 'StaffWait') this.input('cancelExtra'); }
       return;
     }
@@ -82,6 +83,8 @@ export class CabinetSerial extends GSerial {
     this.down[message.name] = now;
     this.wake?.();
     const ctrl = this.ctrl;
+    if (this.rgb) ctrl.pressDown?.('cabinet:' + message.name);   // 離しの通知(REL)がある新ファームのときだけ長押しを数える(古い版は短押し扱い=説明は最後まで流れる)
+    else if (ctrl.tutSkipActive) { ctrl.tutSkip.tap = 1; }
     if (ctrl.phase === 'StaffWait') {
       if (entryGuard(ctrl)) return;
       const other = message.name === 'FIRE' ? 'CHALLENGE' : 'FIRE';

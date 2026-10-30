@@ -53,6 +53,13 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
   const nm = (d, p) => `jp_aim_seal_d${d}_${p}`;
   // JACKPOT CHANCE の次を封印の「in」に（チュートリアルの有無にかかわらず。チュートリアルの最後の次は毎フレーム下で直す）
   for (const d of Object.keys(ms.byD)) { const cs = man.scenes[`jp_chance_d${d}`]; if (cs && man.scenes[nm(d, 'in')]) cs.next = nm(d, 'in'); }
+  // 10/30 JACKPOT CHANCE の背景を封印の扉に（旧は竜宮・水晶＋「〇を狙え」）。導入の前半 jp_chance_open_d{d}（2.0秒）→ 題字 jp_chance_d{d}（1.5秒、扉の上）→ in。合計3.5秒＝旧と同じ。?jpopen=0 で旧。
+  //   題字の場面は名前を jp_chance_d{d} のまま（音・照明・チュートリアルの差し込みは名前で引くため）。音は off>=45 の「〇を狙え」の分を鳴らさない（__jpChanceTrim）。
+  if (qs.get('jpopen') !== '0' && ms.jpOpen) {
+    for (const [k, v] of Object.entries(ms.jpOpen)) man.scenes[k] = { ...v };
+    for (const k of ['jp_intro_dopamine', 'jp_intro_reach']) if (man.scenes[k]) man.scenes[k].next = 'jp_chance_open_d4';   // 実行時に _d{d} へ置き換わる
+    globalThis.__jpChanceTrim = man.scenes.jp_chance_d4?.frames ?? 45;
+  }
 
   const off = controller.onAction((action) => {
     const e = controller.lastGameEvent ?? {};

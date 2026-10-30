@@ -80,26 +80,39 @@ void main(){
  gl_FragColor=vec4(light,1.);
 }`,{...U,uPBLayer:{value:0}});
 
+  // 10/30 応急：合成の倍率を指定できる（?renderscale=1.333 など）。既定 1.333（1080×1920 で合成して 1440×2560 へ）。
+  // ?renderscale=1 か ?quality=high で従来の元解像度、?renderlite=1 は従来どおり 2（720×1280、球 MSAA2）。
+  const pq=new URLSearchParams(globalThis.location?.search??'');
+  const scaleArg=pq.has('renderscale')?Number(pq.get('renderscale')):pq.get('quality')==='high'?1:pq.get('renderlite')==='1'?2:pq.get('renderlite')==='0'?1:1.333;
+  const renderScaleQ=Number.isFinite(scaleArg)&&scaleArg>1.001?Math.min(4,scaleArg):1;
+  const renderLite=renderScaleQ>1;
+  // 10/30 表示実寸描画（?dispfit=0 で従来）：球と最終合成を「画面に実際に映る画素数」（上限1440×2560）で描く。
+  // 素材と座標は元の1440×2560のまま、表示の画素の中心（=ブラウザが縮小で読む位置）で読むので、映る画は同じ。
+  const dispFit=!renderLite&&new URLSearchParams(globalThis.location?.search??'').get('dispfit')!=='0';
   // Eight-bit sRGB storage, hardware-decoded to linear light once per sample.
   // These fixed F0/F4/B4/W4 bases replace repeated pow conversions over the frame.
   const input=U.uMA.value.image,n=W*H*4,linearBytes=new Uint8Array(n*4);
   [0,1,6,7].forEach((layer,i)=>linearBytes.set(input.data.subarray(layer*n,(layer+1)*n),i*n));
   const linear=new THREE.DataArrayTexture(linearBytes,W,H,4);
   linear.type=THREE.UnsignedByteType;linear.format=THREE.RGBAFormat;linear.colorSpace=THREE.SRGBColorSpace;
-  linear.minFilter=linear.magFilter=THREE.NearestFilter;linear.generateMipmaps=false;linear.needsUpdate=true;owned.push(linear);
+  linear.minFilter=linear.magFilter=dispFit?THREE.LinearFilter:THREE.NearestFilter;linear.generateMipmaps=false;linear.needsUpdate=true;owned.push(linear);
   // Render the expensive sphere/composite passes at 720x1280, then present to
   // the native canvas. Keep all artwork, layout and occlusion in native coords.
-  const renderLite=new URLSearchParams(globalThis.location?.search??'').get('renderlite')==='1';
-  const renderScale=renderLite?2:1,RW=W/renderScale,RH=H/renderScale;
-  let balls=renderLite?new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples:2}):hr.rtMain;
+  const renderScale=renderScaleQ;let RW=Math.round(W/renderScale),RH=Math.round(H/renderScale);
+  const KX=(W/RW).toFixed(6),KY=(H/RH).toFixed(6),KFC=`vec4(gl_FragCoord.xy*vec2(${KX},${KY}),gl_FragCoord.zw)`;
+  const fit={size:[W,H],wanted:[W,H],since:0,resizes:0,legacyRestores:0,canvasFull:true,applied:false};
+  const uPBK={value:new THREE.Vector2(1,1)};
+  let balls=renderLite?new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples:renderScale>=2?2:hr.rtMain.samples}):hr.rtMain;
   if(renderLite)owned.push(balls);
-  const ballCrop=renderLite?null:createBallTargetCrop(hr,balls);if(ballCrop)owned.push(ballCrop);
+  let ballCrop=renderLite?null:createBallTargetCrop(hr,balls);if(ballCrop&&!dispFit)owned.push(ballCrop);
+  let fitBalls=null;   // dispFit のときだけ：映る大きさの MSAA の球バッファ（大きさが変わるたびに作り直し、古いのは捨てる）
   const display=renderLite?rt(RW,RH):null;
   if(display)display.texture.type=THREE.UnsignedByteType;
   const present=display?make('uniform sampler2D uImage;void main(){gl_FragColor=texture2D(uImage,gl_FragCoord.xy/vec2(1440.,2560.));}',{uImage:{value:display.texture}}):null;
   const ballMaterial=new hr.ballMat.constructor().copy(Object.create(hr.ballMat,{uniforms:{value:{}}}));ballMaterial.uniforms={...hr.ballMat.uniforms,uAtlas:{value:compact.atlas.texture}};
   ballMaterial.fragmentShader=replace(ballMaterial.fragmentShader,'const float PS = 64.0, PT = 66.0;',`const float PS = ${compact.faceSize}.0, PT = ${compact.tileSize}.0;`);materials.push(ballMaterial);
-  if(renderLite)ballMaterial.fragmentShader=ballMaterial.fragmentShader.replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*2.0,gl_FragCoord.zw)');
+  if(renderLite)ballMaterial.fragmentShader=ballMaterial.fragmentShader.replaceAll('gl_FragCoord',KFC);
+  if(dispFit){ballMaterial.fragmentShader='uniform vec2 uPBK;\n'+ballMaterial.fragmentShader.replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*uPBK,gl_FragCoord.zw)');ballMaterial.uniforms.uPBK=uPBK;}
   const extra={uPBBack:{value:back.texture},uPBFront:{value:front.texture},uPBFields:{value:fields.texture},uPBFrame:{value:linear},uPBTau:hr.composeMat.uniforms.uTau,
     uPBLCD:{value:null},uPBRect:{value:new THREE.Vector4()},uPBPanel:{value:new THREE.Vector4()},uPBGain:{value:1},uPBLCDOn:{value:0}};
   const load=`
@@ -126,10 +139,47 @@ vec4 prebakeC(ivec2 p){
   shader=replace(shader,'vec3 l4 = s2l(f4);','vec3 l4 = texture(uPBFrame,vec3(uvA,1.)).rgb;');
   shader=replace(shader,'vec3 dyed = l2s(mix(s2l(f0.rgb), pattern * hue * kk, 1.0));','vec3 dyed = l2s(pattern * hue * kk);');
   if(renderLite){
-    shader=shader.replace('vec4 d=texelFetch(uD,p,0);','vec4 d=texture(uD,uv);').replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*2.0,gl_FragCoord.zw)');
+    shader=shader.replace('vec4 d=texelFetch(uD,p,0);','vec4 d=texture(uD,uv);').replaceAll('gl_FragCoord',KFC);
   }
-  if(ballCrop)shader=replace(shader,'vec4 d=texelFetch(uD,p,0);','vec4 d=p.y<textureSize(uD,0).y?texelFetch(uD,p,0):vec4(0.);');
-  const final=make(shader,{...U,...extra,uD:{value:balls.texture}});
+  if(dispFit){
+    // 球は映る大きさのバッファをそのまま、τ は元の画素を双線形で（元の大きさでは texelFetch と同じ値）。
+    shader=replace(shader,'vec2 uv=(vec2(p)+.5)/vec2(1440.,2560.),','vec2 uv=gl_FragCoord.xy/vec2(1440.,2560.),');
+    shader=replace(shader,'vec4 d=texelFetch(uD,p,0);','ivec2 pd=ivec2(__RAWFC__.xy);vec4 d=pd.y<textureSize(uD,0).y?texelFetch(uD,pd,0):vec4(0.);');
+    shader=replace(shader,'vec3 tau=texelFetch(uPBTau,ivec2(p.x,2559-p.y),0).rgb;','vec3 tau=pbTau(gl_FragCoord.xy);');
+    shader=replace(shader,'vec4 prebakeC(ivec2 p){',`uniform vec2 uPBK;
+vec3 pbTau(vec2 fc){
+ vec2 t=fc-.5,f=t-floor(t);ivec2 i=ivec2(floor(t)),a=clamp(i,ivec2(0),ivec2(1439,2559)),b=clamp(i+1,ivec2(0),ivec2(1439,2559));
+ vec3 s00=texelFetch(uPBTau,ivec2(a.x,2559-a.y),0).rgb,s10=texelFetch(uPBTau,ivec2(b.x,2559-a.y),0).rgb,s01=texelFetch(uPBTau,ivec2(a.x,2559-b.y),0).rgb,s11=texelFetch(uPBTau,ivec2(b.x,2559-b.y),0).rgb;
+ return mix(mix(s00,s10,f.x),mix(s01,s11,f.x),f.y);
+}
+vec4 prebakeC(ivec2 p){`);
+    shader=shader.replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*uPBK,gl_FragCoord.zw)').replaceAll('__RAWFC__','gl_FragCoord');
+  }
+  else if(ballCrop)shader=replace(shader,'vec4 d=texelFetch(uD,p,0);','vec4 d=p.y<textureSize(uD,0).y?texelFetch(uD,p,0):vec4(0.);');
+  const final=make(shader,{...U,...extra,uD:{value:balls.texture},...(dispFit?{uPBK}:{})});
+  // 映る大きさ：canvas の CSS の箱（回転前の大きさ）× devicePixelRatio、1440×2560 が上限。大きさが 0.2 秒落ち着いてから切り替える。
+  function wantedSize(){
+    const c=r.domElement,dpr=globalThis.devicePixelRatio||1,cw=c.clientWidth,ch=c.clientHeight;
+    if(!(cw>0&&ch>0))return fit.size;
+    return [Math.max(64,Math.min(W,Math.round(cw*dpr))),Math.max(64,Math.min(H,Math.round(ch*dpr)))];
+  }
+  function setCanvas(w,h){if(r.domElement.width!==w||r.domElement.height!==h)r.setSize(w,h,false);fit.canvasFull=w===W&&h===H;}
+  function applyFit(){
+    const want=wantedSize(),now=performance.now();
+    if(want[0]!==fit.wanted[0]||want[1]!==fit.wanted[1]){fit.wanted=want;fit.since=now;}
+    const differs=fit.size[0]!==fit.wanted[0]||fit.size[1]!==fit.wanted[1];
+    if(!fit.applied||(differs&&now-fit.since>200)){
+      const [w,h]=fit.applied?fit.wanted:want;
+      ballCrop?.dispose();fitBalls?.dispose();
+      // 元の大きさのときは従来と同じ hr.rtMain をそのまま使う
+      fitBalls=w===W&&h===H?null:new THREE.WebGLRenderTarget(w,h,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter,depthBuffer:true,samples:hr.rtMain.samples});
+      const full=fitBalls??hr.rtMain;if(fitBalls)r.initRenderTarget?.(fitBalls);
+      ballCrop=createBallTargetCrop(hr,full);balls=full;api.ballCrop=ballCrop;
+      fit.size=[w,h];fit.wanted=[w,h];RW=w;RH=h;uPBK.value.set(W/w,H/h);fit.resizes++;fit.applied=true;
+    }
+    setCanvas(RW,RH);
+  }
+  function restoreFull(){if(dispFit&&!fit.canvasFull){setCanvas(W,H);fit.legacyRestores++;}}
   const legacy=hr.render,dispose=hr.dispose,readLinear=hr.readLinear;
   let enabled=true,disposed=false,probeValid=false;
   const stats={frames:0,fieldUpdates:0,fieldReuses:0,probeUpdates:0,probeReuses:0,legacyFrames:0};
@@ -158,11 +208,12 @@ vec4 prebakeC(ivec2 p){
     if(validProof)fieldInitialized.add(key);else fieldInitialized.delete(key);
   }
   const restored=()=>{fieldInitialized.clear();invalidate();};
-  const api={ballCrop,setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  const api={ballCrop,setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();if(dispFit){ballCrop?.dispose();if(fitBalls)fitBalls.dispose();}r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
   hr.prebakeRelight=api;
   hr.render=function(){
     const plate=getPlate();
-    if(!enabled||hr.viewMode!==0||U.uM3Off.value!==0||!plate?.mat.uniforms.uPanel){stats.legacyFrames++;return legacy.call(hr);}
+    if(!enabled||hr.viewMode!==0||U.uM3Off.value!==0||!plate?.mat.uniforms.uPanel){stats.legacyFrames++;restoreFull();return legacy.call(hr);}
+    if(dispFit)applyFit();
     hr.trayVisualHandle?.update();stats.frames++;
     hr._updateEnvUniforms();
     r.setScissorTest(false);
@@ -182,7 +233,7 @@ vec4 prebakeC(ivec2 p){
   };
   hr.dispose=function(){api.dispose();return dispose.call(hr);};
   // Debug C/D readbacks materialize the reference HDR path on demand.
-  hr.readLinear=function(...args){if(!enabled)return readLinear.apply(hr,args);try{legacy.call(hr);return readLinear.apply(hr,args);}finally{hr.render();}};
+  hr.readLinear=function(...args){if(!enabled)return readLinear.apply(hr,args);try{restoreFull();legacy.call(hr);return readLinear.apply(hr,args);}finally{hr.render();}};
   r.domElement.addEventListener('webglcontextrestored',restored);
   return api;
 }

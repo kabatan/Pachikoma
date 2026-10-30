@@ -24,16 +24,23 @@ export function attachInput(ctrl, { target = window, audio = null, overlayRoot =
     if (e.repeat || !(e.code in map)) return;
     e.preventDefault(); wake();
     const phase = ctrl.phase, action = map[e.code]();
+    if (action === 'start') ctrl.pressDown?.('key:' + e.code);   // 説明の長押しスキップ(tutSkip)。短い押下は dispatch 側で無視される
     const accepted = entryGuard(ctrl) ? false : ctrl.dispatch(action);
     onInput?.({ source: 'keyboard', action, accepted, phase }, ctrl.game);
   };
   target.addEventListener('keydown', onKey);
+  const onKeyUp = (e) => { if (e.code in map) ctrl.pressUp?.('key:' + e.code); };
+  const onBlur = () => ctrl.pressUp?.(null);
+  target.addEventListener('keyup', onKeyUp); target.addEventListener?.('blur', onBlur);
   const onClick = (e) => {
     const el = e.target.closest?.('[data-action]'); if (!el) return;
     const phase = ctrl.phase, action = el.dataset.action;
-    wake(); const accepted = entryGuard(ctrl) ? false : ctrl.dispatch(action);
+    wake(); if (action === 'start') ctrl.pressDown?.('pointer');
+    const accepted = entryGuard(ctrl) ? false : ctrl.dispatch(action);
     onInput?.({ source: 'pointer', action, accepted, phase }, ctrl.game);
   };
   overlayRoot?.addEventListener('pointerdown', onClick);
-  return () => { target.removeEventListener('keydown', onKey); overlayRoot?.removeEventListener('pointerdown', onClick); };
+  const onPointerUp = () => ctrl.pressUp?.('pointer');
+  overlayRoot?.addEventListener('pointerup', onPointerUp); overlayRoot?.addEventListener('pointercancel', onPointerUp);
+  return () => { target.removeEventListener('keydown', onKey); target.removeEventListener('keyup', onKeyUp); target.removeEventListener?.('blur', onBlur); overlayRoot?.removeEventListener('pointerdown', onClick); overlayRoot?.removeEventListener('pointerup', onPointerUp); overlayRoot?.removeEventListener('pointercancel', onPointerUp); };
 }

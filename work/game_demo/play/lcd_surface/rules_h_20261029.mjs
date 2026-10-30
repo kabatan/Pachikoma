@@ -273,7 +273,9 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
         const left = sel === 'left', cx = left ? 905 : 800, cy = left ? 520 : 745;
         ctx.save(); ctx.translate(cx, cy); ctx.scale(2.4, 0.5); const gg = ctx.createRadialGradient(0, 0, 0, 0, 0, 200);
         gg.addColorStop(0, 'rgba(20,0,30,.7)'); gg.addColorStop(1, 'rgba(20,0,30,0)'); ctx.fillStyle = gg; ctx.fillRect(-210, -210, 420, 420); ctx.restore();
-        telop(ctx, '追加で継続', cx, cy, left ? 64 : 92, { glow: 'rgba(255,170,40,.9)' });
+        // 時計0の継続は100円の追加が要る：客が気づくよう「100円で継続」と出す（?chainaddlabel=0 で旧の「追加で継続」）
+        const label = new URLSearchParams(globalThis.location?.search ?? '').get('chainaddlabel') === '0' ? '追加で継続' : '100円で継続';
+        telop(ctx, label, cx, cy, label.length > 5 ? (left ? 56 : 78) : (left ? 64 : 92), { glow: 'rgba(255,170,40,.9)' });
       }
     }
     ctx.restore();

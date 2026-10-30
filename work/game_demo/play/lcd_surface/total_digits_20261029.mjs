@@ -1,6 +1,7 @@
 // 継続選択(確定の窓)と時間切れ(左の札)の「TOTAL 桁」と「連×N」を、焼き込みでなく実行時に重ねる。
 // 映像側は桁を抜いた版(選択: 05_choice/r2/stills/v21_nodigit、時間切れ: timeup_total_plates_20261029 の板)。
 // 桁・連の字は確定の本番映像と同じ部品(07_confirm/v30/prod/parts)。値は決まった確定額で、桁は流さない。
+import { telop } from './hint_h_20261029.mjs';
 const PARTS = new URL('../../../effects/jp_teacher/07_confirm/v30/prod/parts/', import.meta.url);
 const NV21 = new URL('../../../effects/jp_teacher/05_choice/r2/stills/v21_nodigit/', import.meta.url);
 const ease = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
@@ -65,7 +66,7 @@ const CHOICE_MAP = {
   left: { su: 0.5237268518518519, cx: 351.5, y0: 424.77430555555554, top: 253.6, box: [80, 196, 623, 1052] },
   right: { su: 0.36747685185185186, cx: 252.5, y0: 647.7118055555555, top: 253.6, box: [62, 552, 443, 1023] },
 };
-export async function createChoiceTotal({ ctx, PX, PY, getValues, parts = null, cache = new URLSearchParams(location.search).get('choiceoverlay') !== '0', plateWarm = new URLSearchParams(location.search).get('choiceplatewarm') !== '0' }) {
+export async function createChoiceTotal({ ctx, PX, PY, getValues, getAddLabel = null, parts = null, cache = new URLSearchParams(location.search).get('choiceoverlay') !== '0', plateWarm = new URLSearchParams(location.search).get('choiceplatewarm') !== '0' }) {
   parts ??= await loadTotalParts();
   // Realize the existing Canvas2D blur/image paths before gameplay. Scratch
   // plates never enter the value cache or advance a visible animation clock.
@@ -93,6 +94,9 @@ export async function createChoiceTotal({ ctx, PX, PY, getValues, parts = null, 
   }
   const U = { x: Math.min(...Object.values(rect).map((r) => r.x)), y: Math.min(...Object.values(rect).map((r) => r.y)) };
   U.w = Math.max(...Object.values(rect).map((r) => r.x + r.w)) - U.x; U.h = Math.max(...Object.values(rect).map((r) => r.y + r.h)) - U.y;
+  // 時計0の継続の「100円で継続」(右の札の上)も同じ重ね板に描くので、板を右の札まで広げる(?chainaddlabel=0 では広げない)
+  const addLabelOn = !!getAddLabel && new URLSearchParams(location.search).get('chainaddlabel') !== '0';
+  if (addLabelOn) { const x1 = Math.max(U.x + U.w, 1100 - PX), y1 = Math.max(U.y + U.h, 900 - PY), y0 = Math.min(U.y, 440 - PY); U.w = x1 - U.x; U.h = y1 - y0; U.y = y0; }
   const saved = mk(U.w, U.h), sctx = saved.getContext('2d', { alpha: false });
   const ov = mk(U.w, U.h), octx = ov.getContext('2d');
   const overlayCanvas=mk(U.w,U.h),overlayCtx=overlayCanvas.getContext('2d');let overlayMode=false,overlayRevision=0,overlayKey=null;
@@ -126,6 +130,15 @@ export async function createChoiceTotal({ ctx, PX, PY, getValues, parts = null, 
     if(!overlayMode){sctx.drawImage(ctx.canvas, PX + U.x, PY + U.y, U.w, U.h, 0, 0, U.w, U.h); savedValid = true;}
     if (blend) { if (blend.from) layer(blend.from, tau, 1 - blend.alpha); layer(state === blend.to ? blend.to : state, tau, blend.from ? blend.alpha : Math.max(.001, blend.alpha)); }
     else layer(state, tau, 1);
+    if (overlayMode && addLabelOn && getAddLabel()) addLabel(state, blend);
+  };
+  // 「100円で継続」: 極太の明朝×虹グラデ×白銀縁＋黒縁(hint_h の telop)。字は札の絵の手前に置く。液晶が GPU 合成のときだけここで描く(2D 合成のときは rules_h が描く)
+  const addLabel = (state, blend) => {
+    const left = (blend ? blend.to : state) === 'left', cx = left ? 905 : 800, cy = left ? 520 : 745, size = left ? 56 : 78;
+    const a = blend ? (blend.from ? 1 : Math.max(.001, blend.alpha)) : 1;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(cx, cy); ctx.scale(2.4, 0.5); const gg = ctx.createRadialGradient(0, 0, 0, 0, 0, 200);
+    gg.addColorStop(0, 'rgba(20,0,30,.7)'); gg.addColorStop(1, 'rgba(20,0,30,0)'); ctx.fillStyle = gg; ctx.fillRect(-210, -210, 420, 420); ctx.restore();
+    ctx.save(); ctx.globalAlpha = a; telop(ctx, '100円で継続', cx, cy, size, { glow: 'rgba(255,170,40,.9)' }); ctx.restore();
   };
   const api={
     invalidate() { savedValid = false; },     // 映像を描き直した(下の絵は元に戻った)
@@ -140,10 +153,10 @@ export async function createChoiceTotal({ ctx, PX, PY, getValues, parts = null, 
       // Once both slams are settled the original equations no longer depend on tau.
       // During appearance, loop fade or selection fade, retain the original redraw.
       const stable=show&&tau>=Math.max(T_CH+SLAM_CHAIN.length,T_ROW2+5)&&!blend;
-      const nextKey=!show?'empty':stable?key+':'+state:null;
+      const label=addLabelOn&&getAddLabel();const nextKey=!show?(label?(blend?null:'empty:add:'+state):'empty'):stable?key+':'+state+(label?':add':''):null;
       if(cache&&nextKey!==null&&overlayKey===nextKey){savedValid=false;return {canvas:overlayCanvas,x:PX+U.x,y:PY+U.y,width:U.w,height:U.h,revision:overlayRevision};}
       const previous=ctx;overlayCtx.clearRect(0,0,U.w,U.h);overlayCtx.save();overlayCtx.translate(-PX-U.x,-PY-U.y);ctx=overlayCtx;overlayMode=true;
-      try{if(show)drawCurrent(state,blend,tau);}finally{ctx=previous;overlayMode=false;overlayCtx.restore();savedValid=false;}
+      try{if(show)drawCurrent(state,blend,tau);else if(label)addLabel(state,blend);}finally{ctx=previous;overlayMode=false;overlayCtx.restore();savedValid=false;}
       overlayKey=nextKey;
       return {canvas:overlayCanvas,x:PX+U.x,y:PY+U.y,width:U.w,height:U.h,revision:++overlayRevision};
     },

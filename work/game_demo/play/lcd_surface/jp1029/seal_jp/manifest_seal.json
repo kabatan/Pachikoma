@@ -717,5 +717,168 @@
   "7": {
    "N": 5
   }
+ },
+ "jpOpen": {
+  "jp_chance_open_d1": {
+   "file": "seal_jp/jp_open_a.mp4",
+   "frames": 60,
+   "digit": 1,
+   "lights_key": "jp_intro",
+   "lights_from": 200,
+   "cues": [],
+   "next": "jp_chance_d1"
+  },
+  "jp_chance_d1": {
+   "file": "seal_jp/jp_chance_seal.mp4",
+   "frames": 45,
+   "digit": 1,
+   "lights_key": "jp_chance_d4",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_chance_d4"
+    }
+   ],
+   "next": "jp_aim_seal_d1_in"
+  },
+  "jp_chance_open_d2": {
+   "file": "seal_jp/jp_open_a.mp4",
+   "frames": 60,
+   "digit": 2,
+   "lights_key": "jp_intro",
+   "lights_from": 200,
+   "cues": [],
+   "next": "jp_chance_d2"
+  },
+  "jp_chance_d2": {
+   "file": "seal_jp/jp_chance_seal.mp4",
+   "frames": 45,
+   "digit": 2,
+   "lights_key": "jp_chance_d4",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_chance_d4"
+    }
+   ],
+   "next": "jp_aim_seal_d2_in"
+  },
+  "jp_chance_open_d3": {
+   "file": "seal_jp/jp_open_a.mp4",
+   "frames": 60,
+   "digit": 3,
+   "lights_key": "jp_intro",
+   "lights_from": 200,
+   "cues": [],
+   "next": "jp_chance_d3"
+  },
+  "jp_chance_d3": {
+   "file": "seal_jp/jp_chance_seal.mp4",
+   "frames": 45,
+   "digit": 3,
+   "lights_key": "jp_chance_d4",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_chance_d4"
+    }
+   ],
+   "next": "jp_aim_seal_d3_in"
+  },
+  "jp_chance_open_d4": {
+   "file": "seal_jp/jp_open_a.mp4",
+   "frames": 60,
+   "digit": 4,
+   "lights_key": "jp_intro",
+   "lights_from": 200,
+   "cues": [],
+   "next": "jp_chance_d4"
+  },
+  "jp_chance_d4": {
+   "file": "seal_jp/jp_chance_seal.mp4",
+   "frames": 45,
+   "digit": 4,
+   "lights_key": "jp_chance_d4",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_chance_d4"
+    }
+   ],
+   "next": "jp_aim_seal_d4_in"
+  },
+  "jp_chance_open_d5": {
+   "file": "seal_jp/jp_open_a.mp4",
+   "frames": 60,
+   "digit": 5,
+   "lights_key": "jp_intro",
+   "lights_from": 200,
+   "cues": [],
+   "next": "jp_chance_d5"
+  },
+  "jp_chance_d5": {
+   "file": "seal_jp/jp_chance_seal.mp4",
+   "frames": 45,
+   "digit": 5,
+   "lights_key": "jp_chance_d4",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_chance_d4"
+    }
+   ],
+   "next": "jp_aim_seal_d5_in"
+  },
+  "jp_chance_open_d6": {
+   "file": "seal_jp/jp_open_a.mp4",
+   "frames": 60,
+   "digit": 6,
+   "lights_key": "jp_intro",
+   "lights_from": 200,
+   "cues": [],
+   "next": "jp_chance_d6"
+  },
+  "jp_chance_d6": {
+   "file": "seal_jp/jp_chance_seal.mp4",
+   "frames": 45,
+   "digit": 6,
+   "lights_key": "jp_chance_d4",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_chance_d4"
+    }
+   ],
+   "next": "jp_aim_seal_d6_in"
+  },
+  "jp_chance_open_d7": {
+   "file": "seal_jp/jp_open_a.mp4",
+   "frames": 60,
+   "digit": 7,
+   "lights_key": "jp_intro",
+   "lights_from": 200,
+   "cues": [],
+   "next": "jp_chance_d7"
+  },
+  "jp_chance_d7": {
+   "file": "seal_jp/jp_chance_seal.mp4",
+   "frames": 45,
+   "digit": 7,
+   "lights_key": "jp_chance_d4",
+   "cues": [
+    {
+     "f": 0,
+     "kind": "snd",
+     "id": "jp_scene_jp_chance_d4"
+    }
+   ],
+   "next": "jp_aim_seal_d7_in"
+  }
  }
 }

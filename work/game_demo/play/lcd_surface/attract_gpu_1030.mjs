@@ -1,35 +1,37 @@
 // One native video upload and panel draw per decoded frame, in the main context.
 // Texture.update is intentionally empty: the surface's decoded-frame revision
 // owns uploads, including seeks and browsers without requestVideoFrameCallback.
-export function createAttractGpu({THREE:T,renderer:r,video,width,height}) {
+export function createAttractGpu({THREE:T,renderer:r,video,width,height,overlay=null}) {   // overlay={canvas,x,y}: パネル座標(x,y)に置く小さな2D絵(premultiplied)を映像の上に重ねる(説明の長押しスキップのゲージ)
   const texture=new T.Texture(video);
   texture.isVideoTexture=true;texture.update=()=>{};
   texture.colorSpace=T.NoColorSpace;texture.minFilter=texture.magFilter=T.LinearFilter;
   texture.generateMipmaps=false;texture.flipY=true;
+  const ovTex=overlay?new T.CanvasTexture(overlay.canvas):null;
+  if(ovTex){ovTex.colorSpace=T.NoColorSpace;ovTex.minFilter=ovTex.magFilter=T.LinearFilter;ovTex.generateMipmaps=false;ovTex.premultiplyAlpha=true;ovTex.flipY=true;}
   const target=new T.WebGLRenderTarget(width,height,{depthBuffer:false,stencilBuffer:false,generateMipmaps:false,minFilter:T.LinearFilter,magFilter:T.LinearFilter});
   const geometry=new T.PlaneGeometry(2,2),camera=new T.Camera(),scene=new T.Scene();
   const material=new T.ShaderMaterial({
-    uniforms:{video:{value:texture},panel:{value:new T.Vector2(width,height)}},
+    uniforms:{video:{value:texture},panel:{value:new T.Vector2(width,height)},ov:{value:ovTex},ovRect:{value:new T.Vector4(overlay?.x??0,overlay?.y??0,overlay?.canvas.width??1,overlay?.canvas.height??1)}},
     vertexShader:'varying vec2 q;void main(){q=position.xy*.5+.5;gl_Position=vec4(position.xy,0.,1.);}',
-    fragmentShader:'varying vec2 q;uniform sampler2D video;uniform vec2 panel;void main(){vec2 p=vec2(q.x,1.-q.y)*panel;vec2 s=(p-vec2(34.,28.))/vec2(1152.,1268.);vec3 c=vec3(0.);if(all(greaterThanEqual(s,vec2(0.)))&&all(lessThan(s,vec2(1.))))c=texture2D(video,vec2(s.x,1.-s.y)).rgb;gl_FragColor=vec4(c,1.);}',
+    fragmentShader:'varying vec2 q;uniform sampler2D video;uniform vec2 panel;uniform sampler2D ov;uniform vec4 ovRect;void main(){vec2 p=vec2(q.x,1.-q.y)*panel;vec2 s=(p-vec2(34.,28.))/vec2(1152.,1268.);vec3 c=vec3(0.);if(all(greaterThanEqual(s,vec2(0.)))&&all(lessThan(s,vec2(1.))))c=texture2D(video,vec2(s.x,1.-s.y)).rgb;'+(overlay?'vec2 o=(p-ovRect.xy)/ovRect.zw;if(all(greaterThanEqual(o,vec2(0.)))&&all(lessThan(o,vec2(1.)))){vec4 a=texture2D(ov,vec2(o.x,1.-o.y));c=c*(1.-a.a)+a.rgb;}':'')+'gl_FragColor=vec4(c,1.);}',
     depthTest:false,depthWrite:false,blending:T.NoBlending,toneMapped:false,dithering:false
   });
   const mesh=new T.Mesh(geometry,material);mesh.frustumCulled=false;scene.add(mesh);
-  let revision=-1,disposed=false;
+  let revision=-1,ovRevision=-1,disposed=false;
   const stats={uploads:0,draws:0,reuses:0};
   return {
-    compose(nextRevision){
+    compose(nextRevision,ovRev=0){
       if(disposed||video.readyState<2)return null;
-      if(nextRevision===revision){stats.reuses++;return target.texture;}
+      if(nextRevision===revision&&ovRev===ovRevision){stats.reuses++;return target.texture;}
       if(r.getContext().isContextLost())return null;
       const old={target:r.getRenderTarget(),face:r.getActiveCubeFace(),level:r.getActiveMipmapLevel(),viewport:r.getViewport(new T.Vector4()),scissor:r.getScissor(new T.Vector4()),test:r.getScissorTest(),auto:r.autoClear};
       try {
-        texture.needsUpdate=true;r.autoClear=false;r.setRenderTarget(target);r.setScissorTest(false);r.setViewport(0,0,width,height);r.render(scene,camera);
-        revision=nextRevision;stats.uploads++;stats.draws++;return target.texture;
+        texture.needsUpdate=true;if(ovTex&&ovRev!==ovRevision)ovTex.needsUpdate=true;r.autoClear=false;r.setRenderTarget(target);r.setScissorTest(false);r.setViewport(0,0,width,height);r.render(scene,camera);
+        revision=nextRevision;ovRevision=ovRev;stats.uploads++;stats.draws++;return target.texture;
       } finally {r.setRenderTarget(old.target,old.face,old.level);r.setViewport(old.viewport);r.setScissor(old.scissor);r.setScissorTest(old.test);r.autoClear=old.auto;}
     },
     diagnostics:()=>({...stats,revision,targetBytes:width*height*4,disposed}),
-    dispose(){if(disposed)return;disposed=true;texture.dispose();target.dispose();material.dispose();geometry.dispose();}
+    dispose(){if(disposed)return;disposed=true;texture.dispose();ovTex?.dispose();target.dispose();material.dispose();geometry.dispose();}
   };
 }
 

@@ -160,6 +160,7 @@
       }
       if (id === 'challenge_declare') this._later(1.4, () => { if (!this._ended() && d.state.declared && !d.isActive('challenge_flight')) this.notify('challenge_flight', { jp: d.state.n >= 6, armed: true }); }, 'game');
       if (id === 'challenge_declare' && d.state.n >= 6) params = Object.assign({}, params, { jp: true });   // 6灯の勝負は『JPチャンス』
+      if ((id === 'timeup_call' || id === 'offer_tick') && !d.events.has(id)) return -1;   // 音声・液晶だけの通知(電飾の定義なし)。警告を出さず何もしない
       const uid = d.start(id, Object.assign({ once: true }, params));
       this._claim(id, uid);
       return uid;

@@ -22,6 +22,35 @@ export class MedalController {
     this.droppedInputs = [];   // R-04: 勝負ボタンの先押しを0.3秒だけ1回保持。捨てた押しは記録
     this.inputLog = [];
     this.howtoSeconds = 0; this.howtoMinDwell = 0.5; this.howtoPanels = 5; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
+    // 説明(howto)の長押しスキップ(10/30。?tutskip=0 で従来=押すと0.5秒後から飛ばせる)。play.mjs が液晶のゲージを付けたときだけ true にする。
+    // 短い押下(連打)では飛ばさず、押している間 holdSeconds 満ちたら飛ばす。説明が始まって graceSeconds 以内の押下(開始ボタンの余韻の連打)は長押しの数に入れない。
+    this.tutSkipEnabled = false; this.tutSkipHoldSeconds = 1.0; this.tutSkipGraceSeconds = 0.8;
+    this.tutSkip = { holding: false, holdT: 0, src: null, level: 0, tap: 0, flash: 0, completing: 0, taps: 0 };
+  }
+  /** 説明中の長押しスキップが効いているか(入力側が押下/離しを渡すかの判定に使う)。 */
+  get tutSkipActive() { return this.tutSkipEnabled && !!this.howto && this.game.phase === MedalPhase.Attract; }
+  /** 液晶の表示用。active=ゲージを出す、level=リング(0..1)、tap=押した瞬間の光、flash=満ちた閃光、done=SKIP確定中。 */
+  tutSkipView() { const u = this.tutSkip, t = this.howto?.t ?? 0; return { active: this.tutSkipActive, t, level: u.level, holding: u.holding, tap: u.tap, flash: u.flash, done: u.completing > 0 }; }
+  /** 主ボタンの押下(キー/ボタン/ポインタ共通)。長押しの開始。説明の外・無効のときは何もしない。 */
+  pressDown(src = 'key') {
+    if (!this.tutSkipActive) return false;
+    const u = this.tutSkip; u.tap = 1; u.taps++;
+    if (u.completing > 0 || u.holding) return true;
+    u.level = Math.max(u.level, 0.18);   // 押した合図：リングが少し満ちて、離すとすぐ戻る(連打でも「長押しだ」と気づける)
+    if (this.howto.t < this.tutSkipGraceSeconds) return true;   // 余韻の連打は反応だけ見せて数えない
+    u.holding = true; u.holdT = 0; u.src = src; return true;
+  }
+  pressUp(src = 'key') { const u = this.tutSkip; if (u.holding && (u.src === src || src == null)) { u.holding = false; u.holdT = 0; u.src = null; } }
+  _tutSkipTick(dt) {
+    const u = this.tutSkip;
+    if (!this.howto || this.game.phase !== MedalPhase.Attract) { if (u.holding || u.level || u.completing || u.flash || u.tap) this.tutSkip = { holding: false, holdT: 0, src: null, level: 0, tap: 0, flash: 0, completing: 0, taps: u.taps }; return; }
+    u.tap = Math.max(0, u.tap - dt * 5); u.flash = Math.max(0, u.flash - dt * 3);
+    if (u.completing > 0) { u.completing -= dt; u.level = 1; if (u.completing <= 0) { u.completing = 0; this._startNow(); } return; }
+    if (u.holding) {
+      u.holdT += dt; const p = Math.min(1, u.holdT / this.tutSkipHoldSeconds);
+      u.level = Math.max(u.level, 0.18 + 0.82 * p);
+      if (p >= 1) { u.holding = false; u.completing = 0.3; u.flash = 1; u.level = 1; for (const fn of this.listeners) fn('tutSkip', this); }
+    } else u.level = Math.max(0, u.level - dt * 1.3);
   }
   onAction(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   get phase() { return this.game.phase; }
@@ -53,6 +82,7 @@ export class MedalController {
     this.frame++;
     const g = this.game;
     if (this.howto) { this.howto.t += dt; if (this.howto.t >= this.howtoSeconds) this._startNow(); }
+    if (this.tutSkipEnabled) this._tutSkipTick(dt);
     if (!this.freezeRules) g.advance(dt);
     if (!g.rules.ContinuousFire && g.rules.R2Enabled && g.challengeIntent && this.fireBuffer) {
       this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'challenge-clears-buffer' });
@@ -98,6 +128,7 @@ export class MedalController {
     switch (action) {
       case 'start':
         if (g.phase !== MedalPhase.Attract) break;
+        if (this.howto && this.tutSkipEnabled) { if (!this.tutSkip.holding) { this.tutSkip.tap = 1; this.tutSkip.level = Math.max(this.tutSkip.level, 0.18); } break; }   // 長押しスキップ有効：短い押下では飛ばさない
         if (this.howto) {   // 説明は howtoPanels コマ(等分)。押すと次のコマへ、最後のコマで押すと開始。各コマ最低 howtoMinDwell 秒(0.5秒)は押しても進まない(タイトルからの二度押しや連打で一気に飛ばさない)
           const h = this.howto, per = this.howtoSeconds / this.howtoPanels, dwell = Math.min(this.howtoMinDwell, per * 0.6);
           const k = Math.min(this.howtoPanels - 1, Math.floor(h.t / per));

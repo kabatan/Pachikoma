@@ -182,6 +182,7 @@ export async function installJpAudioV5(engine, opts = {}) {
   // ---- 場面ごとの音(場面の開始 t からのフレーム数。出来事の表は jp_events_v5.json) ----
   function fireScene(key, t, extra = {}) {
     for (const e of BYSCENE[key] ?? []) {
+      if (key === 'jp_chance_d*' && globalThis.__jpChanceTrim && e.off >= globalThis.__jpChanceTrim) continue;   // 10/30 JACKPOT CHANCE が短くなった（〇を狙えが無い）ので、その分の音は鳴らさない
       const tt = e.ref === 'stop' ? frT(extra.tStop, e.off) : frT(t, e.off);
       runDo(tt, e.do, key === 'jp_chance_d*' && st.done.has('chancePre') ? { riser: 0 } : {});
     }
