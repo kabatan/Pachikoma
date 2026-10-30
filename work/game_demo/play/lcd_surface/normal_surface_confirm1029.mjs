@@ -102,6 +102,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const lightFrames = man.lights ? await (await fetch(new URL(man.lights, base))).json() : {};
   const font = new FontFace('Dela1026', `url(${new URL('../../../effects/lcd/fonts/DelaGothicOne-Regular.ttf', import.meta.url).href})`);
   await font.load(); document.fonts.add(font);
+  const JP_HOLD_GPU = new URLSearchParams(globalThis.location?.search ?? '').get('jpholdgpu') !== '0';
+  const digitsNow=()=>{let hit=false;const spy=new Proxy(function(){},{get(){hit=true;return spy;},apply(){hit=true;return spy;},set(){hit=true;return true;}});try{jp.drawDigits(spy);}catch{hit=true;}return hit;};   // 数字が出る場面か(何かを描こうとしたか)だけを見る
   const TIMEUP_COVER = new URLSearchParams(globalThis.location?.search ?? '').get('timeupcover') !== '0'; let coverKey = null;
   const attractPause = new URLSearchParams(globalThis.location?.search ?? '').get('attractpause') !== '0';
   let clock = 0, manual = false, shotOn = false, jpOwns = false, lastEvent = null;
@@ -299,6 +301,9 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
             const image=jp.plainVideoSnapshot?.(v);
             if(publishVideo(image,jp.where(),dt)){finishFrame(t0);return;}
           }
+          // 10/31 CPU軽量化：JPの次の映像がまだ読めていない(readyState<2)間、旧経路は直前のGPUの絵を CPU の canvas へ読み戻して(24〜48ms)そのまま出し直していた。
+          // 数字・フラッシュ・減光・遷移が何も重ならない時は出す絵が直前と同じなので、GPUの絵をそのまま出し続ける(画は同じ)。?jpholdgpu=0 で従来
+          if(JP_HOLD_GPU&&gpuFrame&&!resultBackend&&!v?.gpuPalaceImage&&v?.readyState<2&&fadeLeft<=0&&!jp.transition&&!jp.layered&&!jp.where()?.dim&&!(jp.where()?.flash>0)&&!digitsNow()){stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;}
           materializeGpu('jp-video-legacy');
           if(resultBackend)v=resultBackend.rawCanvas('legacy-result-owner-frame');
           if(v?.gpuPalaceImage)v=v.gpuPalaceImage.rawCanvas('legacy-owner-frame');
