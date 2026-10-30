@@ -92,6 +92,13 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     H2.meta = await (await fetch(new URL('meta.json', A2))).json();
   } catch (e) { console.warn('[jp-hud] assets', e); return lcd; }
   const model = lcd.jp.model;
+  // 10/31 制限時間・「あと◯個」の字：北斗無双 第5章（4A）の作りで焼いた画像（hud3_timer/src/bake_t2.py）。?jptimer=old で旧版の字へ
+  let NEWT = qs.get('jptimer') !== 'old'; const T2 = {};
+  if (NEWT) try {
+    const names = ['a', 'to', 'ko', 'colon_n', 'colon_w']; for (let d = 0; d < 10; d++) names.push(`c${d}`, `d${d}_n`, `d${d}_w`);
+    await Promise.all(names.map(async (n) => { T2[n] = await img(new URL(`t2_${n}.png`, A2).href); }));
+    T2.meta = await (await fetch(new URL('t2_meta.json', A2))).json(); Object.assign(TX, { y: TX.y - 40, h: 330 });   // 字が大きく傾くので canvas を縦に広げる（下端の位置は変えない）
+  } catch (e) { console.warn('[jp-hud] timer2 assets', e); NEWT = false; }
   let CD = null;   // 残り3・2・1秒の巨大な数字（ember 面の立体数字・Blender SCALE=8）
   try { const d = new URL('count_digits/', A), meta = await (await fetch(new URL('glyphs.json', d))).json(); CD = { meta, imgs: {} }; for (const k of ['1', '2', '3']) CD.imgs[k] = await img(new URL(meta.glyphs[k].file, d).href); } catch (e) { CD = null; console.warn('[jp-hud] countdown assets', e); }
   const S = { on: false, t: 0, show: 0, enterAt: -9, exitAt: -9, clock: 0, lastCount: 0, countChange: null, hitAt: -9, missAt: -9, lvl: 0, beatT: 0, beatIdx: -1, dubDone: true, cue: false, fx: [], shownKey: null, events: [] };
@@ -124,8 +131,37 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
   const timeText = (st) => { const tl = Math.max(0, st.timeLeft), ss = Math.min(99, Math.floor(tl)), cc = Math.floor((tl - Math.floor(tl)) * 100) % 100; return String(ss).padStart(2, '0') + ':' + String(cc).padStart(2, '0'); };
   const dg = (c, im, x, y, sc, al = 1, shadow = 10) => { const w = im.width * sc, h = im.height * sc; c.save(); c.globalAlpha = al; c.shadowColor = 'rgba(0,0,0,.55)'; c.shadowBlur = shadow; c.shadowOffsetY = 4; c.drawImage(im, x - w / 2, y - h / 2, w, h); c.restore(); };
   const DS = 0.80, ADV = 0.80;
-  const drawText = (st, lvl, heartV, pw) => {
+  const drawTextNew = (st, lvl, heartV, pw) => {   // 4A「5個チャージしろ 05:90」：右へ約5.5°上がる並び、数字は白地＋黄緑＋赤の染み／黒縁＋右下の押し出し、ラベルと個数は暗い赤の面
     tx.clearRect(0, 0, TX.w, TX.h);
+    const cy = TX.h * 0.52, k = 1 + (lvl >= 2 ? (0.06 + 0.06 * (lvl - 2)) * heartV * pw : lvl === 1 ? 0.012 * Math.sin(S.clock * TAU * 0.9) : 0);
+    tx.save(); tx.translate(TX.w / 2, cy); tx.rotate(-0.096);
+    { tx.save(); tx.scale(1, 0.3); const hg = tx.createRadialGradient(0, 0, 0, 0, 0, 600); hg.addColorStop(0, 'rgba(14,0,22,.6)'); hg.addColorStop(0.6, 'rgba(14,0,22,.36)'); hg.addColorStop(1, 'rgba(14,0,22,0)'); tx.fillStyle = hg; tx.fillRect(-600, -600, 1200, 1200); tx.restore(); }   // 字の後ろの柔らかい暗がり（縁なし）
+    const m = T2.meta, v = lvl >= 2 ? 'w' : 'n', DS = 1.03, FOX = (m.cw - m.dx) / 2 + 1, FOY = 12 + m.hf / 2;   // 面の中心（画像内）
+    const put = (im, x, y, sc, ox, oy, al = 1) => { tx.globalAlpha = al; tx.drawImage(im, x - ox * sc, y - oy * sc, im.width * sc, im.height * sc); tx.globalAlpha = 1; };
+    // 右：SS:cc（右端で揃える）
+    { const adv = 118 * DS, cwid = 72 * DS, tot = 4 * adv + cwid + 6; let x = TX.w / 2 - 46 - tot;
+      const txt = timeText(st);
+      for (let i = 0, di = 0; i < txt.length; i++) {
+        const ch = txt[i];
+        if (ch === ':') { const sc = DS * k; put(T2['colon_' + v], x + cwid / 2, 0, sc, (m.colon[0] - m.dx) / 2, FOY); x += cwid; }
+        else { const sc = DS * k * (1 + 0.035 * (di - 1.5)); put(T2['d' + ch + '_' + v], x + adv / 2, 0, sc, FOX, FOY); x += adv; di++; }
+      } }
+    // 左：あと ◯ 個
+    { const need = Math.max(0, st.threshold - st.count), cc = S.countChange, a = cc ? S.clock - cc.at : 9, LS = 0.74, CS = 0.86, ly = 32;
+      let lx = -TX.w / 2 + 34; const ctr = (im, w, y) => put(im, lx + w / 2, y, LS, im.width / 2, im.height / 2);
+      for (const n of ['a', 'to']) { const im = T2[n], w = im.width * LS; put(im, lx + w / 2, ly, LS, im.width / 2, im.height / 2); lx += w * 0.9; }
+      lx += 6; const nw = 118 * CS, ox = (m.cw - m.dx) / 2, oy = FOY, cyn = ly - 6;
+      if (cc && a < 0.35) {
+        const old = T2['c' + cc.from], f = clamp(a / 0.12); if (old && f < 1) put(old, lx + nw / 2, cyn + f * 50, CS * 1.08, ox, oy, 1 - f);
+        const pop = a < 0.1 ? 2.1 - 1.1 * (a / 0.1) ** 2 : 1 + 0.16 * Math.exp(-(a - 0.1) * 12) * Math.cos((a - 0.1) * 34);
+        put(T2['c' + need], lx + nw / 2, cyn, CS * 1.08 * pop, ox, oy, clamp(a / 0.05));
+      } else put(T2['c' + need], lx + nw / 2, cyn, CS * 1.08 * (1 + (lvl >= 2 ? 0.07 * pw * heartV : 0)), ox, oy);
+      lx += nw + 6; { const im = T2.ko, w = im.width * LS; put(im, lx + w / 2, ly, LS, im.width / 2, im.height / 2); } }
+    tx.restore(); T.txt.needsUpdate = true;
+  };
+  const drawTextOld = (st, lvl, heartV, pw) => {
+    tx.clearRect(0, 0, TX.w, TX.h);
+    { tx.save(); tx.translate(TX.w / 2, TX.h * 0.52); tx.scale(1, 0.34); const hg = tx.createRadialGradient(0, 0, 0, 0, 0, 600); hg.addColorStop(0, 'rgba(14,0,22,.66)'); hg.addColorStop(0.6, 'rgba(14,0,22,.4)'); hg.addColorStop(1, 'rgba(14,0,22,0)'); tx.fillStyle = hg; tx.fillRect(-600, -600, 1200, 1200); tx.restore(); }   // 字の後ろの柔らかい暗がり（縁なし）。白飛びでも読める
     const v = lvl >= 2 ? 'w' : 'n', cy = TX.h * 0.52, k = 1 + (lvl >= 2 ? (0.06 + 0.06 * (lvl - 2)) * heartV * pw : lvl === 1 ? 0.012 * Math.sin(S.clock * TAU * 0.9) : 0);
     // 右：SS:cc（右端で揃える）
     const dw = H2.d0_n.width * DS * ADV, cw = H2.lab_colon.width * DS * 0.62, tot = 4 * dw + cw; let x = TX.w - 46 - tot * k;
@@ -148,10 +184,12 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     dg(tx, H2.lab_ko, lx + H2.lab_ko.width * LS / 2, cy + 34, LS);
     T.txt.needsUpdate = true;
   };
+  const drawText = (st, lvl, heartV, pw) => (NEWT ? drawTextNew(st, lvl, heartV, pw) : drawTextOld(st, lvl, heartV, pw));
   const meterLayout = (N) => { const s = clamp(1040 / ((N - 1) * 184 + 260), 0.7, 1.3), adv = 184 * s, w = (N - 1) * adv + 260 * s, x0 = (MT.w - w) / 2; return { s, adv, w, x0, cy: MT.h / 2 + 4 }; };
   const chevC = (i, N) => { const L = meterLayout(N); return { x: MT.x + L.x0 + i * L.adv + 130 * L.s, y: MT.y + L.cy }; };
   const drawMeter = (st, lvl, heartV, pw) => {
     mt.clearRect(0, 0, MT.w, MT.h);
+    { mt.save(); mt.translate(MT.w / 2, MT.h * 0.52); mt.scale(1, 0.4); const hg = mt.createRadialGradient(0, 0, 0, 0, 0, 600); hg.addColorStop(0, 'rgba(14,0,22,.6)'); hg.addColorStop(0.65, 'rgba(14,0,22,.34)'); hg.addColorStop(1, 'rgba(14,0,22,0)'); mt.fillStyle = hg; mt.fillRect(-600, -600, 1200, 1200); mt.restore(); }
     const N = clamp(st.threshold | 0, 1, 6), fill = clamp(st.count | 0, 0, N), L = meterLayout(N), h2 = 0.5 * H2.chev_on.width / H2.meta.chev[0];   // 画像は 2x
     const cvw = H2.chev_on.width * 0.5 * L.s, cvh = H2.chev_on.height * 0.5 * L.s, ck = S.clock;
     // 上の鋼管
@@ -180,9 +218,11 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
   const plateXY = (lx, ly) => ({ x: PIVOT.x + (lx - PIVOT.x) * BASE.sc + BASE.dx, y: PIVOT.y + (ly - PIVOT.y) * BASE.sc });
   const burst = () => {
     const N = clamp((S.st?.threshold | 0) || 4, 1, 6), o = chevC(clamp((S.st?.count | 0) - 1, 0, N - 1), N), top = { x: o.x, y: o.y - 20 };
-    S.fx.push({ k: 'F', at: S.clock, x: top.x, y: top.y + 30, size: 760, life: 0.8, al: 0.9 });   // 実写の炎が札の上へ噴く
+    S.fx.push({ k: 'F', at: S.clock, x: top.x, y: top.y + 60, size: 1300, life: 0.9, al: 1.0 });   // 実写の炎が画面いっぱいに噴き上がる（北斗無双の入賞の手本）
+    S.fx.push({ k: 'F', at: S.clock + 0.06, x: W * 0.22, y: top.y + 90, size: 1000, life: 0.85, al: 0.85 }); S.fx.push({ k: 'F', at: S.clock + 0.1, x: W * 0.78, y: top.y + 90, size: 1000, life: 0.85, al: 0.85 });
+    S.fx.push({ k: 'F', at: S.clock + 0.03, x: W / 2, y: H * 0.78, size: 1500, life: 1.0, al: 0.75 });
     for (let i = 0; i < 46; i++) { const a = R() * TAU, v = 240 + R() * 620; S.fx.push({ k: 's', at: S.clock, x: o.x, y: o.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, life: .45 + R() * .5, r: 7 + R() * 12 }); }
-    S.fx.push({ k: 'b', at: S.clock, x: o.x, y: o.y, life: .5, r: 190 });
+    S.fx.push({ k: 'b', at: S.clock, x: o.x, y: o.y, life: .4, r: 150 });
   };
   const tickFx = (n) => {   // 3→2→1：叩きつけの光と炎
     S.tickAt = S.clock;
@@ -291,6 +331,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
         out.push({ tex: T.beam, w: 900, h: 900, ax: 450, ay: 450, x: PX + W - 20, y: PY + 1010, rot: rot + Math.PI * 0.9, sc: 1.9, alpha: al, add: true });
       }
     }
+    if (S.fx.length || (S.on && (S.st?.count | 0) > 0)) out.push({ tex: T.fx, w: fC.width, h: fC.height, ax: 0, ay: 0, x: PX + FX.x, y: PY + FX.y, rot: 0, sc: 1 / FX.k, alpha: 1, add: true });   // 炎・火花は字とメーターの下（白飛びや炎で字が読めなくならないように）
     // 札はやめた：上段（あと◯個・SS:cc）と下段（矢印メーター）。下から競り上がり、入賞で弾み、外れで揺れる
     { const ty = -grp.dy, ta = ck - (S.tickAt ?? -9), sh = ta < 0.5 ? Math.exp(-ta * 9) : 0;
       out.push({ tex: T.txt, w: TX.w, h: TX.h, ax: 0, ay: 0, x: PX + TX.x + grp.dx + Math.sin(ck * 61) * 7 * sh, y: PY + TX.y + ty * 0.8 + Math.cos(ck * 53) * 6 * sh, rot: 0, sc: 1, alpha: vis });
@@ -303,7 +344,6 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
         out.push({ tex: tx, w: g.w, h: g.h, ax: g.w / 2, ay: g.h / 2, x: PX + W / 2 + Math.sin(u * 90) * 10 * Math.exp(-u * 12), y: PY + 700, rot: 0, sc: hh * slam, alpha: Math.min(1, u / 0.02), add: false });
       }
     }
-    if (S.fx.length || (S.on && (S.st?.count | 0) > 0)) out.push({ tex: T.fx, w: fC.width, h: fC.height, ax: 0, ay: 0, x: PX + FX.x, y: PY + FX.y, rot: 0, sc: 1 / FX.k, alpha: 1, add: true });
     return out;
   };
   (lcd.splitWarmers ??= []).push({ name: 'jphud', done: false, step(r) { for (const t of Object.values(T)) { try { r.initTexture(t); } catch { } } return (this.done = true); } });
