@@ -153,12 +153,12 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     ctx.fillStyle = pg; ctx.strokeStyle = 'rgba(255,205,90,.9)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.roundRect(-500, HELP ? -100 : -88, 1000, HELP ? 202 : 176, 30); ctx.fill(); ctx.stroke();
     if (HELP) {   // 初見向け: 何を待っているか／待つと何が起きるか／やめたいときはどうするか
       helpText(ctx, '時間も玉も止まっています', 0, -38, 46, { fill: WHITE, silver: false });
-      helpText(ctx, `受け取り後に +${r.ExtraSeconds ?? 20}秒  +${r.ExtraLoanBalls ?? 10}玉 で再開！`, 0, 20, 46, { fill: GOLD, silver: false });
+      helpText(ctx, `受け取り後に +${r.ExtraSeconds ?? 20}秒${(g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10) > 0 ? `  +${g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10}玉` : ''} で再開！`, 0, 20, 46, { fill: GOLD, silver: false });
       const l = g().lampCount ?? 0;
       richLine(ctx, [[l > 0 ? `${l}灯のまま 続きから。 ` : 'いまの玉のまま 続きから。 ', HWHITE], ['やめるなら 左ボタン', HGOLD]], 0, 76, 36);
     } else {
     textPath(ctx, '時間も玉も止まっています', 0, -14, 54, { fill: WHITE, silver: false });
-    textPath(ctx, `受け取り後に +${r.ExtraSeconds ?? 20}秒  +${r.ExtraLoanBalls ?? 10}玉 で再開`, 0, 62, 54, { fill: GOLD, silver: false });
+    textPath(ctx, `受け取り後に +${r.ExtraSeconds ?? 20}秒${(g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10) > 0 ? `  +${g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10}玉` : ''} で再開`, 0, 62, 54, { fill: GOLD, silver: false });
     }
     ctx.restore();
     ctx.restore();
@@ -196,12 +196,12 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     x.fillStyle = pg; x.strokeStyle = 'rgba(255,205,90,.9)'; x.lineWidth = 5; x.beginPath(); x.roundRect(-500, HELP ? -100 : -88, 1000, HELP ? 202 : 176, 30); x.fill(); x.stroke();
     if (HELP) {
       helpText(x, '時間も玉も止まっています', 0, -38, 46, { fill: WHITE, silver: false });
-      helpText(x, `受け取り後に +${r.ExtraSeconds ?? 20}秒  +${r.ExtraLoanBalls ?? 10}玉 で再開！`, 0, 20, 46, { fill: GOLD, silver: false });
+      helpText(x, `受け取り後に +${r.ExtraSeconds ?? 20}秒${(g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10) > 0 ? `  +${g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10}玉` : ''} で再開！`, 0, 20, 46, { fill: GOLD, silver: false });
       const l = g().lampCount ?? 0;
       richLine(x, [[l > 0 ? `${l}灯のまま 続きから。 ` : 'いまの玉のまま 続きから。 ', HWHITE], ['やめるなら 左ボタン', HGOLD]], 0, 76, 36);
     } else {
       textPath(x, '時間も玉も止まっています', 0, -14, 54, { fill: WHITE, silver: false });
-      textPath(x, `受け取り後に +${r.ExtraSeconds ?? 20}秒  +${r.ExtraLoanBalls ?? 10}玉 で再開`, 0, 62, 54, { fill: GOLD, silver: false });
+      textPath(x, `受け取り後に +${r.ExtraSeconds ?? 20}秒${(g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10) > 0 ? `  +${g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10}玉` : ''} で再開`, 0, 62, 54, { fill: GOLD, silver: false });
     }
     x.restore();
   };
@@ -227,7 +227,7 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     () => { if (upa.naturalWidth) { const { uw, uh } = upaScale(), c = spCanvas(uw, uh), x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(upa, 0, 0, uw, uh); spTex('upa', c); }
       sp.cv.BAND = spCanvas(RECT.BAND[2], RECT.BAND[3]); spTex('BAND', sp.cv.BAND); sp.cv.ARR = spCanvas(RECT.ARR[2], RECT.ARR[3]); spTex('ARR', sp.cv.ARR); sp.built = true; },
   ];
-  const panelKey = () => { const r = g().rules ?? {}; return `${g().lampCount ?? 0}|${r.ExtraSeconds}|${r.ExtraLoanBalls}`; };
+  const panelKey = () => { const r = g().rules ?? {}; return `${g().lampCount ?? 0}|${r.ExtraSeconds}|${g().extraLoanBallsNow ?? r.ExtraLoanBalls}`; };
   const L = (key, w, h, o) => ({ tex: sp.tex[key], w, h, ax: 0, ay: 0, rot: 0, sc: 1, alpha: 1, add: false, ...o });
   function splitStep(now, t) {
     if (!sp.built) { if (sp.stage < stages.length) stages[sp.stage++](); sp.layers = null; return; }

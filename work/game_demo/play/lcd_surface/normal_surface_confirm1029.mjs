@@ -169,7 +169,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       case 'chain_continue': card('もう一度！', ['光っていない穴へ！', '左のボタンで 玉をうつ'], '#ffb4dc', `${p.lamps ?? 1}灯`); break;
       case 'chain_stop': card('確定！', ['積み増しを獲得！'], '#fff2a0', `${p.banked ?? p.total ?? 0}玉`); break;
       case 'fail': card('また挑戦しよう！', [p.chain ? `最初の ${p.base ?? 0}玉 は残ります` : 'ランプを集めて もう一度！'], '#c5d9ff', p.chainLost > 0 ? `積み増し −${p.chainLost}玉` : null); break;
-      case 'timeup': card('時間です', [`追加で ＋${p.seconds ?? s.rules?.extraSeconds ?? ''}秒・${p.balls ?? s.rules?.extraLoanBalls ?? ''}玉`, '追加しないと 計数へ進みます'], '#ffccac'); break;
+      case 'timeup': card('時間です', [`追加で ＋${p.seconds ?? s.rules?.extraSeconds ?? ''}秒${(p.balls ?? s.rules?.extraLoanBalls ?? 1) > 0 ? `・${p.balls ?? s.rules?.extraLoanBalls ?? ''}玉` : ''}`, '追加しないと 計数へ進みます'], '#ffccac'); break;
       case 'add100': card('まだまだ！', ['続きを楽しもう！'], '#ffdb92', `＋${p.seconds ?? s.rules?.extraSeconds ?? ''}秒`); break;
       case 'finish_count': card('計数中', [p.basis === 'wallet' ? '持ち玉の数で賞が決まります' : `JPの合計 ${p.score ?? s.score ?? 0}玉`], '#b8e8ff', `${p.total ?? p.balls ?? s.balls}玉`); break;
       case 'result': card(s.prize || ['参加賞','C賞','B賞','A賞','S賞'][p.rankIndex ?? p.rank ?? 0], ['ありがとうございました！'], '#ffe198', p.basis === 'wallet' ? `持ち玉 ${p.balls ?? p.score ?? s.score ?? 0}玉` : `JP合計 ${p.score ?? s.score ?? 0}玉`); break;

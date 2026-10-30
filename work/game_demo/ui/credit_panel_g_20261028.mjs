@@ -17,7 +17,7 @@ export function attachCreditPanel({parent,ctrl,overlay,onInput}){
  function render(){
   const g=ctrl.game,waiting=g.phase==='StaffWait';put(panel,'hidden',(!waiting&&g.phase!=='Continue')||panel.dataset.lcd==='1');   // 液晶の追加画面が出る経路では箱を出さない
   put(title,'textContent',waiting?'チケット一枚をスタッフに渡してください':`つづけますか？ あと${Math.ceil(g.offerLeft)}秒`);
-  put(detail,'textContent',waiting?'スタッフの確認後に再開します（スタッフ：左右ボタン同時に長押し／Sキー）':`チケット一枚で再開できます（＋${g.rules.ExtraSeconds}秒・＋${g.rules.ExtraLoanBalls}玉。今の続きから遊べます）。`);
+  put(detail,'textContent',waiting?'スタッフの確認後に再開します（スタッフ：左右ボタン同時に長押し／Sキー）':`チケット一枚で再開できます（＋${g.rules.ExtraSeconds}秒${(g.extraLoanBallsNow ?? g.rules.ExtraLoanBalls) > 0 ? `・＋${g.extraLoanBallsNow ?? g.rules.ExtraLoanBalls}玉` : ''}。今の続きから遊べます）。`);
   put(right,'hidden',waiting);put(left,'textContent',waiting?'左：取り消して終了':'左：終了する');
  }
  const original=overlay.render;overlay.render=function(...args){const result=original.apply(this,args);render();return result;};render();
