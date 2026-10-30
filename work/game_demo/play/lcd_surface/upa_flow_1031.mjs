@@ -162,6 +162,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
     if (FIRST_CHOICE) setRules();
     if (F.cur) { F.cur.t += dt; }
     if (F.cur && !F.cur.edge) { const k = 1 - Math.exp(-dt * 5); if (F.ux === null) { const p0 = F.cur.holes ? null : 1; F.ux = p0 ? F.cur.upaX : 124; F.uy = p0 ? F.cur.upaY : GROUND; } F.ux += (F.cur.upaX - F.ux) * k; F.uy += (F.cur.upaY - F.uy) * k; } else F.ux = F.uy = null;
+    if (F.pendTime && (g.meterStatus || g.rouletteStatus || lcd.jp?.model?.active)) F.pendTime = false;   // 開始の案内はJPに入ったら出さない（JP明けに「あと◯個」の行へ被る）
     if (F.pendTime && !F.cur && !g.meterStatus && !liveVisible()) { F.pendTime = false; show('time_start', true); }
     // ---- 新しいメーター ----
     if (m && mid !== F.mid) {
