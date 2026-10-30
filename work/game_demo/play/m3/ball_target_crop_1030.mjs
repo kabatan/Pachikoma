@@ -7,7 +7,10 @@ export function createBallTargetCrop(hr, full) {
   let enabled=new URLSearchParams(globalThis.location?.search??'').get('ballcrop')!=='0';
   // 10/30 表示実寸描画：球バッファが小さいときは同じ割合で（1440×2560 では従来の 768・1856 のまま）
   const targets=[768,1856].map(h=>Math.ceil(h*full.height/2560)).map(height=>{
-    const t=full.clone();t.setSize(full.width,height);hr.renderer.initRenderTarget(t);return t;
+    const t=full.clone();t.setSize(full.width,height);
+    // 解決後の深度は読まないので色だけ解決する（?ballzskip=0 で従来）
+    if(new URLSearchParams(globalThis.location?.search??'').get('ballzskip')!=='0')t.resolveDepthBuffer=false;
+    hr.renderer.initRenderTarget(t);return t;
   });
   const world=new THREE.Matrix4(),clip=new THREE.Matrix4(),vp=new THREE.Matrix4(),instance=new THREE.Matrix4();
   const bounds=new WeakMap(),stats={frames:0,cropped:0,fullPixels:0,drawPixels:0,lastHeight:full.height,maxY:0};
