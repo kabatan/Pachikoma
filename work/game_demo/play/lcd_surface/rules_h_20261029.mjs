@@ -312,6 +312,7 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   } else await (await import('./chain_announce_v09_1030.mjs')).attachChainAnnounceV09(lcd, { controller, log });
   await (await import('./fx_trim_1030.mjs')).attachFxTrim(lcd, { controller, log });   // 10/30 演出の短縮（溜めと間）。?fxtrim=0 で無し
   await (await import('./jp_seal_1030.mjs')).attachJpSeal(lcd, { controller, log });
+  try { await (await import('./jp_start_1031.mjs')).attachJpStart(lcd, { controller, log }); } catch (e) { console.warn('[jp-start]', e); }   // 10/31 JPチャンスの始まり（止め→雷→扉→題字。黒背景＋文字を外す）。?jpstart=0 で旧、?jpblack=1 で黒背景＋文字を戻す
   try { await (await import('./jp_hud_1031.mjs')).attachJpHud(lcd, { controller, log }); } catch (e) { console.warn('[jp-hud]', e); }   // 10/31 JPチャンス中の残り個数＋残り時間の札・焦り（心拍・赤い縁・警告灯・囲いの赤）。?jphud=0 で無し   // 10/30 JPチャンス中の映像を封印の扉に。?jpseal=0 で旧（jp_aim）
   if (new URLSearchParams(globalThis.location?.search ?? '').get('ft') !== '0') { try { await (await import('./first_timer_1030.mjs')).attachFirstTimer(lcd, { controller, log }); } catch (e) { console.warn('[first-timer]', e); } }   // 10/30 初見の客向けの小さな配慮（?ft1〜ft5=0 で個別に、?ft=0 で全部無し）
   if (new URLSearchParams(globalThis.location?.search ?? '').get('chainseal') === 'v02') await (await import('./chain_seal_1030.mjs')).attachChainSeal(lcd, { controller, log });   // 10/30 継続チャレンジも封印の扉に（JPと同じ経路）。?chainseal=v02 で旧の独自実装、?chainseal=0 で旧（chain_jp_aim）。既定は jp_seal_1030 が継続も担当
