@@ -32,6 +32,45 @@ export async function installPrebakeRelight(hr,{m3,getPlate=()=>window.__play?.f
   const back=rt(),front=rt(),fields=rt(W/S,H/S,3);
   const down=mat=>make(mat.fragmentShader.replaceAll('gl_FragCoord.xy','(gl_FragCoord.xy * 4.0)'),mat.uniforms);
   const bakeBack=down(hr.envBack),bakeFront=down(hr.envFront);
+  // 10/30 環境光の焼きの素材を間引いて持つ（?envdecim=0 で従来）：1/4 解像度の焼きは元の 1440×2560 の素材（A・B・M0・M1）を
+  //  縦横 4 画素おきに 1 点だけ読む。読む画素だけを起動時に CPU で 360×640 に写しておき、焼きはそこを読む（同じ画素の同じ値＝画は同一）。
+  //  間隔の空いた読みはキャッシュの行をほぼ 1 画素ずつしか使わないので、内蔵GPUで帯域を食っていた。
+  const envDecim=new URLSearchParams(globalThis.location?.search??'').get('envdecim')!=='0';
+  const decimEnv=src=>{
+    const names=['uA','uB','uM0','uM1'];
+    const pass=make(`uniform highp sampler2D uA, uB, uM0, uM1;
+uniform vec4 uEaLo, uEaHi, uEbLo, uEbHi;
+void main() {
+  ivec2 q = ivec2(gl_FragCoord.xy);
+  vec4 m0 = texelFetch(uM0, q, 0), m1 = texelFetch(uM1, q, 0);
+  float wa = dot(m0, uEaLo) + dot(m1, uEaHi);
+  float wb = dot(m0, uEbLo) + dot(m1, uEbHi);
+  vec4 a = texelFetch(uA, q, 0), b = texelFetch(uB, q, 0);
+  gl_FragColor = vec4(wa * a.rgb + wb * b.rgb, 0.0);
+}`,{uA:{value:null},uB:{value:null},uM0:{value:null},uM1:{value:null},uEaLo:src.uniforms.uEaLo,uEaHi:src.uniforms.uEaHi,uEbLo:src.uniforms.uEbLo,uEbHi:src.uniforms.uEbHi});
+    const made=[],keys=[];
+    const copy=t=>{
+      const im=t?.image,data=im?.data;
+      if(!t?.isDataTexture||t.flipY||im.width!==W||im.height!==H||!data)return null;
+      const ch=data.length/(W*H);if(!Number.isInteger(ch)||ch<1||ch>4)return null;
+      const w=W/S,h=H/S,out=new data.constructor(w*h*ch);
+      // 焼きの画素 (i,j)（下が 0）は元の画素 (4i+2, 2557-4j)（素材の行 0 が上）を読んでいた
+      for(let j=0;j<h;j++){const row=(H-3-S*j)*W;for(let i=0;i<w;i++){const si=(row+S*i+2)*ch,di=(j*w+i)*ch;for(let c=0;c<ch;c++)out[di+c]=data[si+c];}}
+      const d=new THREE.DataTexture(out,w,h,t.format,t.type);d.internalFormat=t.internalFormat;d.colorSpace=t.colorSpace;
+      d.minFilter=d.magFilter=THREE.NearestFilter;d.generateMipmaps=false;d.flipY=false;d.unpackAlignment=1;d.needsUpdate=true;return d;
+    };
+    let failed=false;
+    return {scene:pass.scene,ok(){
+      if(failed)return false;
+      const cur=names.map(n=>src.uniforms[n].value);
+      if(keys.length&&cur.every((t,i)=>t===keys[i].t&&t.version===keys[i].v))return true;
+      for(const d of made)d.dispose();made.length=0;keys.length=0;
+      for(let i=0;i<4;i++){const d=copy(cur[i]);if(!d){failed=true;return false;}made.push(d);pass.material.uniforms[names[i]].value=d;}
+      cur.forEach(t=>keys.push({t,v:t.version}));return true;
+    },dispose(){for(const d of made)d.dispose();}};
+  };
+  const envD=envDecim?new Map([[bakeBack,decimEnv(hr.envBack)],[bakeFront,decimEnv(hr.envFront)]]):null;
+  if(envD){owned.push(...envD.values());for(const d of envD.values())d.ok();}   // 起動時に写しておく
   const e=m3.man.arrays.E,c=m3.man.arrays.C;
   // Keep native sampling coordinates, but rasterize only rows that can be nonzero.
   // The proof is made from the actual uploaded source data once at installation.
@@ -100,6 +139,9 @@ void main(){
   // （7 回の読み込み、枠の光で 2 か所）を、最終合成と同じ画素位置・同じ式で float32 に焼き、最終合成は 1 回の texelFetch で読む。
   // 焼き直すのは 7 セグ・メーターの値か描画解像度が変わったときだけ。
   const staticBake=pq.get('staticbake')!=='0';
+  // 10/30 F0/F4 の混ぜ（uK4・uGlass）が厳密に 0 か 1 のとき、2 枚読んで混ぜる代わりに片方だけ読む（?k4branch=0 で従来）。
+  //  遊技中の約 3 割の時間は 1。条件は uniform なので画素ごとに分岐はばらけない。
+  const k4Branch=pq.get('k4branch')!=='0';
   const autoQuality=renderLite&&qName==='auto'&&!pq.has('renderscale')&&!pq.has('renderlite')&&!['0','2','4'].includes(msaaQ);
   // 10/30 表示実寸描画（?dispfit=0 で従来）：球と最終合成を「画面に実際に映る画素数」（上限1440×2560）で描く。
   // 素材と座標は元の1440×2560のまま、表示の画素の中心（=ブラウザが縮小で読む位置）で読むので、映る画は同じ。
@@ -217,6 +259,15 @@ vec2 pbFL(float half_){vec2 u=gl_FragCoord.xy/vec2(1440.,2560.);return vec2(clam
 }
 float logoBox(vec2 uv)`);
   }
+  if(k4Branch){
+    const pairs=[['vec3 g = mix(texture(uMA, vec3(uvA, 4.0)).rgb, texture(uMA, vec3(uvA, 5.0)).rgb, uGlass);','vec3 g = pbMix2(uMA, uvA, 4.0, 5.0, uGlass).rgb;'],
+      ['vec4 bk = mix(texture(uMC, vec3(us, 2.0)), texture(uMC, vec3(us, 3.0)), uK4);','vec4 bk = pbMix2(uMC, us, 2.0, 3.0, uK4);'],
+      ['vec4 bd = mix(texture(uMA, vec3(uvA, 2.0)), texture(uMA, vec3(uvA, 3.0)), uK4);','vec4 bd = pbMix2(uMA, uvA, 2.0, 3.0, uK4);'],
+      ['vec4 fo = mix(texture(uMC, vec3(us, 0.0)), texture(uMC, vec3(us, 1.0)), uK4);','vec4 fo = pbMix2(uMC, us, 0.0, 1.0, uK4);'],
+      ['vec4 tr = mix(texture(uMT, vec3(ut, 0.0)), texture(uMT, vec3(ut, 1.0)), uK4);','vec4 tr = pbMix2(uMT, ut, 0.0, 1.0, uK4);']];
+    for(const [x,y] of pairs)shader=replace(shader,x,y);
+    shader=replace(shader,'vec3 frameLit(','vec4 pbMix2(highp sampler2DArray s, vec2 u, float l0, float l1, float k){\n if(k >= 1.0) return texture(s, vec3(u, l1));\n if(k <= 0.0) return texture(s, vec3(u, l0));\n return mix(texture(s, vec3(u, l0)), texture(s, vec3(u, l1)), k);\n}\nvec3 frameLit(');
+  }
   let bakeStaticSrc=null;
   if(staticBake){
     const segA='      float sg = 0.0;\n',segB='\n      // 得点表示板の絵は',
@@ -285,8 +336,15 @@ vec4 prebakeC(ivec2 p){`);
   }
   // 自動の段：起動直後（1.5 秒待って 2.5 秒）と、その後のプレイ中（3 秒ごと）の平均のフレーム間隔を見る。
   // 1 回の大きな引っかかりで段が落ちないよう、1 フレームは 50ms で頭打ち、250ms 超（非表示・読み込み）は数えない。
-  const quality={auto:autoQuality,tier:tierQ>=0?TIERS[tierQ].name:autoQuality?'medium':null,index:tierQ>=0?tierQ:autoQuality?1:-1,history:[],last:0,sum:0,cpu:0,n:0,since:0,startedAt:0,cpuBound:0};
+  const qGuard=pq.get('qualityguard')!=='0';
+  const quality={auto:autoQuality,tier:tierQ>=0?TIERS[tierQ].name:autoQuality?'medium':null,index:tierQ>=0?tierQ:autoQuality?1:-1,history:[],last:0,sum:0,cpu:0,n:0,since:0,startedAt:0,cpuBound:0,guard:qGuard,probe:null,locked:false,reverts:0};
   const qLimitTest=Number(pq.get('qualitylimit'))||0;   // 確認用：判定のしきい値(ms)を差し替える
+  // 10/30 誤判定の見直し（?qualityguard=0 で従来）：
+  //  ・CPU 律速の判定を「平均の間隔の 75%」から「間隔としきい値の小さい方の 75%」に。CPU が 18ms で垂直同期により 33ms 間隔に
+  //    なる場合（平均 25ms）に、従来は GPU 律速と見て段を下げていた。
+  //  ・下げた後の 1 区間でまだしきい値を超え、間隔も下げる前より 7% 以上縮まなければ（30fps に制限された省電力・50Hz の画面・
+  //    主スレッドの外の処理など）、下げても速くならないので下げる前の段へ戻し、以後は自動で下げない。
+  //    ただし解像度が変わらない段（medium→low は MSAA だけ）で縮まないのは判断できないので、解像度の変わる段まで続けて試す。
   function qualityTick(){
     if(!quality.auto)return;
     const now=performance.now();
@@ -299,10 +357,24 @@ vec4 prebakeC(ivec2 p){`);
     const mean=quality.sum/quality.n,cpu=quality.cpu/quality.n;quality.sum=0;quality.cpu=0;quality.n=0;
     const limit=qLimitTest||(now-quality.startedAt<8000?18.5:20);   // 起動直後は 54fps 未満、その後は 50fps 未満で一段下げる
     // 遅れの主因が主スレッドの処理（物理・液晶の CPU）なら、画質を下げても速くならないので下げない
-    if(mean>limit&&cpu>.75*mean){quality.cpuBound++;return;}
+    if(quality.guard&&quality.probe){
+      const pr=quality.probe;
+      if(mean>limit&&mean>pr.meanMs*.93){
+        if(TIERS[quality.index].scale===TIERS[pr.from].scale&&quality.index<TIERS.length-1){   // まだ解像度が同じ：次の段も試す
+          const t=TIERS[++quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
+          quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name,probe:true});quality.since=now+700;return;
+        }
+        quality.probe=null;quality.index=pr.from;const t=TIERS[pr.from];setLite(t.scale,t.msaa);quality.tier=t.name;quality.locked=true;quality.reverts++;
+        quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name,revert:true});quality.since=now+700;return;
+      }
+      quality.probe=null;
+    }
+    if(quality.guard&&quality.locked)return;
+    if(mean>limit&&cpu>.75*(quality.guard?Math.min(mean,limit):mean)){quality.cpuBound++;return;}
     if(mean>limit&&quality.index<TIERS.length-1){
       const t=TIERS[++quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
       quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name});quality.since=now+700;
+      if(quality.guard)quality.probe={from:quality.index-1,meanMs:mean};
     }
   }
   // 映る大きさ：canvas の CSS の箱（回転前の大きさ）× devicePixelRatio、1440×2560 が上限。大きさが 0.2 秒落ち着いてから切り替える。
@@ -348,7 +420,8 @@ vec4 prebakeC(ivec2 p){`);
     if(rect&&!fieldInitialized.has(key)){r.setClearColor(0x000000,pass===bakeFields?1:0);r.clear(true,false,false);cropStats.initialClears++;}
     if(rect?.h!==0){
       if(rect){r.setScissor(0,rect.y,target.width,rect.h);r.setScissorTest(true);}
-      try{r.render(pass.scene,hr.fsCam);}finally{r.setScissorTest(false);}
+      const dz=envD?.get(pass);
+      try{r.render(dz?.ok()?dz.scene:pass.scene,hr.fsCam);}finally{r.setScissorTest(false);}
       cropStats.draws++;cropStats.shadedPixels+=target.width*(rect?rect.h:target.height);
     }
     // A fallback may paint outside the proof's region. Re-clear before using
@@ -356,7 +429,7 @@ vec4 prebakeC(ivec2 p){`);
     if(validProof)fieldInitialized.add(key);else fieldInitialized.delete(key);
   }
   const restored=()=>{fieldInitialized.clear();invalidate();};
-  const api={ballCrop,quality,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,liteCanvas,canvasSize:[r.domElement.width,r.domElement.height],renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();display?.dispose();staticRT?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  const api={ballCrop,quality,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.probe=null;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,liteCanvas,canvasSize:[r.domElement.width,r.domElement.height],renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();display?.dispose();staticRT?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
   hr.prebakeRelight=api;
   hr.render=function(){
     const plate=getPlate();
