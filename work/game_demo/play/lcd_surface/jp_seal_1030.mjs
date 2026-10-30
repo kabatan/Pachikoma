@@ -83,9 +83,10 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
   model.start = (name) => {
     const am = /^jp_aim_d(\d)$/.exec(name ?? '');
     if (am && !model.chainMode && ms.byD[am[1]] && man.scenes[nm(am[1], 'in')]) {
-      const d = am[1], st = controller.game?.meterStatus;
-      if (!st || (st.kind === 'jp' && st.threshold === N(d))) {
-        const c = S.final ? N(d) : Math.min(N(d), st?.count | 0);
+      const st = controller.game?.meterStatus, lane = st?.kind === 'jp' && st.targets?.length === 1 ? String(st.targets[0]) : null;
+      const d = lane && ms.byD[lane] && man.scenes[nm(lane, 'in')] ? lane : am[1];   // 10/30 映像の穴は規則の残り穴（model.d が既定の4に戻っている経路があった）
+      if (!st || st.kind !== 'chain') {   // 10/30 規定数が鎖の数と違っても封印へ（段は比例）。旧は threshold===N のときだけ
+        const T = st?.threshold > 0 ? st.threshold : N(d), c = S.final ? N(d) : stageOf(st?.count | 0, T, N(d));
         name = c <= 0 ? nm(d, 'in') : c >= N(d) ? nm(d, 'open') : nm(d, `s${c}`); S.swaps++; note('redirect', { to: name });
       }
     }
@@ -108,6 +109,8 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
   const tick = () => {
     if (!model.active) return;
     const g = controller.game, st = g.meterStatus, name = model.name ?? '';
+    // 10/30 どの経路で旧の狙い(jp_aim_d*)が始まっても（start の差し替えを通らない経路があった：初回のチュートリアルの後）、ここで封印へ乗り換える
+    { const am = /^jp_aim_d(\d)$/.exec(name); if (am && !model.chainMode && st?.kind !== 'chain' && ms.byD[am[1]] && man.scenes[nm(am[1], 'in')]) { const before = S.swaps; model.start(name); if (S.swaps !== before) { note('redirect:tick', { from: name }); return; } } }
     if (st?.kind === 'jp' || st?.kind === 'chain') S.lastCount = st.count | 0;
     const m = RE.exec(name);
     if (!m) return;

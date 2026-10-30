@@ -206,9 +206,12 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     if(!model.active||model.delay>0||!sc||sc.loop||sc.offer||WAITS.test(model.name)){wdSerial=-1;wdT=0;return;}
     if(wdSerial!==model.serial){wdSerial=model.serial;wdT=0;}
     if(JPREADY&&current&&!current.ready)return;   // 10/30 jpready: 次の映像を読み込み中は看守の時計を進めない（実時間で未準備のまま stop→通常背景に落ちるのを防ぐ）。?jpready=0で戻す
+    // 10/30 roulettewd: ルールHのルーレットは押されるまで回転をループする(最長 約15秒)。映像が実際に進んでいる間は看守の時計を進めない（8.9秒で打ち切って待機に落ち、配当の映像が出なかった）。?roulettewd=0で戻す
+    if(ROULETTEWD&&ROULETTE.test(model.name)&&current?.v&&!current.v.paused){const ct=current.v.currentTime;if(ct!==wdCT){wdCT=ct;wdT=0;return;}}
     wdT+=Math.min(dt,.1);
     if(wdT>sc.frames/man.fps+4){record('watchdog',{name:model.name,wdT});model.stop('watchdog');}
   };
+  const ROULETTEWD=new URLSearchParams(typeof location==='undefined'?'':location.search).get('roulettewd')!=='0',ROULETTE=/^roulette_\d+$/;let wdCT=-1;
   const JPREADY=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jpready')!=='0';
   const lifecycle=[];const record=(kind,data={})=>{lifecycle.push({kind,wall:performance.now(),...data});if(lifecycle.length>1000)lifecycle.shift();};
   let startupWarmPromise=null;
