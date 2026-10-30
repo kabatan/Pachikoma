@@ -139,6 +139,10 @@ void main(){
   // （7 回の読み込み、枠の光で 2 か所）を、最終合成と同じ画素位置・同じ式で float32 に焼き、最終合成は 1 回の texelFetch で読む。
   // 焼き直すのは 7 セグ・メーターの値か描画解像度が変わったときだけ。
   const staticBake=pq.get('staticbake')!=='0';
+  // 10/31 低い段（low・lower・lowest）だけ照明の焼きを 2 フレームに 1 回に（?halfbake=0 で従来）。偶数フレームで環境光（奥・手前）と盤の光、
+  //  奇数フレームで枠の焼きと球のプローブ。光の変化は最大 1 フレーム（16.7ms）遅れる。既定の medium 以上は毎フレームのまま。
+  //  ?halfbake=1 で常に半分、auto（既定）は low 以下、または medium で fps が足りないとき解像度を下げる前に先に半分にする。
+  const halfBakeArg=pq.get('halfbake'),halfBake=halfBakeArg!=='0',halfBakeForce=halfBakeArg==='1';
   // 10/30 F0/F4 の混ぜ（uK4・uGlass）が厳密に 0 か 1 のとき、2 枚読んで混ぜる代わりに片方だけ読む（?k4branch=0 で従来）。
   //  遊技中の約 3 割の時間は 1。条件は uniform なので画素ごとに分岐はばらけない。
   const k4Branch=pq.get('k4branch')!=='0';
@@ -337,7 +341,7 @@ vec4 prebakeC(ivec2 p){`);
   // 自動の段：起動直後（1.5 秒待って 2.5 秒）と、その後のプレイ中（3 秒ごと）の平均のフレーム間隔を見る。
   // 1 回の大きな引っかかりで段が落ちないよう、1 フレームは 50ms で頭打ち、250ms 超（非表示・読み込み）は数えない。
   const qGuard=pq.get('qualityguard')!=='0';
-  const quality={auto:autoQuality,tier:tierQ>=0?TIERS[tierQ].name:autoQuality?'medium':null,index:tierQ>=0?tierQ:autoQuality?1:-1,history:[],last:0,sum:0,cpu:0,n:0,since:0,startedAt:0,cpuBound:0,guard:qGuard,probe:null,locked:false,reverts:0};
+  const quality={auto:autoQuality,tier:tierQ>=0?TIERS[tierQ].name:autoQuality?'medium':null,index:tierQ>=0?tierQ:autoQuality?1:-1,history:[],last:0,sum:0,cpu:0,n:0,since:0,startedAt:0,cpuBound:0,guard:qGuard,probe:null,locked:false,reverts:0,lightHalf:false};
   const qLimitTest=Number(pq.get('qualitylimit'))||0;   // 確認用：判定のしきい値(ms)を差し替える
   // 10/30 誤判定の見直し（?qualityguard=0 で従来）：
   //  ・CPU 律速の判定を「平均の間隔の 75%」から「間隔としきい値の小さい方の 75%」に。CPU が 18ms で垂直同期により 33ms 間隔に
@@ -371,6 +375,9 @@ vec4 prebakeC(ivec2 p){`);
     }
     if(quality.guard&&quality.locked)return;
     if(mean>limit&&cpu>.75*(quality.guard?Math.min(mean,limit):mean)){quality.cpuBound++;return;}
+    if(mean>limit&&halfBake&&!halfBakeForce&&!quality.lightHalf&&quality.index<2){   // 解像度を下げる前に、まず照明の焼きを半分の頻度に（画は等倍のまま、光の変化が最大 1 フレーム遅れるだけ）
+      quality.lightHalf=true;quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:'halfbake'});quality.since=now+700;return;
+    }
     if(mean>limit&&quality.index<TIERS.length-1){
       const t=TIERS[++quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
       quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name});quality.since=now+700;
@@ -439,9 +446,11 @@ vec4 prebakeC(ivec2 p){`);
     hr.trayVisualHandle?.update();stats.frames++;
     hr._updateEnvUniforms();
     r.setScissorTest(false);
-    if(backDirty.changed())drawField(back,bakeBack);else stats.fieldReuses++;
-    if(frontDirty.changed())drawField(front,bakeFront);else stats.fieldReuses++;
-    if(frameBake){if(frameDirty.changed()){r.setRenderTarget(frameF);r.setViewport(0,0,frameF.width,frameF.height);r.render(bakeFrame.scene,hr.fsCam);stats.frameBakes=(stats.frameBakes??0)+1;}else stats.frameReuses=(stats.frameReuses??0)+1;}
+    const hb=halfBake&&(halfBakeForce||quality.index>=2||quality.lightHalf),hbA=!hb||(stats.frames&1)===0,hbB=!hb||(stats.frames&1)===1;
+    if(hb)stats.halfBakeFrames=(stats.halfBakeFrames??0)+1;
+    if(hbA){if(backDirty.changed())drawField(back,bakeBack);else stats.fieldReuses++;
+    if(frontDirty.changed())drawField(front,bakeFront);else stats.fieldReuses++;}
+    if(frameBake&&hbB){if(frameDirty.changed()){r.setRenderTarget(frameF);r.setViewport(0,0,frameF.width,frameF.height);r.render(bakeFrame.scene,hr.fsCam);stats.frameBakes=(stats.frameBakes??0)+1;}else stats.frameReuses=(stats.frameReuses??0)+1;}
     if(staticBake){
       const key=RW+'x'+RH;
       if(key!==staticKey){
@@ -452,8 +461,8 @@ vec4 prebakeC(ivec2 p){`);
       }
       if(staticDirty.changed()){r.setRenderTarget(staticRT);r.setViewport(0,0,staticRT.width,staticRT.height);r.render(bakeStatic.scene,hr.fsCam);stats.staticBakes=(stats.staticBakes??0)+1;}
     }
-    for(let i=1;i<3;i++){if(fieldDirty[i].changed()){bakeFields.material.uniforms.uPBLayer.value=i;drawField(fields,bakeFields,i);}else stats.fieldReuses++;}
-    if(hr.balls.count){if(probeChanged()){compact.compose(hr.frame);stats.probeUpdates++;}else stats.probeReuses++;}
+    if(hbA)for(let i=1;i<3;i++){if(fieldDirty[i].changed()){bakeFields.material.uniforms.uPBLayer.value=i;drawField(fields,bakeFields,i);}else stats.fieldReuses++;}
+    if(hr.balls.count&&hbB){if(probeChanged()){compact.compose(hr.frame);stats.probeUpdates++;}else stats.probeReuses++;}
     extra.uPBLCDOn.value=plate?.mesh.visible?1:0;
     if(plate){extra.uPBLCD.value=plate.mat.uniforms.uT.value;extra.uPBRect.value.copy(plate.mat.uniforms.uRect.value);extra.uPBPanel.value.copy(plate.mat.uniforms.uPanel.value);extra.uPBGain.value=plate.mat.uniforms.uGain.value;}
     balls=ballCrop?.select()??balls;final.material.uniforms.uD.value=balls.texture;
