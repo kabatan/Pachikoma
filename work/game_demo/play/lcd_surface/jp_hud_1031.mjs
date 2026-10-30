@@ -99,6 +99,13 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     await Promise.all(names.map(async (n) => { T2[n] = await img(new URL(`t2_${n}.png`, A2).href); }));
     T2.meta = await (await fetch(new URL('t2_meta.json', A2))).json(); Object.assign(TX, { y: TX.y - 40, h: 330 });   // 字が大きく傾くので canvas を縦に広げる（下端の位置は変えない）
   } catch (e) { console.warn('[jp-hud] timer2 assets', e); NEWT = false; }
+  // 10/31 ?jptimer=v3：制限時間と「あと◯個」を、本番の「48秒」と同じ工程・同じ字（太いセリフの斜体・銀青のパール面・橙金の二重縁。timer_hud/bake → hud5_timer48）で大きく出す
+  let V3 = NEWT && qs.get('jptimer') === 'v3'; const T5 = {};
+  if (V3) try {
+    const names = ['colon_n', 'colon_w', 'a', 'to', 'ko']; for (let d = 0; d < 10; d++) names.push(`d${d}_n`, `d${d}_w`);
+    await Promise.all(names.map(async (n) => { T5[n] = await img(new URL(`t5_${n}.png`, A2).href); }));
+    Object.assign(TX, { y: 480, h: 500 });   // 大きな時計は液晶の中ほど下寄り（扉の錠の下）。字の行は左右の縦長メーターの内側(x130〜1022)に収める
+  } catch (e) { console.warn('[jp-hud] timer v3 assets', e); V3 = false; }
   let CD = null;   // 残り3・2・1秒の巨大な数字（ember 面の立体数字・Blender SCALE=8）
   try { const d = new URL('count_digits/', A), meta = await (await fetch(new URL('glyphs.json', d))).json(); CD = { meta, imgs: {} }; for (const k of ['1', '2', '3']) CD.imgs[k] = await img(new URL(meta.glyphs[k].file, d).href); } catch (e) { CD = null; console.warn('[jp-hud] countdown assets', e); }
   const S = { on: false, t: 0, show: 0, enterAt: -9, exitAt: -9, clock: 0, lastCount: 0, countChange: null, hitAt: -9, missAt: -9, lvl: 0, beatT: 0, beatIdx: -1, dubDone: true, cue: false, fx: [], shownKey: null, events: [] };
@@ -159,6 +166,23 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
       lx += nw + 6; { const im = T2.ko, w = im.width * LS; put(im, lx + w / 2, ly, LS, im.width / 2, im.height / 2); } }
     tx.restore(); T.txt.needsUpdate = true;
   };
+  const drawTextV3 = (st, lvl, heartV, pw) => {   // 中央：大きな SS:cc（48秒と同じ金属字）／その下：あと ◯ 個（同じ字）
+    tx.clearRect(0, 0, TX.w, TX.h);
+    const k = 1 + (lvl >= 2 ? (0.05 + 0.05 * (lvl - 2)) * heartV * pw : lvl === 1 ? 0.01 * Math.sin(S.clock * TAU * 0.9) : 0), cy = 280;
+    { tx.save(); tx.translate(TX.w / 2, cy + 70); tx.scale(1, 0.4); const hg = tx.createRadialGradient(0, 0, 0, 0, 0, 480); hg.addColorStop(0, 'rgba(14,0,22,.5)'); hg.addColorStop(0.6, 'rgba(14,0,22,.28)'); hg.addColorStop(1, 'rgba(14,0,22,0)'); tx.fillStyle = hg; tx.fillRect(-480, -480, 960, 960); tx.restore(); }
+    const v = lvl >= 2 ? 'w' : 'n', SC = 1.0 * k, txt = timeText(st), gi = (ch) => (ch === ':' ? T5['colon_' + v] : T5['d' + ch + '_' + v]);
+    { const adv = (ch, im) => im.width * SC * (ch === ':' ? 0.74 : 0.84); let tot = 0; for (const ch of txt) tot += adv(ch, gi(ch)); let x = TX.w / 2 - tot / 2;
+      for (const ch of txt) { const im = gi(ch), a = adv(ch, im); tx.drawImage(im, x + a / 2 - im.width * SC / 2, cy - im.height * SC / 2, im.width * SC, im.height * SC); x += a; } }
+    { const need = Math.max(0, st.threshold - st.count), cc = S.countChange, a = cc ? S.clock - cc.at : 9, LS = 0.62, ND = 0.66, ly = cy + 175, im1 = T5.a, im2 = T5.to, im3 = T5.ko, dn = T5['d' + need + '_n'];
+      const w1 = im1.width * LS * 0.92, w2 = im2.width * LS * 0.92, w3 = im3.width * LS, wn = Math.max(...Array.from({ length: 10 }, (_, d) => T5['d' + d + '_n'].width)) * ND * 0.9, tot = w1 + w2 + wn + w3 + 14; let lx = TX.w / 2 - tot / 2;
+      const put = (im, x, y, sc, al = 1) => { tx.globalAlpha = al; tx.drawImage(im, x - im.width * sc / 2, y - im.height * sc / 2, im.width * sc, im.height * sc); tx.globalAlpha = 1; };
+      put(im1, lx + w1 / 2, ly, LS); lx += w1; put(im2, lx + w2 / 2, ly, LS); lx += w2 + 7;
+      if (cc && a < 0.35) { const old = T5['d' + cc.from + '_n'], f = clamp(a / 0.12); if (old && f < 1) put(old, lx + wn / 2, ly + f * 40, ND * 1.08, 1 - f);
+        const pop = a < 0.1 ? 2.1 - 1.1 * (a / 0.1) ** 2 : 1 + 0.16 * Math.exp(-(a - 0.1) * 12) * Math.cos((a - 0.1) * 34); put(dn, lx + wn / 2, ly, ND * 1.08 * pop, clamp(a / 0.05));
+      } else put(dn, lx + wn / 2, ly, ND * 1.08);
+      lx += wn + 7; put(im3, lx + w3 / 2, ly, LS); }
+    T.txt.needsUpdate = true;
+  };
   const drawTextOld = (st, lvl, heartV, pw) => {
     tx.clearRect(0, 0, TX.w, TX.h);
     { tx.save(); tx.translate(TX.w / 2, TX.h * 0.52); tx.scale(1, 0.34); const hg = tx.createRadialGradient(0, 0, 0, 0, 0, 600); hg.addColorStop(0, 'rgba(14,0,22,.66)'); hg.addColorStop(0.6, 'rgba(14,0,22,.4)'); hg.addColorStop(1, 'rgba(14,0,22,0)'); tx.fillStyle = hg; tx.fillRect(-600, -600, 1200, 1200); tx.restore(); }   // 字の後ろの柔らかい暗がり（縁なし）。白飛びでも読める
@@ -184,7 +208,8 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     dg(tx, H2.lab_ko, lx + H2.lab_ko.width * LS / 2, cy + 34, LS);
     T.txt.needsUpdate = true;
   };
-  const drawText = (st, lvl, heartV, pw) => (NEWT ? drawTextNew(st, lvl, heartV, pw) : drawTextOld(st, lvl, heartV, pw));
+  const drawText = (st, lvl, heartV, pw) => (V3 ? drawTextV3(st, lvl, heartV, pw) : NEWT ? drawTextNew(st, lvl, heartV, pw) : drawTextOld(st, lvl, heartV, pw));
+  const ARROW = qs.get('jpmeter') === 'arrow';   // 10/31 矢印メーターは出さない（監督）。?jpmeter=arrow で戻す
   const meterLayout = (N) => { const s = clamp(1040 / ((N - 1) * 184 + 260), 0.7, 1.3), adv = 184 * s, w = (N - 1) * adv + 260 * s, x0 = (MT.w - w) / 2; return { s, adv, w, x0, cy: MT.h / 2 + 4 }; };
   const chevC = (i, N) => { const L = meterLayout(N); return { x: MT.x + L.x0 + i * L.adv + 130 * L.s, y: MT.y + L.cy }; };
   const drawMeter = (st, lvl, heartV, pw) => {
@@ -248,7 +273,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
       else if (p.k === 's') { const px = x + p.vx * a * (1 - .35 * u), py = y + p.vy * a * (1 - .35 * u) + 500 * a * a, r = p.r * (1 - .7 * u); const c = u < .3 ? spr.w : u < .65 ? spr.y : spr.o;
         fx.globalAlpha = (1 - u) * .95; fx.drawImage(c, px - r, py - r, r * 2, r * 2); fx.globalAlpha = (1 - u) * .4; fx.drawImage(c, px - p.vx * .02 - r, py - p.vy * .02 - r, r * 2, r * 2); }
     }
-    { const st = S.st; if (st && S.on) {   // 灯った矢印から実写の炎がゆらめく
+    { const st = S.st; if (ARROW && st && S.on) {   // 灯った矢印から実写の炎がゆらめく
       const N = clamp(st.threshold | 0, 1, 6), fill = clamp(st.count | 0, 0, N), L = meterLayout(N);
       for (let i = 0; i < fill; i++) { const c = chevC(i, N), u = frac(S.clock * 1.25 + i * 0.37), r = fireFrame(u, 1, 1); if (!r) continue; const w = 330 * L.s, h = w * 335 / 384;
         fx.globalAlpha = 0.5 + 0.12 * Math.sin(S.clock * 19 + i * 2); fx.drawImage(fm, c.x - FX.x - w / 2, c.y - FX.y - h * 0.78, w, h); } } }
@@ -295,7 +320,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
       if (LED && lvl >= 2) setCue(true, { lvl, beat: S.beatT + 0 }); else setCue(false);
     }
     // 数字・火花の canvas
-    const st2 = S.st; if (st2) { const lvl = S.lvl, P = PANIC.period[lvl] || 1, h = lvl >= 1 ? heart(S.beatT, P) : 0; drawText(st2, lvl, h, PANIC.power[lvl]); drawMeter(st2, lvl, h, PANIC.power[lvl]); }
+    const st2 = S.st; if (st2) { const lvl = S.lvl, P = PANIC.period[lvl] || 1, h = lvl >= 1 ? heart(S.beatT, P) : 0; drawText(st2, lvl, h, PANIC.power[lvl]); if (ARROW) drawMeter(st2, lvl, h, PANIC.power[lvl]); }
     if (S.fx.length || S.fxDirty || (S.on && (S.st?.count | 0) > 0)) { drawFx(); S.fxDirty = S.fx.length > 0; }
   };
 
@@ -331,11 +356,11 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
         out.push({ tex: T.beam, w: 900, h: 900, ax: 450, ay: 450, x: PX + W - 20, y: PY + 1010, rot: rot + Math.PI * 0.9, sc: 1.9, alpha: al, add: true });
       }
     }
-    if (S.fx.length || (S.on && (S.st?.count | 0) > 0)) out.push({ tex: T.fx, w: fC.width, h: fC.height, ax: 0, ay: 0, x: PX + FX.x, y: PY + FX.y, rot: 0, sc: 1 / FX.k, alpha: 1, add: true });   // 炎・火花は字とメーターの下（白飛びや炎で字が読めなくならないように）
+    if (S.fx.length || (ARROW && S.on && (S.st?.count | 0) > 0)) out.push({ tex: T.fx, w: fC.width, h: fC.height, ax: 0, ay: 0, x: PX + FX.x, y: PY + FX.y, rot: 0, sc: 1 / FX.k, alpha: 1, add: true });   // 炎・火花は字とメーターの下（白飛びや炎で字が読めなくならないように）
     // 札はやめた：上段（あと◯個・SS:cc）と下段（矢印メーター）。下から競り上がり、入賞で弾み、外れで揺れる
     { const ty = -grp.dy, ta = ck - (S.tickAt ?? -9), sh = ta < 0.5 ? Math.exp(-ta * 9) : 0;
       out.push({ tex: T.txt, w: TX.w, h: TX.h, ax: 0, ay: 0, x: PX + TX.x + grp.dx + Math.sin(ck * 61) * 7 * sh, y: PY + TX.y + ty * 0.8 + Math.cos(ck * 53) * 6 * sh, rot: 0, sc: 1, alpha: vis });
-      out.push({ tex: T.met, w: MT.w, h: MT.h, ax: 0, ay: 0, x: PX + MT.x + grp.dx + Math.sin(ck * 59) * 6 * sh, y: PY + MT.y + ty + Math.cos(ck * 47) * 6 * sh, rot: 0, sc: 1, alpha: vis }); }
+      if (ARROW) out.push({ tex: T.met, w: MT.w, h: MT.h, ax: 0, ay: 0, x: PX + MT.x + grp.dx + Math.sin(ck * 59) * 6 * sh, y: PY + MT.y + ty + Math.cos(ck * 47) * 6 * sh, rot: 0, sc: 1, alpha: vis }); }
     // 残り3秒から：巨大な数字が毎秒叩きつけられる（心拍と同じ拍で脈打つ）
     if (CD && S.on && S.st && lvl >= 3) {
       const n = Math.ceil(S.st.timeLeft - 1e-6), tx = T['cd' + n];
