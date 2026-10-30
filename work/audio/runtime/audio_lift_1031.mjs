@@ -13,6 +13,17 @@ import { hotBus } from './hot_bus.mjs';
 const dB = x => 10 ** (x / 20);
 const FILES = ['al_hit_1', 'al_hit_2', 'al_hit_3', 'al_hit_4', 'al_break', 'al_break_big', 'al_door', 'al_drone', 'al_pulse1', 'al_pulse2', 'al_riser', 'al_roll', 'al_press', 'al_slam',
   'al_promo_0', 'al_promo_1', 'al_promo_2', 'al_promo_3', 'al_promo_4', 'al_win_first', 'al_win_chain'];
+// 第2弾(synth_lift2.py): 音の種類を増やす。有名な当たり音の「構成」を写した合成のパロディ(出典は REFERENCE.md)。
+//  P=パチスロの「ペカ」 M=海(マリンバ・スチールパン) J=ビッグバンド E=電子(アルペジオ・ビーム・ピアノ) T=和・祭(太鼓・笛・三味線) R=ロック O=オーケストラ
+const WIN2 = ['P0', 'P1', 'P2', 'M0', 'M1', 'M2', 'J0', 'J1', 'J2', 'E0', 'E1', 'E2', 'T0', 'T1', 'R0', 'R1', 'O0', 'O1'].map(n => 'al_win_' + n);
+const HIT2 = ['B', 'C', 'D'].flatMap(t => [1, 2, 3, 4].map(k => `al_hit${t}_${k}`));
+FILES.push(...WIN2, ...HIT2, 'al_breakB', 'al_breakB_big', 'al_breakD', 'al_breakD_big', 'al_rollC', 'al_rollE');
+// JP成功の音: 配当の段(0:30玉 1:40 2:100 3:200 4:500)ごとの候補。同じ段でも毎回ちがう変種を選ぶ(直前と同じものは避ける)
+const WIN_POOL = [['P0', 'P1', 'P2', 'M0'], ['M0', 'M1', 'P2', 'E0'], ['J0', 'J1', 'J2', 'E1', 'M2'], ['T0', 'T1', 'R0', 'E2'], ['O0', 'O1', 'R1', 'T1', 'first']].map(a => a.map(n => 'al_win_' + n));
+const WIN_CHAIN_POOL = ['al_win_O0', 'al_win_T1', 'al_win_E0', 'al_win_R1', 'al_win_J1', 'al_win_chain'];
+// JPチャンスの「テーマ」(入賞の衝撃・鎖の爆発・ルーレットの回転の音色の組)。メーターごとに変える
+const THEMES = { A: { hit: k => 'al_hit_' + k, brk: b => b ? 'al_break_big' : 'al_break', roll: 'al_roll' }, B: { hit: k => 'al_hitB_' + k, brk: b => b ? 'al_breakB_big' : 'al_breakB', roll: 'al_rollC' },
+  C: { hit: k => 'al_hitC_' + k, brk: b => b ? 'al_breakB_big' : 'al_breakB', roll: 'al_rollC' }, D: { hit: k => 'al_hitD_' + k, brk: b => b ? 'al_breakD_big' : 'al_breakD', roll: 'al_rollE' } };
 // 段ごとの既存音(JP本編・JP後・新演出の音。hot 経由)の増幅[dB]。段0=素通し
 const TIER_GAIN = [0, 1.0, 3.0, 8.0];
 // 新しい音の段ごとの出口レベル
@@ -58,7 +69,7 @@ export async function installAudioLift(engine, { lcd, controller, base = new URL
     } catch (e) { P.calib = null; }
   }
   await calibrate();
-  const st = { tier: 0, winUntil: 0, lastSfx: -99, drone: null, pulseAt: Infinity, rollSrc: null, rollG: null, meterId: null, log: [], played: 0, ev: {}, scenes: new Set() };
+  const st = { theme: 'A', lastTheme: 'A', lastWin: {}, tier: 0, winUntil: 0, lastSfx: -99, drone: null, pulseAt: Infinity, rollSrc: null, rollG: null, meterId: null, log: [], played: 0, ev: {}, scenes: new Set() };
   const log = (name, db = 0, extra) => { st.log.push({ t: +now().toFixed(3), name, db, tier: st.tier, ...extra }); if (st.log.length > 500) st.log.shift(); };
   function setTier(t) {
     if (t === st.tier) return; const old = st.tier; st.tier = t; const n = now();
@@ -121,16 +132,24 @@ export async function installAudioLift(engine, { lcd, controller, base = new URL
     const key = w.name + '#' + w.serial; if (key === lastScene) return; lastScene = key;
     const m = /^jp_aim_seal_d\d_(b\d|open)$/.exec(w.name);
     if (m) {
-      if (m[1] === 'open') { play('al_break_big', -2, { at: .8333 }); play('al_door', 0, { at: .9333 }); duck(7, 1.4, 1.2, .8); }
-      else { const k = +m[1].slice(1); play(k >= 3 ? 'al_break_big' : 'al_break', -1 + k * .5, { at: k === 1 ? .4667 : .4 }); duck(5, .6, .8, k === 1 ? .45 : .38); }
+      if (m[1] === 'open') { play(THEMES[st.theme].brk(true), -2, { at: .8333 }); play('al_door', 0, { at: .9333 }); duck(7, 1.4, 1.2, .8); }
+      else { const k = +m[1].slice(1); play(THEMES[st.theme].brk(k >= 3), -1 + k * .5, { at: k === 1 ? .4667 : .4 }); duck(5, .6, .8, k === 1 ? .45 : .38); }
     }
+  }
+
+  function pickTheme(chain) {   // 前回と違うテーマ(継続のメーターは最初のJPとも違う色にする)
+    const names = Object.keys(THEMES).filter(n => n !== st.theme); st.theme = names[(Math.random() * names.length) | 0]; st.ev.theme = st.theme; log('theme ' + st.theme);
+  }
+  function pickWin(tier, chain) {
+    const pool = (chain ? WIN_CHAIN_POOL : WIN_POOL[tier]).filter(n => buffers[n]); if (!pool.length) return chain ? 'al_win_chain' : 'al_win_first';
+    const key = chain ? 'chain' : tier, last = st.lastWin[key]; const c = pool.filter(n => n !== last); const pick = c[(Math.random() * c.length) | 0] ?? pool[0]; st.lastWin[key] = pick; return pick;
   }
 
   // ---- ルーレット ----
   function rouletteStartRoll(e) {
-    if (st.rollSrc) return; if (!buffers.al_roll) return;
+    if (st.rollSrc) return; if (!buffers[THEMES[st.theme].roll]) return;
     const total = Math.max(2, e.autoStopSeconds || 8), n = now();
-    const s = play('al_roll', -30, { loop: true }); if (!s) return; st.rollSrc = s; const g = s._g.gain;
+    const s = play(THEMES[st.theme].roll, -30, { loop: true }); if (!s) return; st.rollSrc = s; const g = s._g.gain;
     g.cancelScheduledValues(n); g.setValueAtTime(dB(-30), n); g.exponentialRampToValueAtTime(dB(-9), n + total); s.playbackRate.setValueAtTime(.9, n); s.playbackRate.linearRampToValueAtTime(1.3, n + total);
   }
   function rouletteStopRoll(fade = .05) { stopSrc(st.rollSrc, fade); st.rollSrc = null; }
@@ -140,19 +159,20 @@ export async function installAudioLift(engine, { lcd, controller, base = new URL
   if (controller?.onAction) offs.push(controller.onAction(act => {
     const e = controller.lastGameEvent; if (!e || e.type !== act) return;
     const jpish = e.kind === 'jp' || e.kind === 'chain';
-    if (act === 'meterReady' && jpish) { st.riserDone = false; setTier(1); }
+    if (act === 'meterReady' && jpish) { st.riserDone = false; setTier(1); pickTheme(e.kind === 'chain'); }
     else if (act === 'meterStart' && jpish) { setTier(1); tensionStart(); }
     else if (act === 'meterLand' && jpish && e.hit) {
       const th = Math.max(1, e.threshold || 4), stage = Math.max(1, Math.min(4, Math.ceil(4 * e.count / th))); st.ev.hits = (st.ev.hits ?? 0) + 1;
-      play('al_hit_' + stage, 0 + (stage - 1) * .5); duck(2 + stage * 1.2, .16 + .04 * stage, .5);
+      play(THEMES[st.theme].hit(stage), 0 + (stage - 1) * .5); duck(2 + stage * 1.2, .16 + .04 * stage, .5);
     }
     else if (act === 'meterEnd' && jpish) { tensionStop(.25); if (!e.success) { st.riserDone = false; setTier(0); } }
     else if (act === 'rouletteStart' && jpish) { setTier(2); st.ev.rouTier = e.tier; rouletteStartRoll(e); }
     else if (act === 'rouletteStopPress' && jpish) { rouletteStopRoll(.04); play('al_press', 0); duck(6, 1.1, .7); }
     else if (act === 'rouletteStopped' && jpish) {
       const first = e.kind === 'jp', tier = Math.max(0, Math.min(4, e.tier | 0));
-      setTier(3); st.winUntil = now() + (tier === 4 ? 12 : 10);
-      play(first ? 'al_win_first' : 'al_win_chain', 2); play('al_promo_' + tier, 0, { at: .12 }); duck(10, 1.6, 1.4); st.ev.wins = (st.ev.wins ?? 0) + 1;
+      const name = pickWin(tier, !first), len = buffers[name]?.duration ?? 8;
+      setTier(3); st.winUntil = now() + Math.max(10, len + 3);
+      play(name, 2); if (tier >= 2) play('al_promo_' + tier, -4, { at: .12 }); duck(10, 1.6, 1.4); st.ev.wins = (st.ev.wins ?? 0) + 1; st.ev.lastWin = name;
     }
   }));
 
