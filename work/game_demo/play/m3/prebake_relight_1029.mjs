@@ -135,6 +135,11 @@ void main(){
   // 最終合成を canvas へ直接描く。CSS の箱は 1440×2560 のままなので、拡大はブラウザの合成（双線形）が行う。
   // 1440×2560 への拡大コピー（全画面 1 pass と RGBA8 の中間 1 枚）が無くなる。
   const liteCanvas=renderLite&&pq.get('litecanvas')!=='0';
+  // 10/31 canvas の大きさを段で変えない（?stablecanvas=0 で従来）：canvas の画素数を変えると描画バッファの作り直しで主スレッドが
+  //  20〜100ms 止まり（段を下げた瞬間のコマ落ちの主因、GPU が混んでいるほど長い）、準備も分割もできない。そこで canvas は
+  //  medium の大きさ（1080×1920）のまま固定し、それより小さい段（lower・lowest）は最終合成を小さい中間 RT に描いて、
+  //  最後に全面 1 枚の双線形コピーで canvas へ広げる。medium と low は従来どおり canvas へ直接描く。
+  let stableCanvas=liteCanvas&&pq.get('stablecanvas')!=='0';
   // 10/30 静的な部分の焼き（?staticbake=0 で従来）：得点板の 7 セグ・メーターの和（12 回の読み込み）と、ロゴの文字の判定
   // （7 回の読み込み、枠の光で 2 か所）を、最終合成と同じ画素位置・同じ式で float32 に焼き、最終合成は 1 回の texelFetch で読む。
   // 焼き直すのは 7 セグ・メーターの値か描画解像度が変わったときだけ。
@@ -194,6 +199,15 @@ void main(){
   const displayRT=(w,h)=>{const t=new THREE.WebGLRenderTarget(w,h,{type:THREE.UnsignedByteType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:false});return t;};
   let display=renderLite&&!liteCanvas?displayRT(RW,RH):null;
   const present=display?make('uniform sampler2D uImage;void main(){gl_FragColor=texture2D(uImage,gl_FragCoord.xy/vec2(1440.,2560.));}',{uImage:{value:display.texture}}):null;
+  const baseCW=Math.round(W/1.333),baseCH=Math.round(H/1.333);   // TIERS[1]（medium）の大きさ
+  const uPresentSize={value:new THREE.Vector2(baseCW,baseCH)};
+  const presentS=liteCanvas?make('uniform sampler2D uImage;uniform vec2 uSize;void main(){gl_FragColor=texture2D(uImage,gl_FragCoord.xy/uSize);}',{uImage:{value:null},uSize:uPresentSize}):null;
+  let sDisplay=null;
+  const ensureSDisplay=()=>{   // 現在の描画解像度が canvas より小さいときだけ中間 RT を持つ
+    if(!stableCanvas)return;
+    if(RW<baseCW){if(!sDisplay||sDisplay.width!==RW||sDisplay.height!==RH){sDisplay?.dispose();sDisplay=displayRT(RW,RH);}}
+    else if(sDisplay){sDisplay.dispose();sDisplay=null;}
+  };
   const ballMaterial=new hr.ballMat.constructor().copy(Object.create(hr.ballMat,{uniforms:{value:{}}}));ballMaterial.uniforms={...hr.ballMat.uniforms,uAtlas:{value:compact.atlas.texture}};
   ballMaterial.fragmentShader=replace(ballMaterial.fragmentShader,'const float PS = 64.0, PT = 66.0;',`const float PS = ${compact.faceSize}.0, PT = ${compact.tileSize}.0;`);materials.push(ballMaterial);
   // 10/30 玉のプローブ選び（?ballsel=0 で従来）：玉の中心だけで決まる「最寄りプローブの区域と近い 3 点・重み」を、
@@ -341,13 +355,14 @@ vec4 prebakeC(ivec2 p){`);
     const t=TIERS[quality.index+1],[w,h]=tierSize(t.scale);
     if(w===RW&&h===RH&&t.msaa===ballSamples)return;
     if(spare&&spare.w===w&&spare.h===h&&spare.samples===t.msaa)return;
-    dropSpare();spare={w,h,samples:t.msaa,stage:0,balls:null,crop:null};
+    dropSpare();spare={w,h,samples:t.msaa,stage:0,balls:null,crop:null,display:null};
   }
-  function dropSpare(){if(!spare)return;spare.crop?.dispose();spare.balls?.dispose();spare=null;prepStats.disposed++;}
+  function dropSpare(){if(!spare)return;spare.crop?.dispose();spare.balls?.dispose();spare.display?.dispose();spare=null;prepStats.disposed++;}
   function prepareStep(){   // 1 フレームに 1 手
     if(!spare||spare.stage>=2)return;
     if(spare.stage===0){
       spare.balls=makeBalls(spare.w,spare.h,spare.samples);r.initRenderTarget?.(spare.balls);
+      if(stableCanvas&&spare.w<baseCW){spare.display=displayRT(spare.w,spare.h);r.initRenderTarget?.(spare.display);}
       const old=r.getRenderTarget();r.setRenderTarget(spare.balls);r.setClearColor(0x000000,0);r.clear(true,true,false);r.setRenderTarget(old);
       spare.stage=1;
     }else{spare.crop=createBallTargetCrop(hr,spare.balls);spare.stage=2;prepStats.prepared++;}
@@ -360,9 +375,9 @@ vec4 prebakeC(ivec2 p){`);
     ballCrop?.dispose();liteBalls.dispose();display?.dispose();
     RW=w;RH=h;ballSamples=samples;uPBK.value.set(W/RW,H/RH);
     const sp=spare&&spare.stage>=2&&spare.w===w&&spare.h===h&&spare.samples===samples?spare:null;
-    if(sp){spare=null;prepStats.hits++;liteBalls=balls=sp.balls;ballCrop=sp.crop;}
+    if(sp){spare=null;prepStats.hits++;liteBalls=balls=sp.balls;ballCrop=sp.crop;if(sp.display){sDisplay?.dispose();sDisplay=sp.display;}}
     else{prepStats.misses++;liteBalls=balls=makeBalls(RW,RH,samples);ballCrop=createBallTargetCrop(hr,balls);}
-    api.ballCrop=ballCrop;
+    api.ballCrop=ballCrop;ensureSDisplay();
     if(present){display=displayRT(RW,RH);present.material.uniforms.uImage.value=display.texture;}
     prepStats.steps++;prepStats.setLiteMs.push(+(performance.now()-t0).toFixed(2));if(prepStats.setLiteMs.length>16)prepStats.setLiteMs.shift();
     prepareNext();
@@ -370,7 +385,7 @@ vec4 prebakeC(ivec2 p){`);
   // 自動の段：起動直後（1.5 秒待って 2.5 秒）と、その後のプレイ中（3 秒ごと）の平均のフレーム間隔を見る。
   // 1 回の大きな引っかかりで段が落ちないよう、1 フレームは 50ms で頭打ち、250ms 超（非表示・読み込み）は数えない。
   const qGuard=pq.get('qualityguard')!=='0';
-  const quality={auto:autoQuality,tier:tierQ>=0?TIERS[tierQ].name:autoQuality?'medium':null,index:tierQ>=0?tierQ:autoQuality?1:-1,history:[],last:0,sum:0,cpu:0,n:0,since:0,startedAt:0,cpuBound:0,guard:qGuard,probe:null,locked:false,reverts:0,lightHalf:false};
+  const quality={auto:autoQuality,tier:tierQ>=0?TIERS[tierQ].name:autoQuality?'medium':null,index:tierQ>=0?tierQ:autoQuality?1:-1,history:[],last:0,sum:0,cpu:0,n:0,since:0,startedAt:0,cpuBound:0,guard:qGuard,probe:null,locked:false,reverts:0,lightHalf:false,over:0,heldWindows:0};
   const qLimitTest=Number(pq.get('qualitylimit'))||0;   // 確認用：判定のしきい値(ms)を差し替える
   // 10/30 誤判定の見直し（?qualityguard=0 で従来）：
   //  ・CPU 律速の判定を「平均の間隔の 75%」から「間隔としきい値の小さい方の 75%」に。CPU が 18ms で垂直同期により 33ms 間隔に
@@ -378,6 +393,10 @@ vec4 prebakeC(ivec2 p){`);
   //  ・下げた後の 1 区間でまだしきい値を超え、間隔も下げる前より 7% 以上縮まなければ（30fps に制限された省電力・50Hz の画面・
   //    主スレッドの外の処理など）、下げても速くならないので下げる前の段へ戻し、以後は自動で下げない。
   //    ただし解像度が変わらない段（medium→low は MSAA だけ）で縮まないのは判断できないので、解像度の変わる段まで続けて試す。
+  // 10/31 下げる判断の見直し（?qualityhold=0 で従来）：起動後 8 秒を過ぎたら、しきい値超えが 2 区間（約 6 秒）続いたときだけ下げる
+  //  （一時的な重さ＝映像の読み込み・演出の切替・連打の山では下げない）。下げた直後の見直しまでの待ちも 0.7 秒から 1.5 秒に延ばし、
+  //  下げた直後の揺れた区間で戻し・次の段を決めない。起動直後（8 秒まで）は従来どおり 1 区間で下げる。
+  const qHold=pq.get('qualityhold')!=='0';
   function qualityTick(){
     if(!quality.auto)return;
     const now=performance.now();
@@ -395,21 +414,25 @@ vec4 prebakeC(ivec2 p){`);
       if(mean>limit&&mean>pr.meanMs*.93){
         if(TIERS[quality.index].scale===TIERS[pr.from].scale&&quality.index<TIERS.length-1){   // まだ解像度が同じ：次の段も試す
           const t=TIERS[++quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
-          quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name,probe:true});quality.since=now+700;return;
+          quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name,probe:true});quality.since=now+(qHold?1500:700);return;
         }
         quality.probe=null;quality.index=pr.from;const t=TIERS[pr.from];setLite(t.scale,t.msaa);quality.tier=t.name;quality.locked=true;quality.reverts++;
-        quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name,revert:true});quality.since=now+700;return;
+        quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name,revert:true});quality.since=now+(qHold?1500:700);return;
       }
       quality.probe=null;
     }
     if(quality.guard&&quality.locked)return;
     if(mean>limit&&cpu>.75*(quality.guard?Math.min(mean,limit):mean)){quality.cpuBound++;return;}
+    if(qHold){
+      if(mean>limit){if(now-quality.startedAt>=8000&&++quality.over<2){quality.heldWindows++;return;}quality.over=0;}
+      else quality.over=0;
+    }
     if(mean>limit&&halfBake&&!halfBakeForce&&!quality.lightHalf&&quality.index<2){   // 解像度を下げる前に、まず照明の焼きを半分の頻度に（画は等倍のまま、光の変化が最大 1 フレーム遅れるだけ）
-      quality.lightHalf=true;quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:'halfbake'});quality.since=now+700;prepareNext();return;
+      quality.lightHalf=true;quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:'halfbake'});quality.since=now+(qHold?1500:700);prepareNext();return;
     }
     if(mean>limit&&quality.index<TIERS.length-1){
       const t=TIERS[++quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
-      quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name});quality.since=now+700;
+      quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name});quality.since=now+(qHold?1500:700);
       if(quality.guard)quality.probe={from:quality.index-1,meanMs:mean};
     }
   }
@@ -487,8 +510,9 @@ vec4 prebakeC(ivec2 p){`);
     if(validProof)fieldInitialized.add(key);else fieldInitialized.delete(key);
   }
   const restored=()=>{fieldInitialized.clear();invalidate();};
-  const api={ballCrop,quality,tierPrep:prepStats,ballSkip:ballStats,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.probe=null;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,tierPrep:prepStats,ballSkip:ballStats,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,liteCanvas,canvasSize:[r.domElement.width,r.domElement.height],renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();dropSpare();display?.dispose();staticRT?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  const api={ballCrop,setStableCanvas(on){stableCanvas=!!on&&liteCanvas;ensureSDisplay();invalidate();return stableCanvas;},quality,tierPrep:prepStats,ballSkip:ballStats,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.probe=null;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,tierPrep:prepStats,ballSkip:ballStats,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,liteCanvas,canvasSize:[r.domElement.width,r.domElement.height],renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();dropSpare();sDisplay?.dispose();display?.dispose();staticRT?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
   hr.prebakeRelight=api;
+  ensureSDisplay();
   hr.render=function(){
     const plate=getPlate();
     if(!enabled||hr.viewMode!==0||U.uM3Off.value!==0||!plate?.mat.uniforms.uPanel){stats.legacyFrames++;restoreFull();return legacy.call(hr);}
@@ -537,8 +561,14 @@ vec4 prebakeC(ivec2 p){`);
       if(bSame)ballCheckAfter();
     }
     U.uUseLut.value=hr.lutEnabled?1:0;
+    if(stableCanvas&&liteCanvas){
+      setCanvas(baseCW,baseCH);
+      if(sDisplay){r.setRenderTarget(sDisplay);r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);presentS.material.uniforms.uImage.value=sDisplay.texture;r.setRenderTarget(null);r.setViewport(0,0,baseCW,baseCH);r.render(presentS.scene,hr.fsCam);stats.stablePresents=(stats.stablePresents??0)+1;}
+      else{r.setRenderTarget(null);r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);}
+    }else{
     if(liteCanvas){setCanvas(RW,RH);r.setRenderTarget(null);}else r.setRenderTarget(display);
     r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);
+    }
     if(present){r.setRenderTarget(null);r.setViewport(0,0,W,H);r.render(present.scene,hr.fsCam);}
   };
   hr.dispose=function(){api.dispose();return dispose.call(hr);};
