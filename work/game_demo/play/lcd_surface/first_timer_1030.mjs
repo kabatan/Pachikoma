@@ -51,7 +51,7 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
       else if (id === 'lamp123' || id === 'lamp4' || id === 'lamp5' || id === 'lamp6') {
         let justPraised = false;
         if (F[2] && !S.praised) { S.praised = true; justPraised = true; S.praise = { at: S.clock }; fx.playPraiseSfx(eng()); note('praise', { id }); }
-        if (id === 'lamp5' && F[4]) { S.five = { at: S.clock }; if (!justPraised) fx.playOneMoreSfx(eng()); note('five'); }
+        if (id === 'lamp5' && F[4]) { S.five = { armed: S.clock, at: -1 }; if (!justPraised) fx.playOneMoreSfx(eng()); note('five'); }   // 帯と点滅は、液晶の灯の表示が5灯になってから（lamp5 の映像は最後で4灯→5灯。frame で at を決める）
       } else if (id === 'dup_protect' || id === 'roulette') {
         if (id === 'roulette') S.five = null;
         if (F[5] && !S.dupDone) { S.dupDone = true; S.dup = { at: S.clock, lane: p.lane ?? p.pocket ?? null }; fx.playDupSfx(eng()); note('dup', { lane: S.dup.lane, id }); }
@@ -75,7 +75,7 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
       }
       else S.sweepAt = -99;
     }
-    if (F[4] && S.five && game().lamps) {
+    if (F[4] && S.five && S.five.at >= 0 && game().lamps) {
       const lamps = game().lamps, on = frac(ck * 3.5) < 0.5;   // 約3.5Hz（4コマ以上）
       if (lamps.length === 5) { if (on) for (let h = 0; h < 7; h++) if (!lamps.includes(h + 1)) set(h, 1, .72, .12, 1.5); }
     }
@@ -134,6 +134,8 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
     ctx.restore();
   };
   const normalPhase = () => ['Ready', 'Flight', 'Effect'].includes(game().phase) && !game().meterStatus && !game().rouletteStatus && !lcd.jp?.model?.active && !lcd.choiceV20?.active;
+  // うぱの声かけを出してよいか：通常時で、残り時間に余裕があり、時間切れ・計数・カード（時間です！等）・JP中でない
+  const promptOk = () => { const g = game(); return normalPhase() && g.secondsLeft > 20 && !g.endPending && !lcd.current?.mode && !lcd.jp?.active; };
   const activeNow = () => !!(S.praise || S.five || S.dup || S.near?.start >= 0 || S.prompt);
 
   const frame0 = lcd.frame.bind(lcd);
@@ -149,7 +151,14 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
     }
     if (S.five) {
       if (g.lampCount !== 5 || g.meterStatus) S.five = null;
-      else { const u = S.clock - S.five.at; if (u < FT.five) drawBand(u); }
+      else {
+        const Fv = S.five;
+        if (Fv.at < 0) {   // 液晶の表示が5灯（lamp5 の映像が終わって idle5）になるまで待つ。「ナイス！」の最中も出さない。映像が想定外でも 5 秒で出す
+          const cur = lcd.current, shown5 = cur?.clip === 'idle5' && cur?.normalN === 5;
+          if ((shown5 || S.clock - Fv.armed > 5) && !S.praise) { Fv.at = S.clock; note('fiveShow', { clip: cur?.clip }); }
+        }
+        if (Fv.at >= 0) { const u = S.clock - Fv.at; if (u < FT.five) drawBand(u); }
+      }
     }
     if (S.dup) { const u = S.clock - S.dup.at; if (u >= FT.dup) S.dup = null; else drawDup(u); }
     if (S.near) {
@@ -166,12 +175,12 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
     if (F[3] && S.startAt >= 0 && !S.promptDone) {
       if (!S.prompt) {
         if (S.pressed) S.promptDone = true;
-        else if (S.clock - S.startAt >= FT.promptAfter && normalPhase() && !g.chainAnnouncing) { S.prompt = { at: S.clock, endAt: -1 }; fx.playChimeSfx(eng()); note('prompt'); }
+        else if (S.clock - S.startAt >= FT.promptAfter && promptOk() && !g.chainAnnouncing) { S.prompt = { at: S.clock, endAt: -1 }; fx.playChimeSfx(eng()); note('prompt'); }
       }
       if (S.prompt) {
         if (S.pressed && S.prompt.endAt < 0) S.prompt.endAt = S.clock;
         const u = S.clock - S.prompt.at, fade = S.prompt.endAt >= 0 ? 1 - (S.clock - S.prompt.endAt) / 0.3 : 1 - Math.max(0, u - FT.promptMax + 0.4) / 0.4;
-        if (fade <= 0 || !normalPhase() && g.meterStatus) { S.prompt = null; S.promptDone = true; } else drawPrompt(u, fade);
+        if (fade <= 0 || !promptOk()) { S.prompt = null; S.promptDone = true; } else drawPrompt(u, fade);
       }
     }
     ctx.restore();
