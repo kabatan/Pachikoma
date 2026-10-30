@@ -234,7 +234,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
           if(texture){
             let outTex=texture;
             {   // 初見向けの重ね描き(ナイス！等)は、GPU の映像の上に小さい層で重ねる(液晶 canvas へ落とさない)。?ftsplit=0 で従来
-              const fl=!lcd?.displayRecoveryActive&&!lcd?.splitBroken?lcd?.firstTimer?.splitLayers?.():null;
+              const fl=!lcd?.displayRecoveryActive&&!lcd?.splitBroken?((h,f)=>h||f?[...(h??[]),...(f??[])]:null)(lcd?.jpHud?.splitLayers?.(),lcd?.firstTimer?.splitLayers?.()):null;   // JPチャンスの札・焦り(jp_hud_1031)＋初見向けの重ね描き
               if(fl){try{const t2=(splitComp??=createSplitCompositor(THREE,hr.renderer)).compose([{tex:texture,w:1240,h:1510,ax:0,ay:0,x:0,y:0,rot:0,sc:1,alpha:1,add:false},...fl]);if(t2){outTex=t2;window.__ftSplitTexture=t2;}}catch(e){lcd.splitBroken=true;console.warn('[lcdsplit] 重ね描きの合成に失敗。従来へ戻します',e);}}
             }
             plate.mat.uniforms.uT.value=outTex;gpu.published=true;uploadRevision=undefined;return last;
@@ -248,10 +248,10 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
         if(!stable||uploadCanvas!==last.lcd||uploadTexture!==plate.tex||plate.tex.image!==last.lcd||uploadRevision!==revision)plate.tex.needsUpdate=true;
         uploadCanvas=last.lcd;uploadTexture=plate.tex;uploadRevision=stable?revision:undefined;
         {   // 時計(残り時間)は液晶 canvas に描かず小さい層で重ねる: 液晶 canvas の保存・復元(読み戻し)を無くす。?timersplit=0 で従来
-          const tl=!lcd?.displayRecoveryActive&&!lcd?.splitBroken?lcd?.timerSplit?.layer():null;
+          const tl0=!lcd?.displayRecoveryActive&&!lcd?.splitBroken?lcd?.timerSplit?.layer():null,jh=!lcd?.displayRecoveryActive&&!lcd?.splitBroken?lcd?.jpHud?.splitLayers?.():null,tl=jh?[...(tl0?(Array.isArray(tl0)?tl0:[tl0]):[]),...jh]:tl0;   // 2D 面の経路でも JPチャンスの札を重ねる
           if(tl&&last.lcd.width===1240&&last.lcd.height===1510){
             let tex=null;
-            try{tex=(splitComp??=createSplitCompositor(THREE,hr.renderer)).compose([{tex:plate.tex,w:1240,h:1510,ax:0,ay:0,x:0,y:0,rot:0,sc:1,alpha:1,add:false},tl]);}catch(e){lcd.splitBroken=true;console.warn('[lcdsplit] 時計の合成に失敗。従来へ戻します',e);}
+            try{tex=(splitComp??=createSplitCompositor(THREE,hr.renderer)).compose([{tex:plate.tex,w:1240,h:1510,ax:0,ay:0,x:0,y:0,rot:0,sc:1,alpha:1,add:false},...(Array.isArray(tl)?tl:[tl])]);}catch(e){lcd.splitBroken=true;console.warn('[lcdsplit] 時計の合成に失敗。従来へ戻します',e);}
             if(tex){window.__timerSplitTexture=tex;plate.mat.uniforms.uT.value=tex;}
           }
         }

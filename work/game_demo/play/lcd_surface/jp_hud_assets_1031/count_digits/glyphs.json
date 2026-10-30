@@ -1,0 +1,33 @@
+{
+ "size": "big",
+ "style": "ember",
+ "hpx": 72,
+ "scale": 8.0,
+ "glyphs": {
+  "1": {
+   "file": "1.png",
+   "cell": "cell_1.png",
+   "w": 432,
+   "h": 715,
+   "ox": -21.0,
+   "oy": -34.5
+  },
+  "2": {
+   "file": "2.png",
+   "cell": "cell_2.png",
+   "w": 543,
+   "h": 719,
+   "ox": -28.25,
+   "oy": -34.25
+  },
+  "3": {
+   "file": "3.png",
+   "cell": "cell_3.png",
+   "w": 530,
+   "h": 722,
+   "ox": -28.125,
+   "oy": -34.75
+  }
+ },
+ "note": "ox,oy＝切り出し PNG の左上の、文字の中心（原点）からのずれ（px、SCALE=1 換算、y は下向き）。w,h は PNG の画素数（SCALE 倍）"
+}

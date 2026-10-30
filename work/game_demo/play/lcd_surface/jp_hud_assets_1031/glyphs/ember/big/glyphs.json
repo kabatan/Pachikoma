@@ -1,0 +1,129 @@
+{
+ "size": "big",
+ "style": "ember",
+ "hpx": 72,
+ "scale": 2.0,
+ "glyphs": {
+  "0": {
+   "file": "0.png",
+   "cell": "cell_0.png",
+   "w": 133,
+   "h": 188,
+   "ox": -25.5,
+   "oy": -36.5
+  },
+  "1": {
+   "file": "1.png",
+   "cell": "cell_1.png",
+   "w": 115,
+   "h": 187,
+   "ox": -22.5,
+   "oy": -36.5
+  },
+  "2": {
+   "file": "2.png",
+   "cell": "cell_2.png",
+   "w": 143,
+   "h": 187,
+   "ox": -30.0,
+   "oy": -36.0
+  },
+  "3": {
+   "file": "3.png",
+   "cell": "cell_3.png",
+   "w": 140,
+   "h": 188,
+   "ox": -30.0,
+   "oy": -36.5
+  },
+  "4": {
+   "file": "4.png",
+   "cell": "cell_4.png",
+   "w": 148,
+   "h": 187,
+   "ox": -31.5,
+   "oy": -37.0
+  },
+  "5": {
+   "file": "5.png",
+   "cell": "cell_5.png",
+   "w": 150,
+   "h": 188,
+   "ox": -31.0,
+   "oy": -37.0
+  },
+  "6": {
+   "file": "6.png",
+   "cell": "cell_6.png",
+   "w": 144,
+   "h": 189,
+   "ox": -25.5,
+   "oy": -37.0
+  },
+  "7": {
+   "file": "7.png",
+   "cell": "cell_7.png",
+   "w": 135,
+   "h": 188,
+   "ox": -22.0,
+   "oy": -37.0
+  },
+  "8": {
+   "file": "8.png",
+   "cell": "cell_8.png",
+   "w": 137,
+   "h": 188,
+   "ox": -27.5,
+   "oy": -36.5
+  },
+  "9": {
+   "file": "9.png",
+   "cell": "cell_9.png",
+   "w": 144,
+   "h": 188,
+   "ox": -31.5,
+   "oy": -36.5
+  },
+  ":": {
+   "file": "colon.png",
+   "cell": "cell_colon.png",
+   "w": 88,
+   "h": 146,
+   "ox": -16.0,
+   "oy": -15.5
+  },
+  ".": {
+   "file": "dot.png",
+   "cell": "cell_dot.png",
+   "w": 78,
+   "h": 78,
+   "ox": -16.0,
+   "oy": 18.5
+  },
+  "あ": {
+   "file": "a.png",
+   "cell": "cell_a.png",
+   "w": 100,
+   "h": 107,
+   "ox": -22.5,
+   "oy": -23.0
+  },
+  "と": {
+   "file": "to.png",
+   "cell": "cell_to.png",
+   "w": 88,
+   "h": 108,
+   "ox": -19.0,
+   "oy": -24.0
+  },
+  "個": {
+   "file": "ko.png",
+   "cell": "cell_ko.png",
+   "w": 136,
+   "h": 131,
+   "ox": -28.0,
+   "oy": -27.0
+  }
+ },
+ "note": "ox,oy＝切り出し PNG の左上の、文字の中心（原点）からのずれ（px、SCALE=1 換算、y は下向き）。w,h は PNG の画素数（SCALE 倍）"
+}
