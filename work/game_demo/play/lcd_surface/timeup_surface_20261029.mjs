@@ -6,7 +6,8 @@ import {createTimeupTotal} from './total_digits_20261029.mjs';
 // 継続(時間切れの動画)の転送削減(10/30): 動画を VideoTexture で直接 GPU へ、字や板は小さい層で重ねる。?timeupvideo=0 で従来(液晶 canvas を毎回全面転送)
 const SPLIT_ON=new URLSearchParams(globalThis.location?.search??'').get('timeupvideo')!=='0';
 const SPLIT_CHECK=new URLSearchParams(globalThis.location?.search??'').has('splitcheck');
-const SPLIT_SETTLE=1.6;   // 入りの動き(板と字のせり出し・説明の出現)が終わってから切り替える
+const PAUSE_GUARD=new URLSearchParams(globalThis.location?.search??'').get('pauseguard')!=='0';   // 止まっている映像へ毎フレーム pause() を呼ばない(約0.1ms)。?pauseguard=0 で従来
+const SPLIT_SETTLE=.35;   // 入りの最初(動画の立ち上がり)だけ従来描画。その後の説明の出現は timeup_help が層の透明度・位置で出す
 const W=1152,H=1268,PX=34,PY=28;
 export async function attachTimeupSurface(lcd,{controller,canvas,onInput,unlock,manifestUrl=new URL('../../../effects/jp_teacher/09_timeup/prod/final/manifest.json',import.meta.url)}={}){
   if(!lcd?.production||lcd.timeupSurface)return lcd;
@@ -41,7 +42,7 @@ export async function attachTimeupSurface(lcd,{controller,canvas,onInput,unlock,
     if(!waiting)target=Math.min(manifest.duration-1/manifest.fps,Math.max(0,30-g.offerLeft));
     if(next!==active){active=next;if(active){target=0;plateIdx=0;totalOv.enter();heldCtx.drawImage(first,0,0);v.currentTime=0;record('enter',{offerLeft:g.offerLeft});}else{v.pause();record('exit',{phase:g.phase,secondsLeft:g.secondsLeft,wallet:g.wallet});}}
     if(g.phase!==lastPhase){lastPhase=g.phase;record('phase',{phase:lastPhase,offerLeft:g.offerLeft});}
-    if(waiting)v.pause();
+    if(waiting&&(!PAUSE_GUARD||!v.paused))v.pause();
     if(active&&!waiting&&!manual&&v.paused)v.play().catch(()=>{});
     if(active&&!waiting&&!manual&&!v.seeking&&Math.abs(v.currentTime-target)>.18)v.currentTime=target;
   };
@@ -66,6 +67,14 @@ export async function attachTimeupSurface(lcd,{controller,canvas,onInput,unlock,
       layers.push({tex:sp.rowTex,w:row.w,h:row.h,ax:row.w/2,ay:row.h/2,x:row.x,y:row.y,rot:0,sc:row.pop,alpha:row.a,add:false});}
     sp.layers=layers;
   };
+  (lcd.splitWarmers??=[]).push({name:'timeup',done:false,step(r){   // 継続の板(32枚)と動画の初回転送を空き時間に済ませる(?splitwarm=0 で従来)
+    if(!SPLIT_ON||sp.fail)return(this.done=true);
+    if(!this.ks){this.ks=[];const seen=new Set();for(let i=0;i<900;i++){const pl=totalOv.split.plate(i);if(pl&&!seen.has(pl.k)){seen.add(pl.k);this.ks.push(pl);}}}
+    const pl=this.ks.shift();
+    if(pl){let pt=sp.ptex.get(pl.k);if(!pt){pt=layerTexture(THREE,pl.img);sp.ptex.set(pl.k,pt);}r.initTexture(pt);return false;}
+    if(v.readyState>=2){sp.vtex??=layerTexture(THREE,v);r.initTexture(sp.vtex);}
+    return(this.done=true);
+  }});
   lcd.frame=(dt,F)=>{
     sync();
     if(!active&&sp.wasSplit){   // 継続の画面を出た瞬間: 次の場面の切替が液晶 canvas を写し取っても同じ絵になるよう、最後の絵を一度だけ canvas へ描く

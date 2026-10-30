@@ -6,7 +6,8 @@ import * as THREE from '../../web/vendor/three/three.module.js';
 import { layerTexture } from './lcd_split_1030.mjs';
 const W = 1152, PX = 34, PY = 28;
 
-export function timeupHelpMode(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('timeuphelp') === '0' ? 'old' : 'new'; }
+// 10/31 初心者向けの説明札は既定で無し（うぱの吹き出しが説明する）。?helpcards=1 で戻す（そのうえで ?timeuphelp=0 なら従来どおり無し）。
+export function timeupHelpMode(search = globalThis.location?.search ?? '') { const q = new URLSearchParams(search); return q.get('helpcards') === '1' && q.get('timeuphelp') !== '0' ? 'new' : 'old'; }
 
 const ease = t => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 const fontFor = sz => sz <= 52 ? `${sz}px "MPLUS1p-ExtraBold","Dela Gothic One","Noto Sans JP",sans-serif` : `${sz}px "Dela Gothic One","MPLUS1p-ExtraBold","Noto Sans JP",sans-serif`;   // 小さい字は縁に潰れにくい太ゴシック
@@ -83,15 +84,15 @@ export async function attachTimeupHelp(lcd, { controller } = {}) {
       else { textPath(ctx, `${f.rankName}まで`, 261, 396, 52, { fill: WHITE, glow: '#8a5cff' }); textPath(ctx, `あと${f.need}玉！`, 261, 476, 74, { fill: GOLD, glow: '#ff9a20' }); }
       ctx.restore(); }
     // 3) 右の札の上: 100円で今の続きから（灯の数・あと1灯）
-    if (!only || only === 2) { const k = ease((t - .5) / .35), c = f.ctx; ctx.save(); ctx.globalAlpha = k; ctx.translate((1 - k) * 40, 0);
+    if (!only || only === 3) { const k = ease((t - .5) / .35), c = f.ctx; ctx.save(); ctx.globalAlpha = k; ctx.translate((1 - k) * 40, 0);
       const h = 52 + c.lines.length * 44 + (c.sub ? 36 : 0); plate(ctx, 690, 232, 380, h, 24, 'rgba(255,220,120,.95)', .88);
       let y = 232 + 58; c.lines.forEach((ln, i) => { richLine(ctx, ln.map(p => [p[0], p[1]]), 880, y, i === 0 ? 36 : 40); y += 46; });
       if (c.sub) textPath(ctx, c.sub, 880, y - 2, 28, { fill: CYAN, silver: false });
       ctx.restore(); }
     // 4) 砂時計の数字の上: これが「100円で入る分」
-    if (!only || only === 2) { const k = ease((t - .8) / .3); ctx.save(); ctx.globalAlpha = k; textPath(ctx, '100円で', 965, 430, 40, { fill: GOLD, glow: '#ff9a20' }); ctx.restore(); }
+    if (!only || only === 4) { const k = ease((t - .8) / .3); ctx.save(); ctx.globalAlpha = k; textPath(ctx, '100円で', 965, 430, 40, { fill: GOLD, glow: '#ff9a20' }); ctx.restore(); }
     // 5) ボタンの指し示し（絵は動かさず、ボタンの字のすぐ上に札で）
-    if (!only || only === 2) { const k = ease((t - 1) / .3); ctx.save(); ctx.globalAlpha = k;
+    if (!only || only === 5) { const k = ease((t - 1) / .3); ctx.save(); ctx.globalAlpha = k;
       plate(ctx, 60, 728, 404, 70, 20, 'rgba(200,210,255,.95)', .94); textPath(ctx, '左ボタンで 終わる', 262, 778, 46, { fill: WHITE, silver: false });
       plate(ctx, 566, 728, 480, 70, 20, 'rgba(255,205,90,.95)', .94); textPath(ctx, '右ボタンで 続ける', 806, 778, 48, { fill: GOLD, silver: false });
       ctx.restore(); }
@@ -108,19 +109,35 @@ export async function attachTimeupHelp(lcd, { controller } = {}) {
     } else sp.on = false;
     drawing = true; st.drawn++; draw(now);
   };
-  // ---- 分割描画 ----
+  // ---- 分割描画 ----（入りの動きも層の透明度・位置で同じ式で出す。札ごとに小さい canvas、内容が変わる時だけ描き直す）
   const SPLIT_ON = new URLSearchParams(globalThis.location?.search ?? '').get('timeupvideo') !== '0';
   const SPLIT_CHECK = new URLSearchParams(globalThis.location?.search ?? '').has('splitcheck');
-  const sp = { on: false, fail: false, c1: null, c2: null, t1: null, t2: null, key1: null, key2: null };
-  const R1 = [20, 0, 1100, 160], R2 = [20, 220, 1100, 620], T_SETTLED = 10;
+  const BLK = [null, [20, 0, 1100, 160], [20, 230, 480, 340], [630, 190, 500, 340], [820, 360, 290, 140], [20, 690, 1090, 170]];   // [x,y,w,h] 札ごとの小さい canvas の範囲(panel 座標)
+  const sp = { on: false, fail: false, c: [], t: [], key: [], };
+  const T_SETTLED = 10;
   function buildSplit() {
     const game = g(), f = continueFacts(game), left = Math.ceil(game.offerLeft ?? 0), k2 = JSON.stringify([f.top, f.rankName, f.need, f.ctx, f.lamps, f.extra]);
-    if (!sp.c1) { sp.c1 = document.createElement('canvas'); sp.c1.width = R1[2]; sp.c1.height = R1[3]; sp.c2 = document.createElement('canvas'); sp.c2.width = R2[2]; sp.c2.height = R2[3]; sp.t1 = layerTexture(THREE, sp.c1); sp.t2 = layerTexture(THREE, sp.c2); }
-    if (sp.key1 !== left) { const x = sp.c1.getContext('2d'); x.clearRect(0, 0, R1[2], R1[3]); draw(0, x, 1, T_SETTLED, -R1[0], -R1[1]); sp.t1.needsUpdate = true; sp.key1 = left; }
-    if (sp.key2 !== k2) { const x = sp.c2.getContext('2d'); x.clearRect(0, 0, R2[2], R2[3]); draw(0, x, 2, T_SETTLED, -R2[0], -R2[1]); sp.t2.needsUpdate = true; sp.key2 = k2; }
+    for (let i = 1; i <= 5; i++) {
+      const R = BLK[i];
+      if (!sp.c[i]) { const c = document.createElement('canvas'); c.width = R[2]; c.height = R[3]; sp.c[i] = c; sp.t[i] = layerTexture(THREE, c); sp.key[i] = null; }
+      const want = i === 1 ? left : k2;
+      if (sp.key[i] !== want) { const x = sp.c[i].getContext('2d'); x.clearRect(0, 0, R[2], R[3]); draw(0, x, i, T_SETTLED, -R[0], -R[1]); sp.t[i].needsUpdate = true; sp.key[i] = want; }
+    }
   }
-  const splitLayers = () => (sp.on && !sp.fail ? [{ tex: sp.t1, w: R1[2], h: R1[3], ax: 0, ay: 0, x: PX + R1[0], y: PY + R1[1], rot: 0, sc: 1, alpha: 1, add: false }, { tex: sp.t2, w: R2[2], h: R2[3], ax: 0, ay: 0, x: PX + R2[0], y: PY + R2[1], rot: 0, sc: 1, alpha: 1, add: false }] : null);
-  if (revision) Object.defineProperty(lcd, 'uploadRevision', { configurable: true, enumerable: true, get: () => drawing ? undefined : revision.call(lcd) });
+  const splitLayers = () => {
+    if (!sp.on || sp.fail || st.since == null) return null;
+    const t = (performance.now() - st.since) / 1000, out = [];
+    for (let i = 1; i <= 5; i++) {
+      const R = BLK[i]; let k, dx = 0, dy = 0;
+      if (i === 1) { k = ease(t / .35); dy = (1 - k) * -40; }
+      else if (i === 2) { k = ease((t - .25) / .35); dy = (1 - k) * 30; }
+      else if (i === 3) { k = ease((t - .5) / .35); dx = (1 - k) * 40; }
+      else if (i === 4) k = ease((t - .8) / .3);
+      else k = ease((t - 1) / .3);
+      if (k > 0) out.push({ tex: sp.t[i], w: R[2], h: R[3], ax: 0, ay: 0, x: PX + R[0] + dx, y: PY + R[1] + dy, rot: 0, sc: 1, alpha: k, add: false });
+    }
+    return out;
+  };
   lcd.timeupHelp = { splitLayers, state: st, get drawing() { return drawing; }, continueFacts: () => continueFacts(g()) };
   return lcd;
 }

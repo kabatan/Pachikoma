@@ -5,7 +5,7 @@ const PX=34,PY=28,SPRITE_LIMIT=104;
 // 10/30 pair style: the seconds HUD mirrors the lit-count badge (top-left "N灯") — same baked glyph family, same scale (0.38 px per glyph unit), same height, mirrored margins. ?timerhud=0 restores the previous HUD.
 const TIMEUP_SKIP=!(typeof location!=='undefined'&&(new URLSearchParams(location.search).get('timeupskip')==='0'||new URLSearchParams(location.search).get('hudhandoff')==='0'));
 const TIMER_SPLIT=!(typeof location!=='undefined'&&new URLSearchParams(location.search).get('timersplit')==='0');   // 時計を液晶 canvas に描かず小さい層で重ねる(保存・復元の drawImage 読み戻しを無くす)。?timersplit=0 で従来
-const SPLIT_PHASES=new Set(['Ready','Flight','Effect','Fault','Meter','Roulette']);   // 時計の上に重ね描きする外側の層(選択・時間切れ・スタッフ)が出ない局面だけ
+const SPLIT_PHASES=new Set(['Ready','Flight','Effect','Fault','Meter','Roulette','ChainChoice']);   // 時計の上に重ね描きする外側の層(選択・時間切れ・スタッフ)が出ない局面だけ
 const PAIR=!(typeof location!=='undefined'&&new URLSearchParams(location.search).get('timerhud')==='0');
 // HUD region in panel-canvas px (1240x1510). The GPU compositors hard-code the same rectangle (vec2(690.,130.)/vec2(496.,410.)); change both together.
 const HUD={x:690,y:130,w:496,h:410};

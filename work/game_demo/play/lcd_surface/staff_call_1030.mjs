@@ -10,7 +10,8 @@ const RESUME_SECONDS = 1.9, GUARD_SECONDS = 1.0;
 // スタッフ待ち画面の転送削減(10/30): 動かない絵は一度だけ、動く絵は行列で、動的な小片だけ小さい canvas で毎フレーム。?staffsplit=0 で従来(全面 canvas を毎回転送)
 const SPLIT_ON = new URLSearchParams(globalThis.location?.search ?? '').get('staffsplit') !== '0';
 const SPLIT_CHECK = new URLSearchParams(globalThis.location?.search ?? '').has('splitcheck');
-const SPLIT_SETTLE = 1.35;   // 入りの動き(最長 1.2 秒)が終わってから分割に切り替える
+const ARR_KEY = new URLSearchParams(globalThis.location?.search ?? '').get('arrkey') !== '0';
+const SPLIT_SETTLE = 0.3;   // 地(前の画面を覆う淡い重なり .25 秒)が終わってから分割に切り替える。その後の入りの動き(最長 1.2 秒)は層の透明度・位置で同じ式で出す
 
 export function staffFlowMode(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('staffflow') === 'old' ? 'old' : 'new'; }
 
@@ -235,24 +236,36 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     const pulse = .5 + .5 * Math.sin(t * 5.2);
     if (sp.panelKey !== panelKey()) { spDraw('C', elC); sp.tex.C.needsUpdate = true; sp.panelKey = panelKey(); }
     spDraw('BAND', (x) => elBand(x, pulse)); sp.tex.BAND.needsUpdate = true;
-    spDraw('ARR', (x) => elArrows(x, t)); sp.tex.ARR.needsUpdate = true;
+    if (ARR_KEY) { const k = [0, 1, 2].map(i => ((t * 3 - i) % 3 < 1 ? 1 : 0)).join(''); if (k !== sp.arrKey) { sp.arrKey = k; spDraw('ARR', (x) => elArrows(x, t)); sp.tex.ARR.needsUpdate = true; } }   // 矢印は3通りの絵しかない(0.33秒ごとに点灯がずれる)ので、変わった時だけ描いて転送する。?arrkey=0 で毎フレーム
+    else { spDraw('ARR', (x) => elArrows(x, t)); sp.tex.ARR.needsUpdate = true; }
     const sc = 1 + .025 * pulse, bob = Math.sin(t * 3.1) * 12;
     const R = (k) => [PX + RECT[k][0], PY + RECT[k][1], RECT[k][2], RECT[k][3]];
     const rc = (k, o = {}) => { const [x, y, w, h] = R(k); return L(k, w, h, { x, y, ...o }); };
+    // 入りの動き(drawCall と同じ式): 帯・字は遅れてせり上がり、チケット・矢印・うぱは .5 秒から、説明板は .8 秒から
+    const bandIn = ease(t / .35), rise = (d) => { const k = ease((t - d) / .4); return [(1 - k) * 70, k]; };
+    const [yA, kA] = rise(.15), [yT, kT] = rise(.3), [yB, kB] = rise(.45), tk = ease((t - .5) / .5), info = ease((t - .8) / .4);
+    const [bx, by, bw, bh] = R('BAND'), [cx, cy, cw, ch] = R('C'), [ax, ay, aw, ah] = R('A'), [ex, ey, ew, eh] = R('B');
     const layers = [
       L('bg', W, H, { x: PX, y: PY }),
       L('rays', 1400, 1400, { ax: 700, ay: 700, x: PX + W / 2, y: PY + 560, rot: t * .22, alpha: .55 + .2 * pulse, add: true }),
-      rc('BAND'),
-      rc('A'),
-      L('T2', RECT.T2[2], RECT.T2[3], { ax: W / 2 - RECT.T2[0], ay: 520 - RECT.T2[1], x: PX + W / 2, y: PY + 520, sc }),
-      rc('B'),
-      L('ticket', 560, 300, { ax: 280, ay: 150, x: PX + 360, y: PY + 925 + bob, rot: -.07 + Math.sin(t * 2.4) * .035 }),
+      L('BAND', bw, bh, { x: bx, y: by + (1 - bandIn) * -60, alpha: bandIn }),
+      L('A', aw, ah, { x: ax, y: ay + yA, alpha: kA }),
+      L('T2', RECT.T2[2], RECT.T2[3], { ax: W / 2 - RECT.T2[0], ay: 520 - RECT.T2[1], x: PX + W / 2, y: PY + 520 + yT, sc, alpha: kT }),
+      L('B', ew, eh, { x: ex, y: ey + yB, alpha: kB }),
+      L('ticket', 560, 300, { ax: 280, ay: 150, x: PX + 360, y: PY + 925 + bob + (1 - tk) * 80, rot: -.07 + Math.sin(t * 2.4) * .035, alpha: tk }),
     ];
-    if (sp.tex.upa) { const { uw, uh } = upaScale(); layers.push(L('upa', uw, uh, { ax: uw / 2, ay: uh / 2, x: PX + 850, y: PY + 890 + Math.sin(t * 4.1) * 10 })); }
-    layers.push(rc('ARR'), rc('C'));
+    if (sp.tex.upa) { const { uw, uh } = upaScale(); layers.push(L('upa', uw, uh, { ax: uw / 2, ay: uh / 2, x: PX + 850, y: PY + 890 + Math.sin(t * 4.1) * 10, alpha: tk })); }
+    layers.push(rc('ARR', { alpha: tk }), L('C', cw, ch, { x: cx, y: cy + (1 - info) * 50, alpha: info }));
     sp.layers = layers;
   }
 
+  // 起動後の空き時間に、静止片の描画とテクスチャの初回転送を一段ずつ済ませる(初めてスタッフ待ちに入る瞬間の約100msの山を無くす)。?splitwarm=0 で従来
+  (lcd.splitWarmers ??= []).push({ name: 'staff', done: false, step(r) {
+    if (!SPLIT_ON || sp.fail) return (this.done = true);
+    if (!sp.built) { stages[sp.stage++](); return false; }
+    this.keys ??= Object.keys(sp.tex); const k = this.keys.shift(); if (!k) return (this.done = true);
+    r.initTexture(sp.tex[k]); return false;
+  } });
   // ---- lcd へ重ねる（timeup_surface のあと）----
   const base = { frame: lcd.frame.bind(lcd) };
   const revision = Object.getOwnPropertyDescriptor(lcd, 'uploadRevision')?.get;

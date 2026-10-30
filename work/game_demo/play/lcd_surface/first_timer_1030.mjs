@@ -35,7 +35,9 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
   const qs = new URLSearchParams(globalThis.location?.search ?? '');
   const on = (n) => { const v = qs.get('ft' + n); return v !== '0' && v !== 'off'; };
   const SPLIT_ON = qs.get('ftsplit') !== '0';
-  const sp = { on: false, fail: false, cAdd: null, cOver: null, tcAdd: null, tcOver: null };
+  const SLOT = { fullAdd: [0, 0, W, H], full: [0, 0, W, H], band: [0, 360, W, 340], dup: [0, 660, W, 260], prompt: [0, 300, W, 760] };   // 札ごとの範囲(panel 座標)
+  const use = (name, addName) => { if (!sp.on) return; const sl = sp.slots[name]; sl.used = true; ctx = sl.x; if (addName) { const sa = sp.slots[addName]; sa.used = true; ctxA = sa.x; } else ctxA = sl.x; };
+  const sp = { on: false, fail: false, slots: null };
   const F = { 1: on(1), 2: on(2), 3: on(3), 4: on(4), 5: on(5) };
   if (!Object.values(F).some(Boolean)) return lcd;
   const mainCtx = lcd.canvas.getContext('2d');
@@ -172,15 +174,17 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
     sp.on = false;
     if (viaGpu) {
       try {
-        if (!sp.cOver) { for (const k of ['cAdd', 'cOver']) { const c = document.createElement('canvas'); c.width = W; c.height = H; sp[k] = c; sp['t' + k] = layerTexture(THREE, c); } }
-        sp.cAdd.getContext('2d').clearRect(0, 0, W, H); sp.cOver.getContext('2d').clearRect(0, 0, W, H);
-        ctx = sp.cOver.getContext('2d'); ctxA = sp.cAdd.getContext('2d'); sp.on = true;
+        // 出ている札の分だけの小さい canvas(帯・穴・うぱの声かけは字の周りだけ、全面は「ナイス！」と「あと◯本」だけ)。出ていない間は触らず転送もしない
+        if (!sp.slots) { sp.slots = {}; for (const [k, r] of Object.entries(SLOT)) { const c = document.createElement('canvas'); c.width = r[2]; c.height = r[3]; sp.slots[k] = { r, c, x: c.getContext('2d'), tex: layerTexture(THREE, c), used: false, dirty: false }; } }
+        for (const sl of Object.values(sp.slots)) { sl.used = false; if (sl.dirty) sl.x.clearRect(sl.r[0], sl.r[1], sl.r[2], sl.r[3]); sl.x.setTransform(1, 0, 0, 1, -sl.r[0], -sl.r[1]); }
+        sp.on = true;
       } catch (e) { sp.fail = true; console.warn('[first-timer] 分割描画を止めて従来へ戻します', e); ctx = ctxA = mainCtx; }
     } else { ctx = ctxA = mainCtx; }
-    ctx.save(); if (!sp.on) { ctx.translate(PX, PY); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); }
+    if (!sp.on) { ctx = ctxA = mainCtx; }
+    if (!sp.on) { mainCtx.save(); mainCtx.translate(PX, PY); mainCtx.beginPath(); mainCtx.rect(0, 0, W, H); mainCtx.clip(); }
     if (S.praise) {   // 囲いを虹色に（cue）と字
       const u = S.clock - S.praise.at;
-      if (u >= FT.praise) { S.praise = null; lcd.cabinetLightScript?.cue?.(null); } else { lcd.cabinetLightScript?.cue?.('first_lamp', u); drawPraise(u); }
+      if (u >= FT.praise) { S.praise = null; lcd.cabinetLightScript?.cue?.(null); } else { lcd.cabinetLightScript?.cue?.('first_lamp', u); use('full', 'fullAdd'); drawPraise(u); }
     }
     if (S.five) {
       if (g.lampCount !== 5 || g.meterStatus) S.five = null;
@@ -190,10 +194,10 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
           const cur = lcd.current, shown5 = cur?.clip === 'idle5' && cur?.normalN === 5;
           if ((shown5 || S.clock - Fv.armed > 5) && !S.praise) { Fv.at = S.clock; note('fiveShow', { clip: cur?.clip }); }
         }
-        if (Fv.at >= 0) { const u = S.clock - Fv.at; if (u < FT.five) drawBand(u); }
+        if (Fv.at >= 0) { const u = S.clock - Fv.at; if (u < FT.five) { use('band'); drawBand(u); } }
       }
     }
-    if (S.dup) { const u = S.clock - S.dup.at; if (u >= FT.dup) S.dup = null; else drawDup(u); }
+    if (S.dup) { const u = S.clock - S.dup.at; if (u >= FT.dup) S.dup = null; else { use('dup'); drawDup(u); } }
     if (S.near) {
       const N = S.near, m = lcd.jp?.model, failing = !!m?.active && /^fail_/.test(m.name ?? '');
       if (failing) N.seen = true;
@@ -202,7 +206,7 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
           if (g.secondsLeft > 0 && ['Ready', 'Flight', 'Effect'].includes(g.phase) && !m?.active) { N.start = S.clock; fx.playNearMissSfx(eng()); note('near', { rem: N.rem }); } else S.near = null;
         } else if (S.clock - N.armed > 12) S.near = null;
       }
-      if (S.near && N.start >= 0) { const u = S.clock - N.start; if (u >= FT.near) S.near = null; else drawNear(u, N.rem); }
+      if (S.near && N.start >= 0) { const u = S.clock - N.start; if (u >= FT.near) S.near = null; else { use('full'); drawNear(u, N.rem); } }
     }
     // うぱの声かけ：開始から5秒押していなければ。最初の押下で引っ込める（最大10秒）
     if (F[3] && S.startAt >= 0 && !S.promptDone) {
@@ -213,11 +217,11 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
       if (S.prompt) {
         if (S.pressed && S.prompt.endAt < 0) S.prompt.endAt = S.clock;
         const u = S.clock - S.prompt.at, fade = S.prompt.endAt >= 0 ? 1 - (S.clock - S.prompt.endAt) / 0.3 : 1 - Math.max(0, u - FT.promptMax + 0.4) / 0.4;
-        if (fade <= 0 || !promptOk()) { S.prompt = null; S.promptDone = true; } else drawPrompt(u, fade);
+        if (fade <= 0 || !promptOk()) { S.prompt = null; S.promptDone = true; } else { use('prompt'); drawPrompt(u, fade); }
       }
     }
-    ctx.restore();
-    if (sp.on) { sp.tcAdd.needsUpdate = true; sp.tcOver.needsUpdate = true; }
+    if (!sp.on) mainCtx.restore();
+    else for (const sl of Object.values(sp.slots)) { if (sl.used || sl.dirty) sl.tex.needsUpdate = true; sl.dirty = sl.used; }
     ctx = ctxA = mainCtx;
     return r;
   };
@@ -225,7 +229,11 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
   const rev = Object.getOwnPropertyDescriptor(lcd, 'uploadRevision')?.get;
   if (rev) Object.defineProperty(lcd, 'uploadRevision', { configurable: true, enumerable: true, get: () => (activeNow() ? undefined : rev.call(lcd)) });
   const nearMiss = ({ rem = 1, kind = 'jp' } = {}) => { if (!F[1]) return; S.near = { rem: clamp(Math.round(rem), 1, 7), kind, armed: S.clock, seen: false, start: -1 }; note('nearArm', { rem, kind }); };
-  const splitLayers = () => (sp.on && !sp.fail && activeNow() ? [{ tex: sp.tcAdd, w: W, h: H, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 1, add: true }, { tex: sp.tcOver, w: W, h: H, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 1, add: false }] : null);
+  const splitLayers = () => {
+    if (!sp.on || sp.fail || !sp.slots) return null;
+    const out = []; for (const k of ['fullAdd', 'full', 'band', 'dup', 'prompt']) { const sl = sp.slots[k]; if (sl.used) out.push({ tex: sl.tex, w: sl.r[2], h: sl.r[3], ax: 0, ay: 0, x: PX + sl.r[0], y: PY + sl.r[1], rot: 0, sc: 1, alpha: 1, add: k === 'fullAdd' }); }
+    return out.length ? out : null;
+  };
   lcd.overlayHold = () => (SPLIT_ON && !sp.fail && !lcd.splitBroken ? false : activeNow());   // normal_surface が見る：重ね描き中はGPUの映像経路を使わない
   lcd.firstTimer = { splitLayers, state: S, flags: F, nearMiss, holeFn, FT, dispose() { lcd.overlayHold = null; controller.dispatch = dispatch0; lcd.onEvent = base0; lcd.frame = frame0; if (lcd.cabinetLightScript?.holeOverlay === holeFn) lcd.cabinetLightScript.holeOverlay = null; if (lcd.cabinetLightScript?.sideOverlay === sideFn) lcd.cabinetLightScript.sideOverlay = null; } };
   return lcd;
