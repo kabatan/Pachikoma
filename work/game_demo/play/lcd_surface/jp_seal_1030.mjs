@@ -37,6 +37,22 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
   const ds = Object.keys(ms.byD ?? {}).filter((d) => ms.byD[d]?.N && man.scenes[`jp_aim_seal_d${d}_s0`] === undefined);
   if (!ds.length) return lcd;
   for (const [k, v] of Object.entries(ms.scenes)) man.scenes[k] = v;
+  // 10/31 鎖が切れる豪華版（監督承認の第4版。大きな鎖の輪の寄り→C字の破片と錠の破片→光の帯→白飛び→「あと◯本」の叩きつけ。576x634）。
+  //   ?jpgb=0 で旧（seal_jp/ の b）のまま。差し替えるのは b{k} の file / frames / skipF と seal.gb=true（音の表 seal_scenes_gb を使う印）だけ。open は旧のまま。作り方は work/effects/r4_h_fx/seal_door/jp_through/（gb_debris.py / seal_make_gb.py / gb_all.sh）。
+  if (qs.get('jpgb') !== '0') {
+    try {
+      const r = await fetch(new URL('./jp1029/seal_jp_gb/manifest_gb.json', import.meta.url));
+      if (r.ok) {
+        const mgb = await r.json(); let n = 0;
+        for (const [k, v] of Object.entries(man.scenes)) {
+          const m = /^jp_aim_seal_d\d_b(\d+)$/.exec(k); const e = m && mgb[`n${v.seal?.N}_b${m[1]}`];
+          if (!e) continue;
+          v.file = e.file; v.frames = e.frames; v.seal = { ...v.seal, skipF: e.skipF ?? v.seal?.skipF, gb: true }; n++;
+        }
+        globalThis.__jpGb = { n };
+      }
+    } catch (e) { console.warn('[jp-seal] gb manifest', e); }
+  }
   // 10/31 カットイン第3版（?jpcut=0 で旧）
   const cutQ = qs.get('jpcut');
   if (cutQ === '1') {

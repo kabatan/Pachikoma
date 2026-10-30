@@ -1,0 +1,52 @@
+{
+ "n2_b1": {
+  "file": "seal_jp_gb/seal_n2_b1.mp4",
+  "frames": 86,
+  "skipF": 44
+ },
+ "n3_b1": {
+  "file": "seal_jp_gb/seal_n3_b1.mp4",
+  "frames": 86,
+  "skipF": 44
+ },
+ "n3_b2": {
+  "file": "seal_jp_gb/seal_n3_b2.mp4",
+  "frames": 86,
+  "skipF": 44
+ },
+ "n4_b1": {
+  "file": "seal_jp_gb/seal_n4_b1.mp4",
+  "frames": 86,
+  "skipF": 44
+ },
+ "n4_b2": {
+  "file": "seal_jp_gb/seal_n4_b2.mp4",
+  "frames": 86,
+  "skipF": 44
+ },
+ "n4_b3": {
+  "file": "seal_jp_gb/seal_n4_b3.mp4",
+  "frames": 86,
+  "skipF": 44
+ },
+ "n5_b1": {
+  "file": "seal_jp_gb/seal_n5_b1.mp4",
+  "frames": 86,
+  "skipF": 44
+ },
+ "n5_b2": {
+  "file": "seal_jp_gb/seal_n5_b2.mp4",
+  "frames": 86,
+  "skipF": 44
+ },
+ "n5_b3": {
+  "file": "seal_jp_gb/seal_n5_b3.mp4",
+  "frames": 86,
+  "skipF": 44
+ },
+ "n5_b4": {
+  "file": "seal_jp_gb/seal_n5_b4.mp4",
+  "frames": 86,
+  "skipF": 44
+ }
+}

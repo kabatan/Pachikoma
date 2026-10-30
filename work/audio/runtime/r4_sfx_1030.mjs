@@ -94,7 +94,9 @@ export async function installR4Sfx(engine, { lcd, controller, cuesUrl = new URL(
     const jp = lcd.jp, w = jp?.active ? jp.where() : null;
     if (!w) { tState.jp.key = null; tState.chain.key = null; tState.seal.key = null; if (amb.cur) ambStop(.3); return; }
     const sm = /^jp_aim_seal_d\d_(in|s\d|b\d|open)$/.exec(w.name);
-    if (sm) { const ss = tState.seal, key = w.name + '#' + w.serial; if (ss.key !== key) { ss.key = key; ss.last = -1; } const tr = cues.seal_scenes?.[sm[1]]; if (tr) runTrack({ items: tr }, (w.f ?? 0) / 30, ss, w.d); }
+    if (sm) { const ss = tState.seal, key = w.name + '#' + w.serial; if (ss.key !== key) { ss.key = key; ss.last = -1; } let tr = cues.seal_scenes?.[sm[1]];
+      { const sc = lcd.jp?.man?.scenes?.[w.name], bk = /^b(\d+)$/.exec(sm[1]); if (sc?.seal?.gb && bk) { const g = cues.seal_scenes_gb?.['b_r' + Math.max(1, Math.min(4, (sc.seal.N | 0) - +bk[1]))]; if (g) tr = g; } }   // 10/31 鎖が切れる豪華版(?jpgb=0で旧)：残り本数ごとの表
+      if (tr) runTrack({ items: tr }, (w.f ?? 0) / 30, ss, w.d); }
     else if (amb.cur && !/^jp_chance|^jp_rush|^tutorial_jp/.test(w.name)) ambStop(.3);
     const off = cues.tutorial_jp.offsets[w.name];
     if (off !== undefined) {
@@ -102,6 +104,10 @@ export async function installR4Sfx(engine, { lcd, controller, cuesUrl = new URL(
       runTrack(cues.tutorial_jp, off + (w.f ?? 0) / 30, js, w.d);
     }
     gatherTick(w);
+    if (w.name === 'chain_announce_cutin') {   // 10/31 継続チャンスのカットイン：告知の頭の音を題字まで（chain_announce_first の 56 コマまで）
+      const cs = tState.chain; if (cs.key !== w.name + '#' + w.serial) { cs.key = w.name + '#' + w.serial; cs.last = -1; }
+      runTrack(cues.chain_announce_first, Math.min(w.f ?? 0, 56) / 30, cs);
+    }
     const ck = cues[w.name];
     if (w.name === 'chain_announce_first' || w.name === 'chain_announce_repeat') {
       const cs = tState.chain; if (cs.key !== w.name + '#' + w.serial) { cs.key = w.name + '#' + w.serial; cs.last = -1; }
