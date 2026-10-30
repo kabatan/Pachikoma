@@ -1,4 +1,5 @@
 import {createGlSegment,createThreeOutput} from './result_gpu_segment_1029.mjs';
+import {richLine as xRich,GOLD as X_GOLD,WHITE as X_WHITE} from './timeup_help_1030.mjs';   // 10/30 初見向けの一言（state.extras）の字
 // Approved result v2: CRF8 native stage video, original glyphs and lossless half-float FX.
 // Runtime values are drawn with the same 30fps source formulas in linear light.
 const W=1152,H=1268, SCL=265/257, PITCH=300*SCL;
@@ -83,6 +84,13 @@ export async function createFinalResultRendererInjected(base,man,video,{THREE,re
  const step=(p,inputs={},values={})=>{use(p,other,{im:current,...inputs},values);[current,other]=[other,current];};
  const blend=(p,values,rect,inputs={})=>{gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);use(p,current,inputs,values,rect);gl.disable(gl.BLEND);};
  const sprite=(name,x,y,s=1,a=1,sy=s,tint=1)=>draw(part[name],current,x,y,s,sy,a,2,0,1,tint);
+ // 10/30 初見向けの一言: state.extras.lines[名前]={key,w,h,size,parts:[[文字,'g'|'w'],...]} を canvas に描いて、一度だけ質感にする（結果ごとに作り直し）。
+ const xTex=new Map();
+ const ensureExtras=ex=>{for(const [k,sp] of Object.entries(ex.lines??{})){const old=xTex.get(k);if(old?.key===sp.key)continue;
+  const c=document.createElement('canvas');c.width=sp.w;c.height=sp.h;const cx=c.getContext('2d');cx.clearRect(0,0,sp.w,sp.h);
+  xRich(cx,sp.parts.map(([t,col])=>[t,col==='g'?X_GOLD:X_WHITE]),sp.w/2,sp.h*.68,sp.size,sp.w-24);
+  const t=tex(sp.w,sp.h,c,true);if(old)gl.deleteTexture(old.t.t);xTex.set(k,{key:sp.key,t});part['x_'+k]=t;}};
+ const xsprite=(k,x,y,s=1,a=1)=>{if(part['x_'+k])sprite('x_'+k,x,y,s,a);};
  const addField=(x,y,r,k,col,kind)=>{if(k<=0)return;const extent=Math.ceil(r*(kind?1.6:3));const x0=Math.max(0,Math.floor(x-extent)),y0=Math.max(0,Math.floor(y-extent)),x1=Math.min(W,Math.floor(x+extent)),y1=Math.min(H,Math.floor(y+extent));if(x1<=x0||y1<=y0)return;gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);use(fieldP,current,{}, {center:[x,y],size:r,amount:k,color:col,kind},[x0,y0,x1-x0,y1-y0]);gl.disable(gl.BLEND);};
  const glint=(x,y,size,k)=>addField(x,y,size,k,[.8,.95,1],1);
  const blob=(x,y,r,col,k)=>addField(x,y,r,k,col,0);
@@ -113,14 +121,16 @@ export async function createFinalResultRendererInjected(base,man,video,{THREE,re
    sprite('medal_'+ranks[k],x,yy,s,a*(lit?1:.85),s,dim);
   }
  }
- function renderBody(f,state){if(disposed||video.readyState<2)return null;f=Math.max(0,Math.floor(f));const {value:V,rankIndex,jp,best,newRecord}=state,rank=ranks[rankIndex];const key=f+':'+JSON.stringify(state);if(key===lastKey)return canvas;lastKey=key;baseFrame(f,Math.min(99999,V));
+ function renderBody(f,state){if(disposed||video.readyState<2)return null;f=Math.max(0,Math.floor(f));const {value:V,rankIndex,jp,best,newRecord}=state,rank=ranks[rankIndex];if(state.extras)ensureExtras(state.extras);const key=f+':'+JSON.stringify(state);if(key===lastKey)return canvas;lastKey=key;baseFrame(f,Math.min(99999,V));
   const u=(f-40)/12,fa=f>=40?Math.min(1,u*1.6):0,hush=ease((f-206)/8)*(1-ease((f-214)/4));step(underP,{shadow:part.frame_shadow},{hush,frameAlpha:fa,shade:0});
   if(f>=40){const s=1+.10*(1-ease(u)),t=(f-52)%54;blend(frameP,{opacity:fa,bandX:-300+(W+800)*t/22,bandOn:f>=52&&t<22?1:0},[Math.round(W/2-W*s/2),Math.round(H/2-H*s/2),Math.round(W*s),Math.round(H*s)],{im:part.frame_gold});const points=[[60,60],[575,55],[1090,60],[62,1212],[1090,1212],[100,640],[1052,640]];for(let i=0;i<points.length;i++){const [x,y]=points[i],ph=((f-40)*.9+i*17)%50;glint(576+(x-576)*1.06,634+(y-634)*1.06,46+10*(i%3),Math.max(0,1-Math.abs(ph-8)/8)*fa*.9);}}
-  if(f>=160)step(lowerP,{}, {opacity:ease((f-160)/8)});meter(f,state);
+  if(f>=160)step(lowerP,{}, {opacity:ease((f-160)/8)});meter(f,state);if(state.extras&&f>=172)xsprite('total',576,924,1,Math.min(1,(f-172)/8));
   const tm=f-214;if(tm>=0){use(rayP,fx,{}, {frame:f});blur(fx,fxTmp,fxBlur,6);step(medalLightP,{rays:fxBlur},{frame:f,rankS:rank==='S'?1:0});const s=pop(tm,slam)*.72*(tm>20?1+.012*Math.sin(f*.15):1);sprite('medal_shadow_'+rank,584,310,s,.6);sprite('medal_'+rank,576,296,s);const t2=(tm-8)%48;if(tm>=8&&t2<20)step(medalSweepP,{mask:part['medal_'+rank]},{bandX:296+610*t2/20});for(const [dx,dy,ph]of [[-130,-100,0],[120,-120,17],[150,80,31],[-150,90,44]])glint(576+dx,296+dy,56,Math.max(0,1-Math.abs(((tm+ph)%56)-6)/6)*ease(tm/8));const tp=tm-7;if(tp>=0){const sp=pop(tp,[1.6,1.25,1,1.05,1]),a=Math.min(1,(tp+1)/2);sprite('plaque_shadow_'+rank,584,490,sp,.55*a);sprite('plaque_'+rank,576,482,sp,a);}if(tm<28&&applyFx('medal',f))step(sparksP,{add:fx},{gammaMode:1});}
   chip(f,222,245,newRecord?'new':'best',newRecord?V:best,'tama',newRecord);chip(f,230,905,'jp',jp,'kai');
   const mk=f>=292?Math.max(0,1-(f-292)/8):1,tmg=f-228;if(tmg>=0&&mk>0){const s=pop(tmg,popMsg),a=Math.min(1,(tmg+1)/2)*mk,yo=(1-mk)*-30;if(rankIndex<4){const y=1108+yo,nk=state.nextIndex,need=state.need,sc=1.3,pitch=66*sc,tot=330+124+pitch*String(need).length+130;let x=490-tot/2;const put=(nm,cx,cy,scale)=>sprite(nm,490+(cx-490)*s,y+(cy-y)*s,scale*s,a);if(state.dreamRequired){put('lb_dream',490,y,1);}else{put('lb_nx_'+ranks[nk],x+165,y,1);x+=330;put('lb_ato',x+68,y+6,1);x+=124;for(const ch of String(need)){put('sn'+ch,x+pitch/2,y-2,sc);x+=pitch;}put('lb_tama',x+36,y+10,1.1);put('lb_excl',x+92,y,.95);}if(tmg<5)glint(490,y,170,.7*(1-tmg/5));}else{sprite('lb_top',490,1115+yo,1.25*s,a);if(tmg<20)blob(490,1115,160,[1,.8,.3],.5*(1-tmg/20)*a);for(const [dx,dy,ph]of [[-260,-20,0],[250,10,16],[-110,30,33],[140,-30,46]])glint(490+dx,1115+dy,50,Math.max(0,1-Math.abs(((tmg+ph)%56)-6)/6));}}
-  if(f>=292){const tc=f-292,s=pop(tc,popMsg),a=Math.min(1,(tc+1)/3),pul=1+.035*Math.sin(tc*.45);sprite('lb_retry',560,1108,.98*s*pul,a);sprite('lb_arrow',190-14*Math.abs(Math.sin(tc*.3)),1108,s,a);if(tc<5)glint(560,1108,150,.7*(1-tc/5));}
+  if(f>=292){const tc0=f-292,CY=120,xs=state.extras?['praise','miss','bye','retry'].filter(n=>n==='retry'||state.extras.lines?.[n]):['retry'],ph=xs.length>1?xs[Math.floor(tc0/CY)%xs.length]:'retry',tc=xs.length>1?tc0%CY:tc0,s=pop(tc,popMsg),fadeOut=xs.length>1&&tc>CY-8?Math.max(0,(CY-tc)/8):1,a=Math.min(1,(tc+1)/3)*fadeOut,pul=1+.035*Math.sin(tc*.45);
+   if(ph==='retry'){sprite('lb_retry',560,1108,.98*s*pul,a);sprite('lb_arrow',190-14*Math.abs(Math.sin(tc*.3)),1108,s,a);if(tc<5)glint(560,1108,150,.7*(1-tc/5));}
+   else{xsprite(ph,590,1108,s,a);if(tc<5)glint(560,1108,150,.7*(1-tc/5));}}
   if(f>=220){const ph=((f-228)%40+40)%40,hop=ph<14?18*Math.sin(ph/14*Math.PI):0,enter=(1-ease((f-220)/8))*240;gl.bindTexture(gl.TEXTURE_2D,upa.t);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);draw(upa,current,165,1206-upa.h*1.5-hop+enter,3,3,1,2);}
   if(f>=214)for(let i=0;i<bubbles.length;i++){const [bx,sp,r,ph]=bubbles[i],by=1240-((ph+(f-214)*sp*3)%1200),x=bx+14*Math.sin((f+i*30)*.05);if(by>130&&by<1200)blob(x,by,r,[.75,.9,1],.16);}
   step(clampP);use(passthrough,null,{im:current});canvas.resultRevision=(canvas.resultRevision??0)+1;return canvas;
