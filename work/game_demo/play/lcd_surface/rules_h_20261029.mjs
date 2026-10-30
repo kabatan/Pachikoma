@@ -37,7 +37,12 @@ const SLIDE_FRAMES = 36;                   // 停止コマの手前のこの数�
 // 選択画面の「継続」の札（右の札）の位置。字の幅は札の幅(枠いっぱい)の 90%。札の上半分（「続」の絵の上）に置く。
 //   cx,cy = 字の中心、w = 字の幅（枠の幅 × BADGE_RATIO）。3 状態の実測（1152x1268 の面）。切り替え中は choiceV20.transition の重みで補間する。
 const BADGE_RATIO = 0.9, BADGE_GLYPH = 625;   // BADGE_GLYPH = odds_badge_card.png の字の見える幅(px)
-const CARD = { neutral: { cx: 819, cy: 445, frame: 618 }, right: { cx: 800, cy: 420, frame: 630 }, left: { cx: 897, cy: 655, frame: 443 } };
+// 10/31：説明の札(choice_help、液晶 y372〜510)と重ならないよう、大きい側の札では説明の札の下〜「継続」の字の上(y〜790)に置く（旧 cy 445/420）。
+//   100円の追加が要るときは下に「100円で継続」が出るので、一回り小さくして上へ寄せる（ADD_*）。?badgepos=old で旧の位置
+const CARD = { neutral: { cx: 819, cy: 650, frame: 556 }, right: { cx: 800, cy: 650, frame: 556 }, left: { cx: 897, cy: 655, frame: 443 } };
+const CARD_OLD = { neutral: { cx: 819, cy: 445, frame: 618 }, right: { cx: 800, cy: 420, frame: 630 }, left: { cx: 897, cy: 655, frame: 443 } };
+const ADD_SCALE = 0.70, ADD_DY = -47;
+const cardOf = (name, add) => { const c = (new URLSearchParams(globalThis.location?.search ?? '').get('badgepos') === 'old' ? CARD_OLD : CARD)[name]; return c && add && name !== 'left' ? { cx: c.cx, cy: c.cy + ADD_DY, frame: c.frame * ADD_SCALE } : c; };
 const BADGE_DELAY = 0.25;                       // 選択画面が出てから叩きつけるまで
 const BRAKE = { hold: 0.12, fade: 0.58 };   // ルーレットの押した瞬間の白いブレーキ光：全面の白を 0.12 秒保ち、0.58 秒でほどく（つなぎの二重像を隠す。短くすると見える）
 const FINISH_SECONDS = 1.2;                // 満タンの叩きつけ
@@ -84,7 +89,8 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
       const rr = controller.game.rules; rr.JpTutorialSeconds = TUT.secs; rr.JpTutorialEvery = TUT.every;
     } catch (e) { console.warn('[rules-h] tutorial overlay', e); tutOverlay = null; }
   }
-  const S = { wall: 0, normalT: 0, presses: 0, addContinue: false, clock: 0, plan: null, press: null, flashAt: -9, jpVideo: null, roulette: null, events: [], loops: 0, absorbed: 0, introFixes: 0 };
+  const S = { wall: 0, normalT: 0, presses: 0, addContinue: false, clock: 0, plan: null, press: null, flashAt: -9, jpVideo: null, roulette: null, events: [], loops: 0, absorbed: 0, introFixes: 0, badgeRev: 0, badgeKey: null, badgeGpu: false };
+  const badgeCanvas = document.createElement('canvas'); badgeCanvas.width = W; badgeCanvas.height = H; const bctx = badgeCanvas.getContext('2d');   // 2/3 の札の GPU 層用（液晶の見える範囲と同じ大きさ）
   const note = (k, d = {}) => { S.events.push({ k, at: +S.clock.toFixed(2), ...d }); if (S.events.length > 200) S.events.shift(); log(k, d); };
 
   // ---- ゲームの出来事（規則 H の action 名。本体は controller.lastGameEvent）----
@@ -285,19 +291,29 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     }
     // 選択画面：「継続」の札の上半分に、札の幅いっぱい(90%)の銀の 2/3（黒縁）。出るときに強く叩きつける。継続を選ぶと成功率 2/3、と結びつけて見せる
     if (lcd.choiceV20?.active) {
-      const cv = lcd.choiceV20, sel = cv.selected, tr = cv.transition, gs = CARD[sel] ?? CARD.neutral;
-      let G = gs; if (tr?.from && CARD[tr.from]) { const a0 = CARD[tr.from], k = tr.alpha; G = { cx: a0.cx + (gs.cx - a0.cx) * k, cy: a0.cy + (gs.cy - a0.cy) * k, frame: a0.frame + (gs.frame - a0.frame) * k }; }
+      const cv = lcd.choiceV20, sel = cv.selected, tr = cv.transition, addNow = !!(S.addContinue || g.chainNeedsAdd), gs = cardOf(sel, addNow) ?? cardOf('neutral', addNow);
+      let G = gs; if (tr?.from && CARD[tr.from]) { const a0 = cardOf(tr.from, addNow), k = tr.alpha; G = { cx: a0.cx + (gs.cx - a0.cx) * k, cy: a0.cy + (gs.cy - a0.cy) * k, frame: a0.frame + (gs.frame - a0.frame) * k }; }
       const t = S.choiceT - BADGE_DELAY, u = t - 0.14;
+      // 選択画面が GPU 合成のときは、2D の液晶へ描いても見えない。液晶の見える範囲と同じ大きさの専用 canvas に描き、GPU 側の層(setBadgeCanvas)へ渡す
+      const be = lcd.gpuPanelSource?.backend, gpuBadge = typeof be?.setBadgeCanvas === 'function';
       if (t >= 0) {
         const m = u < 0 ? 3.0 - 2.0 * (t / 0.14) ** 2 : 1 + 0.10 * Math.exp(-9 * u) * Math.cos(u * 38), sh = u >= 0 ? Math.sin(u * 100) * 14 * Math.exp(-u * 16) : 0, sv = u >= 0 ? Math.cos(u * 83) * 9 * Math.exp(-u * 16) : 0;
         const sc = (G.frame * BADGE_RATIO / BADGE_GLYPH) * m;
-        ctx.save(); ctx.globalAlpha = Math.min(1, t / 0.04); ctx.translate(G.cx + sh, G.cy + sv); ctx.scale(sc, sc); ctx.drawImage(badge, -badge.width / 2, -badge.height / 2); ctx.restore();
-        if (u >= 0 && u < 0.3) {   // 着いた瞬間の白い閃光（札の上だけ。にじみのみ）
-          const f = (1 - u / 0.3) ** 2, gr = ctx.createRadialGradient(G.cx, G.cy, 10, G.cx, G.cy, G.frame * 0.75);
-          gr.addColorStop(0, `rgba(255,255,255,${0.85 * f})`); gr.addColorStop(0.45, `rgba(255,230,170,${0.35 * f})`); gr.addColorStop(1, 'rgba(255,200,120,0)');
-          ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = gr; ctx.fillRect(G.cx - G.frame, G.cy - G.frame, G.frame * 2, G.frame * 2); ctx.globalCompositeOperation = 'source-over';
+        let bc = ctx;
+        if (gpuBadge) {
+          bc = bctx; const key = `${t > 1.5 ? 's' : Math.round(t * 120)}|${sel}|${tr?.from ?? ''}|${(tr?.alpha ?? 0).toFixed(3)}|${addNow}`;
+          if (key !== S.badgeKey) { S.badgeKey = key; S.badgeRev++; bctx.clearRect(0, 0, W, H); } else { be.setBadgeCanvas(badgeCanvas, S.badgeRev); S.badgeGpu = true; bc = null; }
         }
-      }
+        if (bc) {
+        bc.save(); bc.globalAlpha = Math.min(1, t / 0.04); bc.translate(G.cx + sh, G.cy + sv); bc.scale(sc, sc); bc.drawImage(badge, -badge.width / 2, -badge.height / 2); bc.restore();
+        if (u >= 0 && u < 0.3) {   // 着いた瞬間の白い閃光（札の上だけ。にじみのみ）
+          const f = (1 - u / 0.3) ** 2, gr = bc.createRadialGradient(G.cx, G.cy, 10, G.cx, G.cy, G.frame * 0.75);
+          gr.addColorStop(0, `rgba(255,255,255,${0.85 * f})`); gr.addColorStop(0.45, `rgba(255,230,170,${0.35 * f})`); gr.addColorStop(1, 'rgba(255,200,120,0)');
+          bc.globalCompositeOperation = 'lighter'; bc.fillStyle = gr; bc.fillRect(G.cx - G.frame, G.cy - G.frame, G.frame * 2, G.frame * 2); bc.globalCompositeOperation = 'source-over';
+        }
+        if (gpuBadge) { be.setBadgeCanvas(badgeCanvas, S.badgeRev); S.badgeGpu = true; }
+        }
+      } else if (S.badgeGpu && gpuBadge) { be.setBadgeCanvas(null); S.badgeGpu = false; S.badgeKey = null; }
       // 時間切れ後の継続：札の上に「追加で継続」（受け口は lcd.rulesH.setContinueAdd）。字(2/3)と重ならないよう、札の絵の下半分（「継続」の文字の上）／小さい札では札の上
       if (S.addContinue || g.chainNeedsAdd) {
         const left = sel === 'left', cx = left ? 905 : 800, cy = left ? 520 : 745;
@@ -308,6 +324,7 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
         telop(ctx, label, cx, cy, label.length > 5 ? (left ? 56 : 78) : (left ? 64 : 92), { glow: 'rgba(255,170,40,.9)' });
       }
     }
+    if (!lcd.choiceV20?.active && S.badgeGpu) { try { lcd.gpuPanelSource?.backend?.setBadgeCanvas?.(null); } catch {} S.badgeGpu = false; S.badgeKey = null; }
     ctx.restore();
     return r;
   };

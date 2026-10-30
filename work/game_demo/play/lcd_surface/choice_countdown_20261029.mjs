@@ -12,7 +12,7 @@ export async function createChoiceCountdown(canvas,getValue,{cache=new URLSearch
   const mixed=make(),mix=mixed.getContext('2d'),saved=make(),save=saved.getContext('2d',{alpha:false});
   const snapshot=make(),snap=snapshot.getContext('2d');
   const load=async file=>{const res=await fetch(new URL(file,base));if(!res.ok)throw Error('Choice countdown asset: '+file);return createImageBitmap(await res.blob());};
-  const states={};
+  const states={},maxValue=Math.max(...meta.values);   // 10/31：100円の追加の選択は 30 秒。素材は 0..30（以前は 0..12 で 12 に張り付いた）
   for(const [name,files] of Object.entries(meta.states)){
     const patch=await load(files.patch),digits={};
     await Promise.all(Object.entries(files.digits).map(async([n,file])=>{digits[n]=await load(file);}));
@@ -23,7 +23,7 @@ export async function createChoiceCountdown(canvas,getValue,{cache=new URLSearch
   let drawn=false,value=null,bumpAge=1,patchKey=null,digitKey=null,patchRevision=0,digitRevision=0,paintPatch=true,paintDigit=true;
   const advance=(dt,override)=>{
     const raw=override??getValue();if(!Number.isFinite(raw))return false;
-    const next=Math.min(12,Math.max(0,Math.ceil(raw-1e-9)));
+    const next=Math.min(maxValue,Math.max(0,Math.ceil(raw-1e-9)));
     if(next!==value){bumpAge=value===null?1:0;value=next;}bumpAge+=Math.max(0,dt);return true;
   };
   const scaleNow=()=>{const t=Math.min(1,bumpAge/.18);return 1+.025*Math.sin(Math.PI*t)*(1-t);};
