@@ -99,7 +99,7 @@ export class MedalController {
       if (g.canFire && !this.confirmFinish && !this.preBuffer) { const b = this.fireBuffer; this.fireBuffer = null; if (this._fire(b.aim, b.dir)) for (const fn of this.listeners) fn('fire', this); }
       else if ((!g.rules.ContinuousFire && this.fireBuffer.left <= 0) || !g.canAim) { this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'expired' }); this.fireBuffer = null; }
     }
-    if (g.phase === MedalPhase.Continue || g.phase === MedalPhase.ChainChoice || g.phase === MedalPhase.Result) this.confirmFinish = false;
+    if (g.phase === MedalPhase.Continue || g.phase === MedalPhase.ChainChoice || g.phase === MedalPhase.Result || g.phase === MedalPhase.Fault || g.phase === 'Meter' || g.phase === 'Roulette' || g.meter) this.confirmFinish = false;   // 10/31 検証: 連打メーター(H)・ルーレット・故障に入ったら「ここで計数しますか」の確認待ちを消す（持ち越すと連打の発射を止める）
     this.resultAge = g.phase === MedalPhase.Result ? (this.resultAge ?? 0) + dt : 0;   // 結果が出てからの秒(客の連打で飛ばさない)
     if (g.canAim && !this.confirmFinish) this.aimClock += dt * g.challengeAimSpeed; // 狙いのスイープは入力受付中だけ進む
     this.aim = triangle(this.aimClock / this.sweepPeriod);

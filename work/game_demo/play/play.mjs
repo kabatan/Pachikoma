@@ -216,7 +216,7 @@ if (!q.has('nofx')) {
     for(const duration of durations){const plan=winPlan({id:'jp',data:{duration}},engine.winTiming),key='jp:'+plan.duration;if(!engine.winCache.has(key))engine.winCache.set(key,createWinSound(engine.ctx,engine.buffers,engine.winTiming,plan));}
   }
   if (lcd && M3 && !q.has('m3lcdfit')) q.set('m3lcdfit', 'panel');
-  if (lcd?.production) installLcdRecoveryBoundary(lcd);
+  if (lcd?.production) installLcdRecoveryBoundary(lcd, { onCleared: () => { frameFaultBoundary.rearm(); window.__displayRecoveryCleared = (window.__displayRecoveryCleared ?? 0) + 1; } });   // 10/31 待機へ戻ったら復旧モードを解く（次の客へ持ち越さない）
   if (lcd) window.__lcdSurface = lcd;
   if (lcd?.production && r2Audio && q.get('afterjp') !== '0') { try { window.__afterJp = await (await import('../../audio/runtime/after_jp_sound_1029.mjs')).installAfterJpSound(r2Audio.engine, { lcd, controller: ctrl }); } catch (error) { console.error('[after-jp]', error); } }   // JP後(継続・確定・時間切れ・最終リザルト)の音。?afterjp=0 で無効
   if (lcd?.production && r2Audio && q.get('newsfx') !== '0') { try { window.__r4Sfx = await (await import('../../audio/runtime/r4_sfx_1030.mjs')).installR4Sfx(r2Audio.engine, { lcd, controller: ctrl }); } catch (error) { console.error('[r4-sfx]', error); } }   // 10/30 新しい演出(チュートリアル・継続告知・封印の扉・穴の強調・残り時間)の効果音。?newsfx=0 で無効(従来の音)

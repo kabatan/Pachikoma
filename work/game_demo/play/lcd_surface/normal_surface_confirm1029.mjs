@@ -248,6 +248,9 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     get displayRecoveryActive(){return displayRecovery.active;},
     renderRecoveredFrame(dt=0){if(!displayRecovery.active)return false;clock+=dt;drawRecovery(dt);return true;},
     displayRecoveryDiagnostics(){return {...displayRecovery,cleanupErrors:[...displayRecovery.cleanupErrors]};},
+    // 10/31 検証: 復旧モードは次の客へ持ち越さない（待機へ戻る 'attract'＝reset で frame_fault_boundary が呼ぶ）。復旧で捨てた GPU の履歴・映像の経路は戻さず（CPU 経路）、場面の状態だけを初期化して通常の描画へ戻す
+    clearDisplayRecovery(){if(!displayRecovery.active)return false;displayRecovery.active=false;displayRecovery.cleared=(displayRecovery.cleared??0)+1;displayRecovery.reason=null;displayRecovery.cleanupErrors.length=0;
+      gpuFrame=null;invalidateResult();fadeLeft=0;lastJpSerial=-1;jpOwns=false;mode=null;guard=null;shotOn=false;launchPulses=[];lastEvent=null;return true;},
     get gpuPanelSource(){return fullPrevious?.wrap(gpuFrame)??gpuFrame;},
     withFullPanelPreviousSource(source,fn){return fullPrevious?fullPrevious.withSource(source,fn):fn();},
     get fullPanelPreviousManager(){return fullPanelPrevious;},

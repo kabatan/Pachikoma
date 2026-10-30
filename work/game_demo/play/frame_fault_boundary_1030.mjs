@@ -25,13 +25,15 @@ export function createFrameFaultBoundary({recover,onFault,onRecovered=()=>{}}={}
       return state.status!=='fault';
     }catch(recoveryError){state.recoveryError=describe(recoveryError);return fault(error,stage);}
   }
-  return {handle,snapshot};
+  // 10/31 検証: 表示の復旧のあと、液晶の復旧モードを解いた（次の客）なら、次の表示エラーでもう一度復旧を試せるようにする（でないと2回目は即停止）
+  function rearm() { if(state.status!=='recovered')return false; state.status='healthy'; state.attempts=0; state.stage=null; state.error=null; state.rearms=(state.rearms??0)+1; return true; }
+  return {handle,snapshot,rearm};
 }
 
 const recoveryBoundaries=new WeakSet();
 // Install last, outside Choice/final/timer wrappers. The normal owner alone
 // supplies the recovered image; stale wrappers must not paint or publish it.
-export function installLcdRecoveryBoundary(lcd) {
+export function installLcdRecoveryBoundary(lcd,{onCleared=()=>{}}={}) {
   if(recoveryBoundaries.has(lcd))return lcd;
   const gpu=Object.getOwnPropertyDescriptor(lcd,'gpuPanelSource');
   if(typeof lcd.frame!=='function'||typeof lcd.onEvent!=='function'||typeof lcd.prepare!=='function'||typeof lcd.renderRecoveredFrame!=='function'||!gpu?.configurable||typeof gpu.get!=='function')throw TypeError('LCD recovery boundary requires owner APIs and a configurable GPU getter');
@@ -42,7 +44,14 @@ export function installLcdRecoveryBoundary(lcd) {
     if(this.displayRecoveryActive)return this.renderRecoveredFrame(0);
     return result;
   };
-  lcd.onEvent=function(...args){if(this.displayRecoveryActive)return;return onEvent.apply(this,args);};
+  // 復旧モードの間は合図を捨てる。ただし待機へ戻る 'attract'（reset）では復旧モードを解き、その合図から通常に戻す（次の客へ持ち越さない）
+  lcd.onEvent=function(...args){
+    if(this.displayRecoveryActive){
+      if(args[0]==='attract'&&typeof this.clearDisplayRecovery==='function'&&this.clearDisplayRecovery()){try{onCleared();}catch{}}
+      else return;
+    }
+    return onEvent.apply(this,args);
+  };
   lcd.prepare=function(...args){if(this.displayRecoveryActive)return Promise.resolve();return prepare.apply(this,args);};
   Object.defineProperty(lcd,'gpuPanelSource',{...gpu,get(){return this.displayRecoveryActive?null:gpu.get.call(this);}});
   recoveryBoundaries.add(lcd);
