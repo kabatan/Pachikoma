@@ -14,6 +14,7 @@
   const smooth = (x) => { x = clamp(x); return x * x * (3 - 2 * x); };
   const lerp = (a, b, u) => a + (b - a) * u;
   const hash = (i, k = 0) => { let x = (Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(k + 1, 0x85ebca6b)) >>> 0; x = Math.imul(x ^ (x >>> 16), 0x7feb352d); x = Math.imul(x ^ (x >>> 15), 0x846ca68b); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
+  const HOLE_DECO = typeof location !== 'undefined' && /[?&]holedeco=1(&|$)/.test(location.search || '');   // 10/31 穴のLEDは状態だけ。演出の'pocket'レーンと初見ヒントの穴は ?holedeco=1 のときだけ
   const hsv = (h) => { const f = (n) => { const k = (n + h * 6) % 6; return 1 - Math.max(0, Math.min(k, 4 - k, 1)); }; return [f(5), f(3), f(1)]; };
   const srgb2lin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
   const hexColorCache = new Map();
@@ -188,6 +189,7 @@
     applyTrack(F, inst, tr, lt, n) {
       const p = tr.p || {}, u = clamp((lt - tr.t0) / Math.max(tr.t1 - tr.t0, 1e-6)), lt0 = lt - tr.t0, dur = tr.t1 - tr.t0;
       const lane = tr.lane, pat = tr.pat; if (!pat) return;
+      if (lane === 'pocket' && !HOLE_DECO) return;
       const isP = lane === 'petal', isE = lane === 'edge';
       if (!(isP || isE || lane === 'pocket' || lane === 'logo' || lane === 'ambient' || lane === 'seg' || lane === 'btn')) return;
       // These patterns emit their cue in step(), but never write a light value.
@@ -350,6 +352,7 @@
     hintLights(F, t) {
       const H = this.state.hint; if (!H) return;
       const lit = this.state.litPockets;
+      if (H.holes && !HOLE_DECO) H.holes = null;
       if (H.holes) {
         const h = H.holes; if (h.until > 0 && t > h.until) H.holes = null; else {
           const ph = Math.max(0, t - h.t0), ramp = Math.min(smooth(ph / .3), h.until > 0 ? smooth((h.until - t) / .3) : 1);

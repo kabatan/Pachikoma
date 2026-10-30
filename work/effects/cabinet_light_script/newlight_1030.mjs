@@ -20,7 +20,11 @@ const rings = (o, v) => { for (let j = 0; j < 4; j++) o.aR[j] = v; };
 // 走る光（区画ごとに位相をずらした山）0..1
 const crest = (i, x, sharp = 2) => Math.pow(.5 + .5 * Math.cos(TAU * (x - PH[i])), sharp);
 const rainbowAll = (o, L, hue, spread) => { for (let i = 0; i < 8; i++) { hsvTo(tmp, 0, hue + spread * PH[i]); reg(o, i, L, tmp); } };
+// 穴のLEDはゲームの状態（球が入った・灯の数・残りの穴）だけを表す（10/31 監督）。holes＝飾り（?holedeco=1 のときだけ光る）。
+// lamp＝チュートリアルで実機のランプの見え方（灯った穴・残り1つの脈動）を見せる見本（遊技中ではない待機画面のみ。光らせる）。
+const HOLEDECO = typeof location !== 'undefined' && /[?&]holedeco=1(&|$)/.test(location.search || '');
 const holes = (o, i, L, c) => { o.holeOn = true; o.hv[i * 3] = c[0] * L; o.hv[i * 3 + 1] = c[1] * L; o.hv[i * 3 + 2] = c[2] * L; };
+const lamp = (o, i, L, c) => { holes(o, i, L, c); o.holeDemo = true; };
 const begin0 = o => { o.abs = true; o.holeOn = false; o.hv.fill(0); o.aK.fill(0); rings(o, 0); o.gain = 1; o.white = 0; o.floor = 0; };
 const begin = begin0;
 const FLASH = (t, at, d = .12) => t >= at ? Math.exp(-(t - at) / d) : 0;            // 立ち上がり一発・指数で落ちる白
@@ -46,19 +50,19 @@ function tut06(o, c) {
     case 2: {   // 穴に入れてランプを光らせよう：穴が1,2,..6 と順に点く（0.35s + 0.3s*k）。点く瞬間に白い閃き＋足元の閃き
       const n = clamp(Math.floor((u - .35) / .3) + 1, 0, 6);
       all(o, .3, BLUE); let flash = 0;
-      for (let k = 0; k < 6; k++) { const at = .35 + .3 * k; if (u >= at) { holes(o, k, 1.5, k < 4 ? [1, .82, .55] : k === 4 ? [1, .32, .02] : GOLD); const f = FLASH(u, at, .1); holes(o, k, 1.5 + 9 * f, f > .3 ? WHITE : (k < 4 ? [1, .82, .55] : GOLD)); if (f > flash) flash = f; } }
+      for (let k = 0; k < 6; k++) { const at = .35 + .3 * k; if (u >= at) { lamp(o, k, 1.5, k < 4 ? [1, .82, .55] : k === 4 ? [1, .32, .02] : GOLD); const f = FLASH(u, at, .1); lamp(o, k, 1.5 + 9 * f, f > .3 ? WHITE : (k < 4 ? [1, .82, .55] : GOLD)); if (f > flash) flash = f; } }
       reg(o, 7, .4 + .9 * flash + .15 * n, mixc(GOLD, WHITE, flash * .5)); grp(o, LEFT, .3 + .25 * n * .3, PINK); grp(o, RIGHT, .3 + .25 * n * .3, PINK);
       rings(o, .06 * n); hit(o, flash * .3); break;
     }
     case 3: {   // 6つ光ったらJACKPOT CHANCE：頭の白→金赤交互（5Hz）。6つ点灯＋残りの穴（7）が金で脈打つ
-      for (let k = 0; k < 6; k++) holes(o, k, 1.6, k < 4 ? [1, .82, .55] : k === 4 ? [1, .32, .02] : GOLD);
-      const pp = .5 + .5 * Math.sin(TAU * 2.4 * ck); holes(o, 6, .6 + 1.6 * pp * pp, mixc(GOLD, WHITE, pp * .6));
+      for (let k = 0; k < 6; k++) lamp(o, k, 1.6, k < 4 ? [1, .82, .55] : k === 4 ? [1, .32, .02] : GOLD);
+      const pp = .5 + .5 * Math.sin(TAU * 2.4 * ck); lamp(o, 6, .6 + 1.6 * pp * pp, mixc(GOLD, WHITE, pp * .6));
       if (u < 1.4) { const a = sq(ck * 5, .55), col = a ? GOLD : RED; for (let i = 0; i < 8; i++) reg(o, i, (a ? 1.5 : .3) * (.6 + .4 * crest(i, ck * 3, 2)), col); rings(o, a ? .4 : .08); hit(o, a && frac(ck * 5) < .2 ? .35 : 0); }
       else { for (let i = 0; i < 8; i++) reg(o, i, .75 + .5 * crest(i, ck * 1.2, 2), GOLD); rings(o, .15); }
       hit(o, FLASH(u, 0, .12) * .9); break;
     }
     case 4: {   // 何が起こるかはおたのしみ：桃と青のゆるい交互（1.4Hz）。穴は6灯のまま
-      for (let k = 0; k < 6; k++) holes(o, k, 1.2, k < 4 ? [1, .82, .55] : k === 4 ? [1, .32, .02] : GOLD);
+      for (let k = 0; k < 6; k++) lamp(o, k, 1.2, k < 4 ? [1, .82, .55] : k === 4 ? [1, .32, .02] : GOLD);
       const a = frac(ck * .7) < .5, col = a ? PINK : CYAN, w = .5 + .5 * Math.sin(TAU * 1.4 * ck - 1.57);
       grp(o, HEAD, .6 + .5 * w, col); grp(o, LEFT, a ? .85 : .45, PINK); grp(o, RIGHT, a ? .45 : .85, CYAN); reg(o, 7, .55, col); rings(o, .1); break;
     }
@@ -225,30 +229,30 @@ function tut09(o, c) {
       all(o, .22, BLUE); grp(o, LEFT, .8 + .85 * ps, mixc(GOLD, WHITE, ps * .7)); reg(o, 7, .3 + .5 * crest(4, ck * 2.4, 3), GOLD); rings(o, .08 + .1 * ps); hit(o, FLASH(u, .35, .12) * .55); break;
     }
     case 3: {   // 玉が穴に入ってランプが光る(1.6s)：穴が1つ白く閃いて点く
-      all(o, .3, BLUE); if (u >= 1.55) { const f = FLASH(u, 1.55, .12); holes(o, 0, 1.5 + 9 * f, f > .3 ? WHITE : LIT4); reg(o, 7, .4 + .9 * f, mixc(GOLD, WHITE, f * .5)); hit(o, f * .35); } rings(o, .1); break;
+      all(o, .3, BLUE); if (u >= 1.55) { const f = FLASH(u, 1.55, .12); lamp(o, 0, 1.5 + 9 * f, f > .3 ? WHITE : LIT4); reg(o, 7, .4 + .9 * f, mixc(GOLD, WHITE, f * .5)); hit(o, f * .35); } rings(o, .1); break;
     }
     case 4: {   // ついていない穴をねらう：4つ点灯、残る2つが金で脈打つ
-      all(o, .3, BLUE); for (let k = 0; k < 4; k++) holes(o, k, 1.4, LIT4);
-      for (let k = 4; k < 6; k++) holes(o, k, .5 + 1.5 * ps, mixc(GOLD, WHITE, ps * .6)); rings(o, .1); break;
+      all(o, .3, BLUE); for (let k = 0; k < 4; k++) lamp(o, k, 1.4, LIT4);
+      for (let k = 4; k < 6; k++) lamp(o, k, .5 + 1.5 * ps, mixc(GOLD, WHITE, ps * .6)); rings(o, .1); break;
     }
     case 5: {   // 重複：赤く警告（2.4Hz）。「重複!!」(1.6s)で白、ランプが1つ消える(3.0s)
-      const n = u < 3.0 ? 4 : 3; for (let k = 0; k < n; k++) holes(o, k, 1.3, LIT4);
+      const n = u < 3.0 ? 4 : 3; for (let k = 0; k < n; k++) lamp(o, k, 1.3, LIT4);
       const a = .35 + .65 * ps; all(o, (u < 1.5 ? .3 : .6 + .6 * a), RED); rings(o, .1 + .15 * a);
       hit(o, FLASH(u, 1.6, .12) * .5 + FLASH(u, 3.0, .12) * .4); break;
     }
     case 6: {   // 5灯→紫の雷：はじめ金の交互（5Hz）、1.2s から紫（雷は囲いも紫）
-      for (let k = 0; k < 6; k++) holes(o, k, 1.5, LIT4);
+      for (let k = 0; k < 6; k++) lamp(o, k, 1.5, LIT4);
       if (u < 1.2) { const a = sq(ck * 5, .55); all(o, a ? 1.4 : .3, a ? GOLD : RED); rings(o, a ? .35 : .08); hit(o, FLASH(u, 0, .12) * .6); }
       else { const a = sq(ck * 5, .5); all(o, a ? 1.4 : .35, a ? VIOLET : PBLK); rings(o, a ? .35 : .1); hit(o, FLASH(u, 1.2, .1) * .7); }
       break;
     }
-    case 7: for (let k = 0; k < 6; k++) holes(o, k, 1.5, LIT4); for (let i = 0; i < 8; i++) reg(o, i, .6 + .5 * crest(i, ck * 1.2, 2), VIOLET); rings(o, .12); break;   // 扉へ近づく
+    case 7: for (let k = 0; k < 6; k++) lamp(o, k, 1.5, LIT4); for (let i = 0; i < 8; i++) reg(o, i, .6 + .5 * crest(i, ck * 1.2, 2), VIOLET); rings(o, .12); break;   // 扉へ近づく
     case 8: {   // JACKPOT CHANCE（題字）：金の強い脈動＋一発
-      for (let k = 0; k < 6; k++) holes(o, k, 1.5, LIT4); holes(o, 6, .6 + 1.6 * ps, mixc(GOLD, WHITE, ps * .6));
+      for (let k = 0; k < 6; k++) lamp(o, k, 1.5, LIT4); lamp(o, 6, .6 + 1.6 * ps, mixc(GOLD, WHITE, ps * .6));
       for (let i = 0; i < 8; i++) reg(o, i, 1.0 + .5 * crest(i, ck * 2.4, 2), GOLD); rings(o, .25); hit(o, FLASH(u, .1, .14) * .8); break;
     }
     case 9: {   // 連打・鎖：残った1つの穴が金で脈打つ。頭は紫
-      for (let k = 0; k < 6; k++) holes(o, k, 1.2, LIT4); holes(o, 6, .6 + 1.8 * ps, mixc(GOLD, WHITE, ps * .7));
+      for (let k = 0; k < 6; k++) lamp(o, k, 1.2, LIT4); lamp(o, 6, .6 + 1.8 * ps, mixc(GOLD, WHITE, ps * .7));
       for (let i = 0; i < 8; i++) reg(o, i, .55 + .45 * crest(i, ck * 2, 2), i < 3 ? VIOLET : PBLK); rings(o, .12); hit(o, FLASH(u, 1.7, .1) * .25); break;
     }
     case 10: {   // 解放：白金の一発→金
@@ -264,7 +268,7 @@ function tut09(o, c) {
     case 13: {   // まとめ：行が出るごと（0.2/2.2/4.3s）に穴が点く。落ち着いた青＋金
       all(o, .35 + .1 * ps, BLUE); const n = u < 2.2 ? 1 : u < 4.3 ? 2 : 3;
       for (let k = 0; k < 7; k++) if (k < (n === 1 ? 1 : n === 2 ? 6 : 7)) holes(o, k, 1.3, n === 3 ? GOLD : LIT4);
-      grp(o, HEAD, .5 + .3 * ps, GOLD); hit(o, FLASH(u, .2, .1) * .3 + FLASH(u, 2.2, .1) * .3 + FLASH(u, 4.3, .1) * .3); rings(o, .1); break;
+      grp(o, HEAD, .5 + .3 * ps, GOLD); if (!HOLEDECO) { const f = Math.max(FLASH(u, .2, .12), FLASH(u, 2.2, .12), FLASH(u, 4.3, .12)); grp(o, LEFT, .35 + .9 * f, GOLD); grp(o, RIGHT, .35 + .9 * f, GOLD); } hit(o, FLASH(u, .2, .1) * .3 + FLASH(u, 2.2, .1) * .3 + FLASH(u, 4.3, .1) * .3); rings(o, .1); break;
     }
     default: {   // はじめよう：金の定常＋走る光（増え続けない）
       if (u < .5) { const a = sq(u * 7, .5); all(o, a ? 1.5 : .25, GOLD); o.white = a && frac(u * 7) < .25 ? .4 : 0; rings(o, a ? .4 : .05); }

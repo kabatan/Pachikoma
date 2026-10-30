@@ -16,7 +16,7 @@ const pulse = (x, decay) => Math.exp(-frac(x) * decay);                 // fast 
 const GOLD = [1, .52, .02], RED = [1, .02, .03], PINK = [1, .06, .42], VIOLET = [.42, .04, 1], BLUE = [.05, .3, 1], WHITE = [1, .95, .85], VIOLET_DEEP = [.38, .02, .8];
 
 // 10/30 newlight: abs = 'absolute' scene (newlight_1030.mjs). aK[8] region level, aC[24] region colour, aR[4] ring level, hv[21] hole script (rgb per hole), holeOn.
-export function createFx() { return { gain: 1, white: 0, floor: 0, mode: 0, mix: 0, hue: 0, spread: 0, r: 0, g: 0, b: 0, active: false, cDepth: 0, cHz: 0, cSharp: 2, cWave: 1, aDepth: 0, aHz: 0, aWave: 1, abs: false, holeOn: false, aK: new Float32Array(8), aC: new Float32Array(24), aR: new Float32Array(4), hv: new Float32Array(21), sOv: false, sc: new Float32Array(3), ringOwn: false }; }
+export function createFx() { return { gain: 1, white: 0, floor: 0, mode: 0, mix: 0, hue: 0, spread: 0, r: 0, g: 0, b: 0, active: false, cDepth: 0, cHz: 0, cSharp: 2, cWave: 1, aDepth: 0, aHz: 0, aWave: 1, abs: false, holeOn: false, holeDemo: false, aK: new Float32Array(8), aC: new Float32Array(24), aR: new Float32Array(4), hv: new Float32Array(21), sOv: false, sc: new Float32Array(3), ringOwn: false }; }
 const REG = Object.create(null);
 export const registerGrammar = (name, fn) => { REG[name] = fn; };
 export const isRegistered = g => !!REG[g];
@@ -40,7 +40,7 @@ const HEAT_COLOR = { flight_heat0: VIOLET, flight_heat1: PINK, flight_heat2: RED
 // c: { grammar, name, t (seconds in the clip / mode), clock, lampN, hitAge (s since a ball entered a hole), secondsLeft, playing, source }
 export function evalFx(o, c) {
   const t = c.t, ck = c.clock, g = c.grammar;
-  o.abs = false; o.holeOn = false; o.sOv = false; o.ringOwn = false;
+  o.abs = false; o.holeOn = false; o.holeDemo = false; o.sOv = false; o.ringOwn = false;
   o.gain = 1; o.white = 0; o.mode = 0; o.mix = 0; o.hue = 0; o.spread = 0; o.floor = 0; o.cDepth = 0; o.cHz = 0; o.aDepth = 0; o.aHz = 0;
   switch (g) {
     case 'sea_breathe': {                          // normal lamps: the more lamps, the more it throbs

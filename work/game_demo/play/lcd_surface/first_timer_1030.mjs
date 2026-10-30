@@ -17,6 +17,7 @@ const easeOut = (x) => 1 - (1 - Math.min(1, Math.max(0, x))) ** 3;
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
 const frac = (x) => x - Math.floor(x);
 const img = (u) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(Error('asset ' + u)); i.src = u; });
+const HOLEDECO = typeof location !== 'undefined' && /[?&]holedeco=1(&|$)/.test(location.search || '');   // 10/31 穴のLEDは状態だけ。流す光・「あと1つ」の点滅は側面の縦長の電飾へ（?holedeco=1 で旧：穴のLED）
 export const FT = { praise: 0.8, five: 3.0, dup: 2.4, near: 1.5, promptMax: 10, promptAfter: 5, sweepPasses: 2, sweepGap: 0.13, sweepPass: 1.25 };
 
 function glow(ctx, x, y, r, rgb, k) {
@@ -72,7 +73,7 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
   const holeFn = (v, ck) => {
     let any = false;
     const set = (h, r, g, b, L) => { v[h * 3] = Math.max(v[h * 3], r * L); v[h * 3 + 1] = Math.max(v[h * 3 + 1], g * L); v[h * 3 + 2] = Math.max(v[h * 3 + 2], b * L); any = true; };
-    if (F[3] && S.sweepAt > -90) {
+    if (HOLEDECO && F[3] && S.sweepAt > -90) {
       const u = ck - S.sweepAt;
       if (u < FT.sweepPass * FT.sweepPasses + 0.9) for (let pass = 0; pass < FT.sweepPasses; pass++) for (let h = 0; h < 7; h++) {
         const d = u - pass * FT.sweepPass - h * FT.sweepGap; if (d < 0 || d > 0.7) continue;
@@ -80,7 +81,7 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
       }
       else S.sweepAt = -99;
     }
-    if (F[4] && S.five && S.five.at >= 0 && game().lamps) {
+    if (HOLEDECO && F[4] && S.five && S.five.at >= 0 && game().lamps) {
       const lamps = game().lamps, on = frac(ck * 3.5) < 0.5;   // 約3.5Hz（4コマ以上）
       if (lamps.length === 5) { if (on) for (let h = 0; h < 7; h++) if (!lamps.includes(h + 1)) set(h, 1, .72, .12, 1.5); }
     }
@@ -88,6 +89,21 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
       const u = ck - S.dup.at;
       if (u >= 0 && u < 0.9 && (u % 0.3) < 0.15) set(S.dup.lane - 1, 1, .02, .02, 5);   // 赤く3回
     }
+    return any;
+  };
+  // ---- 側面の縦長の電飾（穴のLEDの代わり。cabinet_light_script が毎フレーム呼ぶ。boost(区画, 明るさ, r, g, b)。区画 3/4=左の柱 上/下、5/6=右の柱 上/下、7=足元）----
+  const sideFn = (boost, ck) => {
+    if (HOLEDECO) return false;
+    let any = false;
+    if (F[3] && S.sweepAt > -90) {   // 開始直後：光が左の柱の上→下→足元→右の柱の下→上へ流れる（2回）
+      const u = ck - S.sweepAt, ORDER = [3, 4, 7, 6, 5];
+      if (u < FT.sweepPass * FT.sweepPasses + 0.9) for (let pass = 0; pass < FT.sweepPasses; pass++) for (let k = 0; k < 5; k++) {
+        const d = u - pass * FT.sweepPass - k * 0.2; if (d < 0 || d > 0.7) continue;
+        boost(ORDER[k], Math.min(1.7, 1.7 * Math.exp(-d / 0.2)), 1, .86, .5); any = true;
+      }
+      else S.sweepAt = -99;
+    }
+    if (F[4] && S.five && S.five.at >= 0 && game().lamps && game().lamps.length === 5 && frac(ck * 3.5) < 0.5) { for (let r = 3; r <= 6; r++) boost(r, 1.5, 1, .72, .12); any = true; }   // 5灯：柱が速く点滅
     return any;
   };
   let hooked = false;
@@ -147,7 +163,7 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
   lcd.frame = (dt, Fr) => {
     const r = frame0(dt, Fr);
     S.clock += dt;
-    if (!hooked && lcd.cabinetLightScript) { lcd.cabinetLightScript.holeOverlay = holeFn; hooked = true; }
+    if (!hooked && lcd.cabinetLightScript) { lcd.cabinetLightScript.holeOverlay = holeFn; lcd.cabinetLightScript.sideOverlay = sideFn; hooked = true; }
     const g = game();
     // 重ね描きは、GPU の映像経路のままなら小さい層(透明 canvas 2 枚)で重ねる。そうでなければ従来どおり液晶 canvas へ(?ftsplit=0 で常に従来)
     const gpu = lcd.gpuPanelSource, choice = lcd.choiceV20;
@@ -211,6 +227,6 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
   const nearMiss = ({ rem = 1, kind = 'jp' } = {}) => { if (!F[1]) return; S.near = { rem: clamp(Math.round(rem), 1, 7), kind, armed: S.clock, seen: false, start: -1 }; note('nearArm', { rem, kind }); };
   const splitLayers = () => (sp.on && !sp.fail && activeNow() ? [{ tex: sp.tcAdd, w: W, h: H, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 1, add: true }, { tex: sp.tcOver, w: W, h: H, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 1, add: false }] : null);
   lcd.overlayHold = () => (SPLIT_ON && !sp.fail && !lcd.splitBroken ? false : activeNow());   // normal_surface が見る：重ね描き中はGPUの映像経路を使わない
-  lcd.firstTimer = { splitLayers, state: S, flags: F, nearMiss, holeFn, FT, dispose() { lcd.overlayHold = null; controller.dispatch = dispatch0; lcd.onEvent = base0; lcd.frame = frame0; if (lcd.cabinetLightScript?.holeOverlay === holeFn) lcd.cabinetLightScript.holeOverlay = null; } };
+  lcd.firstTimer = { splitLayers, state: S, flags: F, nearMiss, holeFn, FT, dispose() { lcd.overlayHold = null; controller.dispatch = dispatch0; lcd.onEvent = base0; lcd.frame = frame0; if (lcd.cabinetLightScript?.holeOverlay === holeFn) lcd.cabinetLightScript.holeOverlay = null; if (lcd.cabinetLightScript?.sideOverlay === sideFn) lcd.cabinetLightScript.sideOverlay = null; } };
   return lcd;
 }

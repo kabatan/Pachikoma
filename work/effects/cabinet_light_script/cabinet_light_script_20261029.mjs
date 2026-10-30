@@ -18,6 +18,7 @@ function mediaClock(lcd,index,c){
 }
 const RING_REG=[1,4,6,7];
 const NLQ=typeof location!=='undefined'?location.search||'':'';
+const HOLEDECO=/[?&]holedeco=1(&|$)/.test(NLQ);   // 10/31 穴のLEDは状態だけ。飾りで光らせる旧挙動は ?holedeco=1
 const NLON=!/[?&]newlight=0(&|$)/.test(NLQ),SEALIGHT=/[?&]sealight=1(&|$)/.test(NLQ);
 export async function attachCabinetLightScript(lcd,{getLamps=()=>[],getState=()=>null}={}){
  if(!lcd?.production||lcd.cabinetLightScript)return lcd;
@@ -75,6 +76,8 @@ export async function attachCabinetLightScript(lcd,{getLamps=()=>[],getState=()=
    }
    for(let i=0;i<4;i++)shade(row.ring[i],g0*(1-d*(1-fx.cWave)*.6),mix,mode,fx.hue+fx.spread*i*.2);
  };
+ // 区画 i（0頭 1えら 2ロゴ 3/4左の柱 上/下 5/6右の柱 上/下 7足元）を L まで持ち上げる（modulateAbs と同じ配分）
+ const boostRegion=(i,L,r,g,b)=>{if(L<=row.K[i])return;row.K[i]=L;const c=row.Kc[i];c[0]=r;c[1]=g;c[2]=b;const w=row.wash[i],z=row.zone[i];w[0]=r*L*.42;w[1]=g*L*.42;w[2]=b*L*.42;z[0]=r*L*.34;z[1]=g*L*.34;z[2]=b*L*.34;};
  const reflect=()=>{for(let s=0;s<8;s++){const [a,b]=ZONES[s];for(let j=0;j<3;j++)row.reflections[s].rgb[j]=(row.zone[a][j]+row.zone[b][j])*.35+(row.wash[a][j]+row.wash[b][j])*.45;}};
  // ---- newlight (10/30): scenes made today. cue(name,time,x) lets the scene owner drive a light scene by hand (cue(null) releases); autodetected: tutorial v06, tutorial_jp_*, jp_through*/chain_flow_* names.
  let ext=null;const nlSpec={},baseAt=index.sources.normal.idle4.offset,hole7={mode:'script',v:null,rgb:[1,.58,0],level:0},nlx={d:4,N:4,fin:false,rem:4,repeat:false};
@@ -160,20 +163,22 @@ export async function attachCabinetLightScript(lcd,{getLamps=()=>[],getState=()=
    }
    row.meterLimit=old?.meterLimit??5;
    if(api.after){api.after(row,strip,clock);lastOffset=-1;}   // 10/30 staff flow: 呼び出し中の電飾を外から上書きする（外すと次の行で表から作り直す）
+   if(api.sideOverlay&&api.sideOverlay(boostRegion,clock)){reflect();lastOffset=-1;}   // 10/31 穴の代わりに側面の縦長の電飾（柱・足元）で飾る合図
    // Only actual unlit targets at six lights breathe. A miss never points at an unhit hole.
    const n=Math.min(6,lamps.length),pc=POCKET_COLORS[n];
    row.hole=lamps.length===6?hole:null;
-   if(fx.holeOn){hole7.v=fx.hv;row.hole=hole7;}   // newlight: scripted hole LEDs (m3_cabinet 'script' mode)
+   const hs=fx.holeOn&&(HOLEDECO||fx.holeDemo);   // 穴の台本は、飾り(holeDeco)か見本(holeDemo)のときだけ採用
+   if(hs){hole7.v=fx.hv;row.hole=hole7;}   // newlight: scripted hole LEDs (m3_cabinet 'script' mode)
    if(api.holeOverlay){   // 10/30 first-timer: hole-LED-only cues (sweep / 5-lamp blink / duplicate red) laid over the base light; returns true when it wrote something
      holeOv.fill(0);
-     if(api.holeOverlay(holeOv,clock)){if(fx.holeOn)for(let i=0;i<21;i++)if(fx.hv[i]>holeOv[i])holeOv[i]=fx.hv[i];hole7.v=holeOv;row.hole=hole7;}
+     if(api.holeOverlay(holeOv,clock)){if(hs)for(let i=0;i<21;i++)if(fx.hv[i]>holeOv[i])holeOv[i]=fx.hv[i];hole7.v=holeOv;row.hole=hole7;}
    }
    // Reflections follow the factual mouth LEDs; C-pack LEDs remain receipt-driven.
    if(F.pocket)for(let i=0;i<7;i++){
      const lit=lamps.includes(i+1),age=clock-hitAt[i],hit=age>=0&&age<.6,white=hit?Math.exp(-age/.06):0,after=hit?1+1.6*Math.exp(-age/.22):1;
      for(let j=0;j<3;j++){
        let v=lit?pc[j]*2:lamps.length===6?hole.rgb[j]*hole.level*2:0;
-       if(fx.holeOn&&fx.hv[i*3+j]>0)v=Math.max(v,fx.hv[i*3+j]*2);
+       if(hs&&fx.hv[i*3+j]>0)v=Math.max(v,fx.hv[i*3+j]*2);
        if(hit){const hue=lit||lamps.length===0?pc[j]:hole.rgb[j];v=Math.max(v,hue*2)*after*(1-white)+12*white;}
        F.pocket[i*3+j]=v;
      }
@@ -183,7 +188,7 @@ export async function attachCabinetLightScript(lcd,{getLamps=()=>[],getState=()=
    current.source=source;current.name=name;current.time=time;current.frame=f;current.grammar=spec.grammar;current.flash=table[at+98]*scale;current.dim=source==='jp'&&!!w?.dim;
    lastSource=source;lastName=name;lastTime=time;
  };
- const api={current,index,bytes:data.byteLength,strip,fx,cue:(name,time=0,x=null)=>{ext=name?{name,time,x}:null;},get hitAge(){return clock-lastHit;}};lcd.cabinetLightScript=api;
+ const api={boost:boostRegion,current,index,bytes:data.byteLength,strip,fx,cue:(name,time=0,x=null)=>{ext=name?{name,time,x}:null;},get hitAge(){return clock-lastHit;}};lcd.cabinetLightScript=api;
  if(typeof window!=='undefined')window.__cabinetLightScript=api;
  return lcd;
 }

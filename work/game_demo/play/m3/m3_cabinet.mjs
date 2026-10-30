@@ -448,6 +448,7 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
   presenter?.on?.((type, d) => { if (type === 'receipt' && d.lane >= 1 && d.lane <= 7 && d.kind !== 'Loan') (d.tease ? pendingTease : pendingHit).push(d.lane - 1); });
   // JPチャンス（連打メーター）中の「入れる穴」強調：当たりの穴だけを速く脈打たせ、ほかの灯を落とし、入った瞬間に強く閃かせる。?jpholehl=0 で旧挙動（メーター中も穴は通常のまま）
   // 確保なし：状態は固定長の配列と数値だけ。meter はゲームの生の状態（targets=まだ光っていない穴、stage=intro|firing|settling）
+  const HOLEDECO = q.get('holedeco') === '1';   // 10/31 穴のLEDは状態（入った・灯の数・残りの穴）だけ。飾り（指し示し・近い外れ・場面の色）は ?holedeco=1 のときだけ
   const JPHL = q.get('jpholehl') !== '0', hlMask = new Uint8Array(7), sealAt = new Array(7).fill(-99), pendingSeal = [];
   let hlK = 0, hlClock = 0;
   if (JPHL && onMeterLand) onMeterLand((lane) => { if (lane >= 1 && lane <= 7) pendingSeal.push(lane - 1); });
@@ -557,7 +558,7 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
     const lamps = getLamps ? [...getLamps()] : [], nn = Math.min(6, lamps.length);
     // 灯った穴の色（灯の数で：〜3 灯は暖かい白、4 灯は桃、5 灯は橙、6 灯は金）。白っぽく褪せないよう濃く
     const PC = [[1, .82, .55], [1, .82, .55], [1, .82, .55], [1, .82, .55], [1, .06, .38], [1, .32, .02], [1, .58, 0]][nn];
-    const hint = dir?.state?.hint?.holes, hph = hint ? Math.max(0, (dir.t - hint.t0)) : 0;
+    const hint = HOLEDECO ? dir?.state?.hint?.holes : null, hph = hint ? Math.max(0, (dir.t - hint.t0)) : 0;
     const flashOf = new Array(7).fill(0);
     for (let i = 0; i < 7; i++) {
       const lit = lamps.includes(i + 1);
@@ -565,9 +566,9 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
       if (!lit && lamps.length >= 6 && lamps.length < 7) { const w = HOLE_BASE * (.55 + .35 * Math.sin(2 * Math.PI * 1.1 * clock)); c = [1 * w, .58 * w, 0]; }   // 6 灯：残りの 1 つ＝狙う穴（ゲームの状態）
       if (hint && !lit && (hint.pockets === 'unlit' || (hint.pockets || []).includes(i + 1))) { const w = HOLE_BASE * (.25 + .5 * (.5 + .5 * Math.sin(2 * Math.PI * .8 * hph - Math.PI / 2))); c = c.map((v, q) => Math.max(v, [.5, .82, 1][q] * w)); }   // 説明の「ここを狙う」（チュートリアル）
       const hc=F.m3?.hole;
-      if(hc?.mode==='target_pulse'&&!lit&&lamps.length===6){const gain=HOLE_BASE*(hc.level??((hc.gain??1)*(.55+.35*Math.sin(2*Math.PI*(hc.hz??1.7)*clock))));c=(hc.rgb??[1,.58,0]).map(v=>v*gain);}
+      if(hc?.mode==='target_pulse'&&!lit&&lamps.length===6){const gain=HOLE_BASE*(hc.level??(((HOLEDECO&&hc.gain)||1)*(.55+.35*Math.sin(2*Math.PI*(hc.hz??1.7)*clock))));c=((HOLEDECO&&hc.rgb)||[1,.58,0]).map(v=>v*gain);}
       if(hc?.mode==='script'&&hc.v){const a=hc.v;c=[Math.max(c[0],a[i*3]*HOLE_BASE),Math.max(c[1],a[i*3+1]*HOLE_BASE),Math.max(c[2],a[i*3+2]*HOLE_BASE)];}   // 10/30 newlight：場面の台本が穴ごとの色を渡す（?newlight=0 では来ない）
-      if(hc?.mode==='near_miss'&&hc.cup===i+1){c=c.map((v,q)=>Math.max(v,(hc.rgb??[.45,.35,.6])[q]*HOLE_BASE*(hc.gain??0)));}
+      if(HOLEDECO&&hc?.mode==='near_miss'&&hc.cup===i+1){c=c.map((v,q)=>Math.max(v,(hc.rgb??[.45,.35,.6])[q]*HOLE_BASE*(hc.gain??0)));}
       const dt = clock - teaseAt[i];
       if (dt >= 0 && dt < 0.35) { const k = Math.sin(Math.PI * dt / 0.35) ** 2 * 0.5 * HOLE_BASE; c = [Math.max(c[0], k), Math.max(c[1], .58 * k), c[2]]; }
       const d = clock - hitAt[i];
