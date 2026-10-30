@@ -95,11 +95,12 @@
   ],
   "PrizeThresholds": [
     0,
-    45,
-    85,
-    150,
+    90,
+    135,
+    165,
     400
   ],
+  "ExtraLoanWalletCap": 80,
   "PrizeNames": [
     "参加賞",
     "C賞",

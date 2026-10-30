@@ -77,6 +77,9 @@ export class MedalRules extends GRules {
     this.ChainAnnounceSeconds = o.ChainAnnounceSeconds ?? 0;
     this.ChainAnnounceSecondsFirst = o.ChainAnnounceSecondsFirst ?? null;   // 最初の継続（JP直後・ChainFirstAuto）の告知の秒数（10/30 告知 v09 は 9.5、2回目以降の ChainAnnounceSeconds は 9.0）。null で ChainAnnounceSeconds と同じ
     this.ChainFirstAuto = o.ChainFirstAuto ?? false;
+    // --- 追加（100円）の玉（10/31 監督決定）。null: 従来どおり毎回 ExtraLoanBalls。数値: 追加の時点で持ち玉がこの数以上なら、追加は時間だけ（玉は0）。
+    //     撃たずに追加をくり返して持ち玉（＝賞）を積む抜け道を塞ぐ。最初の貸玉（開始）は対象外。
+    this.ExtraLoanWalletCap = o.ExtraLoanWalletCap ?? null;
     this.RuleVariant = 'H_20261029';
     this._hReady = true;
     this.validate();
@@ -145,6 +148,7 @@ export class MedalRules extends GRules {
       !Number.isInteger(r.MeterMaxInFlight) || r.MeterMaxInFlight < 1 || r.MeterMaxInFlight > 8 ||
       !isNum(r.MeterFireInterval) || r.MeterFireInterval < 0 || !isNum(r.MeterAimSpeed) || r.MeterAimSpeed <= 0 || r.MeterAimSpeed > 1 ||
       !isNum(r.MeterSettleSeconds) || r.MeterSettleSeconds < 0 ||
+      !(r.ExtraLoanWalletCap === null || (Number.isInteger(r.ExtraLoanWalletCap) && r.ExtraLoanWalletCap >= 0)) ||
       typeof r.ClockStopOnMeter !== 'boolean' || typeof r.ClockStopOnRoulette !== 'boolean' ||
       !isNum(r.RouletteStartDelaySeconds) || r.RouletteStartDelaySeconds < 0 ||
       !isNum(r.RouletteAutoStopSeconds) || r.RouletteAutoStopSeconds <= 0 ||
@@ -283,6 +287,15 @@ export class MedalGame extends GGame {
     if (idx < 0) idx = segs.length - 1;
     if (r.DuplicateExtension === 'latch') idx = this._dupIdx = Math.max(this._dupIdx, idx);
     return { index: idx, ...segs[idx] };
+  }
+  /** いま追加したら受け取る玉の数（液晶の「+○玉で再開」用。持ち玉が ExtraLoanWalletCap 以上なら0） */
+  get extraLoanBallsNow() { const r = this.rules, cap = r.ExtraLoanWalletCap; return cap !== null && this.wallet >= cap ? 0 : (r.ExtraLoanBalls ?? r.LoanBalls); }
+  /** 追加の払い出し: 持ち玉が ExtraLoanWalletCap 以上なら玉は0（時間だけ）。開始の貸玉は従来どおり。 */
+  _loan() {
+    const r = this.rules, cap = r.ExtraLoanWalletCap;
+    if (!this.addedCredit || cap === null || this.wallet < cap) return super._loan();
+    const keep = r.ExtraLoanBalls; r.ExtraLoanBalls = 0;
+    try { return super._loan(); } finally { r.ExtraLoanBalls = keep; }
   }
   activateExtra(requestId = this.extraRequestId) {
     const elapsedBefore = this._elapsed();
