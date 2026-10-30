@@ -40,7 +40,7 @@ export async function attachFinalResultSurface(lcd,{controller,finalResultImageF
  // 10/30 保険（?finalguard=0 で無し）: 最終結果が出て2秒たっても動画が readyState<2、または画が黒(中央付近の輝度がほぼ0)なら、旧の描画経路へ切り替えて結果を必ず見せる。
  // 段階: GPU合成 → 旧の描画(WebGL2・2D転写) → それでも黒/動画なしなら、結果の数字だけの静止カード。原因は console.error と errors に残す。
  const GUARD=new URLSearchParams(globalThis.location?.search??'').get('finalguard')!=='0';
- const guard={enabled:GUARD,stage:'gpu',reason:null,checks:0,bad:0,switchedAt:null,force:null,log:[]};let legacy=null,lastCheck=0,plain=false;
+ const guard={enabled:GUARD,stage:'gpu',reason:null,checks:0,bad:0,switchedAt:null,force:null,log:[]};let legacy=null,lastCheck=0,plain=false,guardCt=-1,guardMoveAt=0;const FINAL_OLD=new URLSearchParams(globalThis.location?.search??'').get('finalguard')==='old';
  const probe=document.createElement('canvas');probe.width=probe.height=8;const probeCtx=probe.getContext('2d',{willReadFrequently:true});
  const lumaOf=d=>{let t=0;for(let i=0;i<d.length;i+=4)t+=(d[i]+d[i+1]+d[i+2])/765;return t/(d.length/4);};
  const videoLuma=()=>{if(video.readyState<2||!video.videoWidth)return null;try{probeCtx.drawImage(video,video.videoWidth*.35,video.videoHeight*.35,video.videoWidth*.3,video.videoHeight*.3,0,0,8,8);return lumaOf(probeCtx.getImageData(0,0,8,8).data);}catch{return null;}};
@@ -64,7 +64,10 @@ export async function attachFinalResultSurface(lcd,{controller,finalResultImageF
  const guardTick=()=>{
   if(!GUARD||manual||plain||time<2)return;const now=performance.now();if(now-lastCheck<250)return;lastCheck=now;guard.checks++;
   let bad=guard.force&&(guard.stage==='gpu'||guard.force==='persist')?'test:'+guard.force:null;
-  if(!bad){if(video.readyState<2)bad='video readyState='+video.readyState;
+  // 10/31 誤作動対策（?finalguard=old で従来）: readyState<2 でも再生位置が進んでいる間は止まりとみなさない。進みが1.5秒止まって初めて不良にする
+  const ct=video.currentTime;if(ct!==guardCt||FINAL_OLD){guardCt=ct;guardMoveAt=now;}
+  const stalled=FINAL_OLD||now-guardMoveAt>=1500;
+  if(!bad){if(video.readyState<2){if(stalled)bad='video readyState='+video.readyState+(FINAL_OLD?'':' (再生位置が1.5秒進まない)');}
    else if(gpuMode&&renderer.surface?.valid===false)bad='gpu surface invalid';
    else{const l=videoLuma();if(l!=null&&l<.02)bad='video black luma='+l.toFixed(3);else if(!gpuMode&&guard.stage==='legacy'){const p=panelLuma();if(p!=null&&p<.02)bad='panel black luma='+p.toFixed(3);}}}
   if(!bad){guard.bad=0;return;}guard.bad++;guard.reason=bad;
@@ -83,7 +86,7 @@ export async function attachFinalResultSurface(lcd,{controller,finalResultImageF
    // rows=行の配列（各行は [文字,'g'|'w'] の並び）。1行は 64px 前後（「次のA賞まで」と同じ大きさ）、長い文は2行にする
    const line=(key,rows,w=800,size=rows.length===1?72:58,pitch=62)=>({key:key+':'+rows.map(r=>r.map(p=>p[0]).join('')).join('|'),w,h:rows.length*pitch+50,size,pitch,rows});
    const prize=st.rankIndex>0?names[st.rankIndex]:'';const lines={};
-   lines.total=line('t',[[['TOTAL＝いま手元に残った玉の数','w']]],800,42,0);lines.total.h=64;
+   if(new URLSearchParams(globalThis.location?.search??'').get('helpcards')==='1'){lines.total=line('t',[[['TOTAL＝いま手元に残った玉の数','w']]],800,42,0);lines.total.h=64;}   // 10/31 説明札は既定で無し（?helpcards=1 で戻す）
    const pr=PRAISE[st.rankIndex]??[['ナイスプレイ！']];
    lines.praise=line('p',pr.map((r,i)=>i===0&&prize?[[prize+' ','g'],[r[0],'w']]:[[r[0],'w']]));
    let miss=null;

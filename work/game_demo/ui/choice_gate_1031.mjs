@@ -53,6 +53,10 @@ export function choiceBlocked(ctrl, register = true) {
 /** 入口（実機ボタン・キーボード）が自前で捨てた押下も、連打として数える。 */
 export function registerPress(ctrl) { ctrl._lastPressAt = uiNow(ctrl); }
 
+let _staffGate = null;
+/** ?staffgate=0 で従来（出てから0.7秒だけ捨てる）に戻る。 */
+export function staffGateOn() { if (_staffGate === null) { let q = ''; try { q = globalThis.location?.search ?? ''; } catch {} _staffGate = new URLSearchParams(q).get('staffgate') !== '0'; } return _staffGate; }
+export function resetStaffGate() { _staffGate = null; }
 export const GUARD_SECONDS = 0.7;   // StaffWait: スタッフ画面が出た直後の押しを捨てる秒
 
 /** Pure mapping used by tests and the bridge. StaffWait is handled by the bridge (chord rules); here it returns null. */
@@ -74,7 +78,11 @@ export function entryGuard(ctrl) {
   const age = choiceAge(ctrl);   // 追加(Continue)・継続(ChainChoice)。告知中は 0
   if (age !== null) return age < CHOICE_GUARD_SECONDS;
   const g = ctrl.game;
-  if (ctrl.phase === 'StaffWait' && typeof g.staffWaitSeconds === 'number') return g.staffWaitSeconds < GUARD_SECONDS;
+  if (ctrl.phase === 'StaffWait' && typeof g.staffWaitSeconds === 'number') {
+    if (!staffGateOn()) return g.staffWaitSeconds < GUARD_SECONDS;
+    // 10/31 スタッフ待ちも選択画面と同じ：出てから1.5秒、かつ連打（捨てた押しを含む）が0.4秒止まるまで取り消せない
+    return g.staffWaitSeconds < CHOICE_GUARD_SECONDS || uiNow(ctrl) - (ctrl._lastPressAt ?? -Infinity) < MASH_QUIET_SECONDS;
+  }
   return false;
 }
 

@@ -8,6 +8,25 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   const ctx=lcd.canvas.getContext('2d'),errors=[];
   v.muted=true;v.playsInline=true;v.loop=true;v.preload='auto';
   const error=()=>{const message=`attract video: ${v.error?.message??'unavailable'}`;errors.push(message);console.error(message);};
+  // 10/31 復旧（?attractretry=0 で無し）: PIPELINE_ERROR_DECODE 等で動画が止まったら src を読み直して再生を再開する（最大3回。成功して5秒再生できたら回数を戻す）
+  const retryOn=new URLSearchParams(globalThis.location?.search??'').get('attractretry')!=='0';
+  const recovery={tries:0,max:3,recovered:0,failed:false,pending:false};let recoverReset=0;
+  const recover=()=>{
+    if(!retryOn||recovery.pending||disposedEarly)return;
+    if(recovery.tries>=recovery.max){recovery.failed=true;return;}
+    recovery.tries++;recovery.pending=true;
+    setTimeout(()=>{
+      recovery.pending=false;if(disposedEarly)return;
+      const resume=Math.min(v.currentTime||0,Math.max(0,(man.duration||1)-.1));
+      try{heldFrameDrop?.();}catch{}
+      const ok=()=>{v.removeEventListener('loadeddata',ok);recovery.recovered++;try{v.currentTime=active&&!manual?0:resume;}catch{}if(active&&!manual)v.play().catch(()=>{});};
+      v.addEventListener('loadeddata',ok,{once:true});
+      v.removeAttribute('src');v.load();v.src=new URL(man.file,base).href;v.load();
+    },150*recovery.tries);
+  };
+  let disposedEarly=false,heldFrameDrop=null;
+  v.addEventListener('error',()=>recover());
+  v.addEventListener('playing',()=>{const n=performance.now();if(!recoverReset)recoverReset=n;setTimeout(()=>{if(!v.paused&&!v.error)recovery.tries=0;},5000);});
   v.addEventListener('error',error);
   await new Promise((resolve,reject)=>{
     const done=()=>{clearTimeout(timer);v.removeEventListener('loadeddata',done);v.removeEventListener('error',bad);resolve();};
@@ -20,6 +39,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   const gpuEnabled=query.get('attractgpu')!=='0',skipEnabled=query.get('attractskip')!=='0';
   const paint=skipEnabled?suppressCanvasPaint(ctx):{stats:{skipped:0},run:fn=>fn(),dispose(){}};
   let gpu=null,published=false,frameRevision=0,heldFrame=null,heldRevision=-1,callback=null,fallbackKey=null;
+  heldFrameDrop=()=>{heldFrame?.close();heldFrame=null;heldRevision=-1;};
   const stats={frames:0,hiddenFrames:0,canvasDraws:0,decodedFrames:0,boundaryCopies:0};
   const decoded=()=>{frameRevision++;stats.decodedFrames++;};
   const watch=()=>{callback=v.requestVideoFrameCallback(()=>{callback=null;if(disposed)return;decoded();watch();});};
@@ -71,12 +91,12 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   // Preserve the existing cabinet lighting path; only replace the LCD pixels.
   lcd.applyLights=F=>original.applyLights(F);
   if(revision)Object.defineProperty(lcd,'uploadRevision',{configurable:true,enumerable:true,get:()=>active?undefined:revision.call(lcd)});
-  lcd.attractSurface={video:v,manifest:man,errors,get active(){return active;},get time(){return manual?time:v.currentTime;},
+  lcd.attractSurface={video:v,recovery,manifest:man,errors,get active(){return active;},get time(){return manual?time:v.currentTime;},
     connectGpu(options){if(gpuEnabled&&!gpu)gpu=createAttractGpu({...options,video:v,width:lcd.canvas.width,height:lcd.canvas.height});},
     get directActive(){return active&&direct();},
     compose(){if(!active||!direct())return null;const texture=gpu.compose(frameRevision);published=!!texture;return texture;},
     materialize,
     diagnostics:()=>({...stats,gpuEnabled,skipEnabled,frameRevision,heldFrame:!!heldFrame,paintSkipped:paint.stats.skipped,gpu:gpu?.diagnostics()??null})};
-  lcd.dispose=()=>{if(disposed)return;disposed=true;if(callback!==null)v.cancelVideoFrameCallback?.(callback);heldFrame?.close();heldFrame=null;gpu?.dispose();paint.dispose();v.pause();v.removeEventListener('seeked',decoded);v.removeEventListener('loadeddata',decoded);v.removeEventListener('error',error);v.removeAttribute('src');v.load();original.dispose();};
+  lcd.dispose=()=>{if(disposed)return;disposed=true;disposedEarly=true;if(callback!==null)v.cancelVideoFrameCallback?.(callback);heldFrame?.close();heldFrame=null;gpu?.dispose();paint.dispose();v.pause();v.removeEventListener('seeked',decoded);v.removeEventListener('loadeddata',decoded);v.removeEventListener('error',error);v.removeAttribute('src');v.load();original.dispose();};
   sync();return lcd;
 }
