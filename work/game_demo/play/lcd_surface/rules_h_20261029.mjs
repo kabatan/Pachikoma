@@ -25,12 +25,14 @@ import {createMashHint, HINT, telop} from './hint_h_20261029.mjs';
 import {loadTutorialOverlay} from './tutorial_jp_overlay_1030.mjs';
 
 const PX = 34, PY = 28;                    // 液晶の面(1240x1510)の中の見える範囲(1152x1268)の左上
-// ルーレットの回転ループ（10/31 修正）：映像ごとの [始め, 終わり) コマ。旧は全配当共通の 26→38（0.4秒・つなぎの差が通常の2.4倍）で、毎回の巻き戻しが
-//   GOP30・76Mbps の映像の途中コマへのシークとなり約8コマ固まった（かくかく）。映像側は始めのコマをキーフレームにし、終わり側 8 コマを始め側と混ぜ、
-//   終わりの後ろ 4 コマは始めの複製にしてある（production_20261028/roulette_*.mp4、元は orig_20261031/）。?roulooploop=old で旧ループ。
+// ルーレットの回転ループ（10/31 修正）：旧は全配当共通の 26→38（0.4秒・つなぎの差が通常の2.4倍）を巻き戻すシークで、GOP30・76Mbps の映像では毎回 約8コマ固まった（かくかく）。
+//   H 専用の映像 production_20261028/h_roulette_{配当}.mp4 は、回転の区間 [始め,終わり) を継ぎ目をなだらかにして M(=5) 回ぶん並べてあり、押されるまで巻き戻さず前へ流す
+//   （シークは押した瞬間だけ＝白いブレーキ光の裏）。コマ数は (M-1)×区間 だけ延びるので、場面の frames / stop_frame / cue.f(終わり以降)を実行時にその分ずらす。G は元の映像のまま。
+//   万一並べた分を使い切ったら、従来どおり始めへ巻き戻す。?roulooploop=old で旧(26→38・元の映像)。
 const LOOPS = { roulette_30: [33, 78], roulette_40: [24, 62], roulette_100: [30, 75], roulette_200: [35, 82], roulette_500: [32, 77] };
+const LOOP_M = 5;
 const LOOP_OLD = new URLSearchParams(globalThis.location?.search ?? '').get('roulooploop') === 'old';
-const loopOf = (name) => (LOOP_OLD ? [26, 38] : LOOPS[name] ?? [26, 38]);
+const loopOf = (name, sc) => (LOOP_OLD || !sc?.hLoop ? [26, 38] : [sc.hLoop.a, sc.hLoop.b + sc.hLoop.shift]);
 const SLIDE_FRAMES = 36;                   // 停止コマの手前のこの数のコマから滑って止まる（= RouletteSlideSeconds 1.2秒 × 30fps）
 // 選択画面の「継続」の札（右の札）の位置。字の幅は札の幅(枠いっぱい)の 90%。札の上半分（「続」の絵の上）に置く。
 //   cx,cy = 字の中心、w = 字の幅（枠の幅 × BADGE_RATIO）。3 状態の実測（1152x1268 の面）。切り替え中は choiceV20.transition の重みで補間する。
@@ -65,6 +67,12 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   const gem = await Promise.all(['1', '2', '3', '4', '5', '6', '7', 'max'].map((k) => img(new URL(`./rules_h_assets/gem_${k}.png`, import.meta.url).href)));
   const meter = createMeterH({ style, sprites: { digits: gem.slice(0, 7), max: gem[7] } });
   const model = lcd.jp.model, man = lcd.jp.man;
+  if (!LOOP_OLD) for (const [nm, [a, b]] of Object.entries(LOOPS)) {   // H 専用の回転ループ映像に差し替え（G は触らない）
+    const sc0 = man.scenes[nm]; if (!sc0 || sc0.hLoop || !/production_20261028\/roulette_\d+\.mp4$/.test(sc0.file)) continue;
+    const shift = (LOOP_M - 1) * (b - a);
+    sc0.hLoop = { a, b, shift }; sc0.file = sc0.file.replace(/roulette_(\d+)\.mp4$/, 'h_roulette_$1.mp4'); sc0.frames += shift; sc0.stop_frame += shift;
+    for (const c of sc0.cues ?? []) if (c.f >= b) c.f += shift;
+  }
   // ---- JPチャンスのチュートリアル ----
   const tq = new URLSearchParams(globalThis.location?.search ?? '').get('jptutorial');
   const TUT = { on: tq !== '0' && tq !== 'off', every: tq === 'all', fin: 'tutorial_jp_fin', secs: 0 };
@@ -182,7 +190,7 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
         // 押した瞬間：停止コマの手前 36 コマへ。ここから 1.2 秒で止まる。つなぎは白いブレーキ光で隠す
         S.press.applied = true; S.flashAt = S.clock; v.currentTime = Math.max(0, (sc.stop_frame - SLIDE_FRAMES) / man.fps); note('slide', { from: sc.stop_frame - SLIDE_FRAMES });
       } else if (!S.press && (!ro || ro.stage === 'spinning')) {
-        const [la, lb] = loopOf(name);
+        const [la, lb] = loopOf(name, sc);
         if (t >= lb) {
           // 回転を繰り返す（押されるまで）。行き過ぎた分(最大 4 コマ)は始めに足して位相を保つ。タイムラインの時刻も同時に合わせ、jp_surface 側の巻き戻し検出による 2 度目のシークを防ぐ
           const to = (la + Math.min(4, Math.max(0, t - lb))) / man.fps;
