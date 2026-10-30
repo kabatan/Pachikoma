@@ -35,6 +35,16 @@ export function attachTrayVisual(hr, pa) {
     // 管の除外でboundsが変わっても、床と同面の可動蓋の描画順は従来どおり保つ。
     if(vv.length){const mesh=make(vv,ii,mat);if(mat===material)mesh.renderOrder=1;}
   }
+  // 透明×両面は three が毎フレーム side を裏→表に替えて needsUpdate し、シェーダ選び直し(getProgram)が2回走る。
+  // 裏面用・表面用の材質を別メッシュにして同じ順(裏→表)で描く。画は同一。?traysplit=0 で従来。
+  const splitMats=[];
+  if(new URLSearchParams(globalThis.location?.search??'').get('traysplit')!=='0'){
+    for(const mesh of group.children.filter(m=>m.isMesh&&m.material===guardMaterial)){
+      const back=guardMaterial.clone(),front=guardMaterial.clone();back.side=THREE.BackSide;front.side=THREE.FrontSide;splitMats.push(back,front);
+      mesh.material=back;const twin=new THREE.Mesh(mesh.geometry,front);twin.frustumCulled=mesh.frustumCulled;twin.renderOrder=mesh.renderOrder;
+      twin.position.copy(mesh.position);twin.quaternion.copy(mesh.quaternion);twin.scale.copy(mesh.scale);group.add(twin);
+    }
+  }
   const moving=[];
   for(const src of tray.visualMechs){
     if(!['MECH_OVF_FLAP','MECH_CNT_FLAP'].includes(src.id))continue;
@@ -64,6 +74,6 @@ export function attachTrayVisual(hr, pa) {
     }
     return {count,positions:visiblePositions};
   };
-  update();const handle={group,update,visibleBalls,dispose(){hr.render=originalRender;hr.trayVisual=false;hr.trayVisualHandle=null;hr.sBalls.remove(group);for(const m of group.children)m.geometry?.dispose();material.dispose();guardMaterial.dispose();}};
+  update();const handle={group,update,visibleBalls,dispose(){hr.render=originalRender;hr.trayVisual=false;hr.trayVisualHandle=null;hr.sBalls.remove(group);for(const m of group.children)m.geometry?.dispose();material.dispose();guardMaterial.dispose();for(const m of splitMats)m.dispose();}};
   hr.trayVisualHandle=handle;return handle;
 }
