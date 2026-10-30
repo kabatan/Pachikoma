@@ -7,9 +7,11 @@ const pop=(t,a)=>t>=0&&t<a.length?a[t]:1;
 const CH=[2.4,1.55,1.12,.93,1.04,1], MID=[1.20,.96,1.03,1], LAST=[1.85,1.38,.92,1.08,.98,1];
 
 export async function createFinalResultRendererInjected(base,man,video,{THREE,renderer}){
+ let textCacheEnabled=new URLSearchParams(globalThis.location?.search??'').get('finaltextcache')!=='0',lastTextKey=null;
+ let bloomEnabled=new URLSearchParams(globalThis.location?.search??'').get('finalbloom')!=='0';
  const gl=renderer.getContext();
  const canvas={width:W,height:H,readyState:4,resultRevision:0};let disposed=false,valid=false,output=null,vao=null,buffer=null,warming=false;
- const stats={renders:0,cacheHits:0,waits:0,failures:[],reads:0,lastInput:null};
+ const stats={textBuilds:0,textReuses:0,renders:0,cacheHits:0,waits:0,failures:[],reads:0,lastInput:null};
  if(!gl||!gl.getExtension('EXT_color_buffer_float'))throw Error('Native result compositor requires float render targets');
  gl.getExtension('OES_texture_float_linear');
  const programs=[],textures=[],fbos=[],locations=new Map(),shaderBodies=[];
@@ -46,8 +48,11 @@ export async function createFinalResultRendererInjected(base,man,video,{THREE,re
  o=vec4(b,1);}`);
  const warpP=prog(`uniform sampler2D im;uniform vec2 shift;uniform float zoom;void main(){vec2 p=(uv*vec2(1152,1268)-vec2(576,634)-shift)/zoom+vec2(576,634);o=texture(im,p/vec2(1152,1268));}`);
  const hiP=prog(`uniform sampler2D im;void main(){o=vec4(max(texture(im,uv).rgb-vec3(.92),vec3(0)),1);}`);
+ // Only the broad bloom is reduced; native image/text and final output stay unchanged.
+ const reduceP=prog(`uniform sampler2D im;void main(){ivec2 p=ivec2(gl_FragCoord.xy)*2;o=(texelFetch(im,p,0)+texelFetch(im,p+ivec2(1,0),0)+texelFetch(im,p+ivec2(0,1),0)+texelFetch(im,p+ivec2(1,1),0))*.25;}`);
  const finalP=prog(`uniform sampler2D im,b10,b36;void main(){vec2 v=uv;vec3 c=texture(im,v).rgb+(texture(b10,v).rgb*.6+texture(b36,v).rgb*.9)*.18;o=vec4(pow(clamp(c,0.,1.),vec3(1./2.2)),1);}`);
  const L=target(),tmp=target(),shadow=target(),glow=target(),image=target(),warped=target(),hi=target(),b10=target(),b36=target();
+ const [hi2,tmp2,b102,hi4,tmp4,b364]=[target(W/2,H/2),target(W/2,H/2),target(W/2,H/2),target(W/4,H/4),target(W/4,H/4),target(W/4,H/4)];
  const slot=target(244,Math.floor(760*SCL)),slotBlur=target(244,Math.floor(760*SCL));
  const atlas={},part={};
  const load=async(path,logicalScale=1)=>{const response=await fetch(new URL(path,base));if(!response.ok)throw Error(`result PNG ${response.status}: ${path}`);const b=await createImageBitmap(await response.blob(),{premultiplyAlpha:'none',colorSpaceConversion:'none'});try{const t=tex(b.width,b.height,b,true);t.w*=logicalScale;t.h*=logicalScale;return t;}finally{b.close();}};
@@ -89,12 +94,12 @@ export async function createFinalResultRendererInjected(base,man,video,{THREE,re
    const count=t=>{const u=Math.max(0,Math.min(1,(t-102)/54));return V*(1-(1-u)**1.7);},odo=(v,k)=>k===0?v:Math.floor(v/10**k)+Math.max(0,Math.min(1,(v/10**(k-1))%10-9));const q=odo(count(f),k),dq=Math.abs(q-odo(count(f-1),k)),fl=Math.floor(q),fr=q-fl;clear(slot);for(let jj=-2;jj<=2;jj++)draw(atlas['d'+((fl+jj)%10+10)%10],slot,122,slot.h/2+(jj-fr)*PITCH);const len=Math.min(dq,1)*PITCH*.62;let input=slot;if(len>3){use(filterP,slotBlur,{im:slot},{stepUV:[0,1/slot.h],sigma:1,box:Math.floor((Math.floor(len)|1)/2)});input=slotBlur;}draw(input,L,...P(cx,cy),s,s,op,0,slot.h,len>3?1+1.5*Math.min(1,dq):1);
   }put('tama',...P(991,859));
  }
- function baseFrame(f,V){totalDigits(f,V);blur(L,tmp,shadow,14);blur(L,tmp,glow,22);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,bgTex.t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,video);
+ function baseFrame(f,V){const textKey=V+':'+(f>=162?'settled':f);if(!textCacheEnabled||lastTextKey!==textKey){totalDigits(f,V);blur(L,tmp,shadow,14);blur(L,tmp,glow,22);lastTextKey=textKey;stats.textBuilds++;}else stats.textReuses++;gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,bgTex.t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,video);
   clear(postTex);const tl=f-156,fl=tl>=0&&tl<4?[.55,.32,.16,.07][tl]:0;
   gl.bindFramebuffer(gl.FRAMEBUFFER,postTex.f);gl.clearBufferfv(gl.COLOR,0,new Float32Array([fl,fl*.92,fl*.75,1-fl]));
   if(applyFx('total',f)){gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);use(copyP,postTex,{im:fx});gl.disable(gl.BLEND);}
   const spin=f>=102&&f<156?.6+.6*(f-102)/54:0,gain=.32+.12*spin+(tl>=0?1.4*Math.exp(-tl*.14):0);use(composeP,image,{bg:bgTex,letters:L,shadow,glow,post:postTex},{gain,f,isFail:0,nd:String(V).length});
-  let sh=0,zoom=1;if(tl>=0&&tl<14){sh=40*(1-tl/16);zoom=1+.1*Math.exp(-tl*.42);}if(f>=108&&f<156)sh=Math.max(sh,2+3*((f-102)/54)**2);if(f>=147&&f<156)zoom=1+.03*ease((f-147)/9);use(warpP,warped,{im:image},{shift:[sh*Math.sin(f*2.3),sh*Math.cos(f*3.1)],zoom});use(hiP,hi,{im:warped});blur(hi,tmp,b10,10);blur(hi,tmp,b36,36);use(finalP,stage,{im:warped,b10,b36});use(copyP,rA,{im:stage});current=rA;other=rB;
+  let sh=0,zoom=1;if(tl>=0&&tl<14){sh=40*(1-tl/16);zoom=1+.1*Math.exp(-tl*.42);}if(f>=108&&f<156)sh=Math.max(sh,2+3*((f-102)/54)**2);if(f>=147&&f<156)zoom=1+.03*ease((f-147)/9);use(warpP,warped,{im:image},{shift:[sh*Math.sin(f*2.3),sh*Math.cos(f*3.1)],zoom});use(hiP,hi,{im:warped});if(bloomEnabled){use(reduceP,hi2,{im:hi});use(reduceP,hi4,{im:hi2});blur(hi2,tmp2,b102,5);blur(hi4,tmp4,b364,9);use(finalP,stage,{im:warped,b10:b102,b36:b364});}else{blur(hi,tmp,b10,10);blur(hi,tmp,b36,36);use(finalP,stage,{im:warped,b10,b36});}use(copyP,rA,{im:stage});current=rA;other=rB;
  }
  const ranks='NCBAS',slam=[2.7,1.75,1.18,.90,1.07,.98,1],popChip=[1.6,1.25,.95,1.05,1],popMsg=[1.8,1.35,1.08,.96,1.04,1];
  function smallDigits(num,cx,cy,sc,a,pitch=66,unit=null){const str=String(num),wid=pitch*sc*str.length+(unit?80*sc:0);let x=cx-wid/2+pitch*sc/2;for(const ch of str){sprite('sn'+ch,x,cy,sc,a);x+=pitch*sc;}if(unit)sprite('lb_'+unit,x+10*sc,cy+4*sc,.85*sc,a);}
@@ -121,7 +126,7 @@ export async function createFinalResultRendererInjected(base,man,video,{THREE,re
   step(clampP);use(passthrough,null,{im:current});canvas.resultRevision=(canvas.resultRevision??0)+1;return canvas;
  }
  const surface={type:'lcd-gpu-surface',texture:output.texture,target:output.target,width:W,height:H,context:gl,origin:'bottom-left',encoding:'srgb-encoded',alphaMode:'opaque',get revision(){return canvas.resultRevision;},get valid(){return valid&&!disposed;}};
- function render(f,state){if(warming)throw Error('Final live render during boot actual warm');if(disposed)return null;if(video.readyState<2){stats.waits++;return null;}const key=Math.max(0,Math.floor(f))+':'+JSON.stringify(state);if(key===lastKey&&valid){stats.cacheHits++;return surface;}valid=false;try{const result=segment.run('final-render',()=>renderBody(f,state));if(result){valid=true;stats.renders++;stats.lastInput={f:Math.max(0,Math.floor(f)),state:JSON.parse(JSON.stringify(state))};return surface;}return null;}catch(error){lastKey=null;stats.failures.push({reason:'render',message:String(error?.message??error)});throw error;}}
+ function render(f,state){if(warming)throw Error('Final live render during boot actual warm');if(disposed)return null;if(video.readyState<2){stats.waits++;return null;}const key=Math.max(0,Math.floor(f))+':'+JSON.stringify(state);if(key===lastKey&&valid){stats.cacheHits++;return surface;}valid=false;try{const result=segment.run('final-render',()=>renderBody(f,state));if(result){valid=true;stats.renders++;stats.lastInput={f:Math.max(0,Math.floor(f)),state:JSON.parse(JSON.stringify(state))};return surface;}return null;}catch(error){lastKey=null;lastTextKey=null;stats.failures.push({reason:'render',message:String(error?.message??error)});throw error;}}
  function warmActual({state,afterNative}={}){
   if(disposed||warming||valid||canvas.resultRevision!==0||stats.renders||lastKey!==null)throw Error('Final actual warm requires unused boot core');
   if(renderer.getRenderTarget()!==null)throw Error('Final actual warm requires default-target boundary');
@@ -144,13 +149,13 @@ export async function createFinalResultRendererInjected(base,man,video,{THREE,re
     try{gl.bindFramebuffer(gl.FRAMEBUFFER,output.framebuffer);gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);}catch(error){receipt.cleanupErrors.push(String(error?.message??error));}
     if(mag!==null){try{gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,upa.t);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,mag);}catch(error){receipt.cleanupErrors.push(String(error?.message??error));}}
    });}catch(error){receipt.cleanupErrors.push(String(error?.message??error));}
-   current=saved.current;other=saved.other;lastKey=saved.lastKey;letterBounds=saved.letterBounds;canvas.resultRevision=saved.revision;valid=saved.valid;warming=false;receipt.metadataReset=true;receipt.blackCleared=receipt.cleanupErrors.length===0;receipt.sourceAfter=source();if(!receipt.blackCleared)receipt.status='failed';
+   current=saved.current;other=saved.other;lastKey=saved.lastKey;lastTextKey=null;letterBounds=saved.letterBounds;canvas.resultRevision=saved.revision;valid=saved.valid;warming=false;receipt.metadataReset=true;receipt.blackCleared=receipt.cleanupErrors.length===0;receipt.sourceAfter=source();if(!receipt.blackCleared)receipt.status='failed';
   }
   return receipt;
  }
- return {surface,prewarm,render,warmActual,get ready(){return effects.size===fxRows.length;},shaderSources:()=>[...shaderBodies],segmentDiagnostics:()=>segment.diagnostics(),
+ return {setBloomEnabled(on){bloomEnabled=!!on;lastKey=null;},setTextCacheEnabled(on){textCacheEnabled=!!on;lastTextKey=null;lastKey=null;},surface,prewarm,render,warmActual,get ready(){return effects.size===fxRows.length;},shaderSources:()=>[...shaderBodies],segmentDiagnostics:()=>segment.diagnostics(),
   readPixels(){if(!surface.valid)throw Error('Final result has no completed native image');stats.reads++;return output.readPixels();},
-  diagnostics:()=>({...stats,lastInput:stats.lastInput?JSON.parse(JSON.stringify(stats.lastInput)):null,failures:stats.failures.map(x=>({...x})),kind:'final_result_compositor_injected',valid:surface.valid,revision:canvas.resultRevision,ready:effects.size===fxRows.length,segment:segment.diagnostics(),extraContexts:0,disposed}),
+  diagnostics:()=>({bloomEnabled,textCacheEnabled,...stats,lastInput:stats.lastInput?JSON.parse(JSON.stringify(stats.lastInput)):null,failures:stats.failures.map(x=>({...x})),kind:'final_result_compositor_injected',valid:surface.valid,revision:canvas.resultRevision,ready:effects.size===fxRows.length,segment:segment.diagnostics(),extraContexts:0,disposed}),
   dispose(){if(warming)throw Error('Final dispose during synchronous actual warm');if(disposed)return;disposed=true;valid=false;effects.clear();try{segment.run('final-dispose',cleanup);}finally{output.dispose();}}
  };
  }catch(error){disposed=true;valid=false;try{segment.run('final-init-failed-cleanup',cleanup);}finally{output?.dispose();}throw error;}

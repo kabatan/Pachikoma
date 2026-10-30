@@ -1,3 +1,4 @@
+import {createBallTargetCrop} from './ball_target_crop_1030.mjs';
 import * as THREE from '../../web/vendor/three/three.module.js';
 import {loadCompactProbe} from './prebake_probe_1029.mjs';
 
@@ -90,8 +91,9 @@ void main(){
   // the native canvas. Keep all artwork, layout and occlusion in native coords.
   const renderLite=new URLSearchParams(globalThis.location?.search??'').get('renderlite')==='1';
   const renderScale=renderLite?2:1,RW=W/renderScale,RH=H/renderScale;
-  const balls=renderLite?new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples:2}):hr.rtMain;
+  let balls=renderLite?new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples:2}):hr.rtMain;
   if(renderLite)owned.push(balls);
+  const ballCrop=renderLite?null:createBallTargetCrop(hr,balls);if(ballCrop)owned.push(ballCrop);
   const display=renderLite?rt(RW,RH):null;
   if(display)display.texture.type=THREE.UnsignedByteType;
   const present=display?make('uniform sampler2D uImage;void main(){gl_FragColor=texture2D(uImage,gl_FragCoord.xy/vec2(1440.,2560.));}',{uImage:{value:display.texture}}):null;
@@ -126,6 +128,7 @@ vec4 prebakeC(ivec2 p){
   if(renderLite){
     shader=shader.replace('vec4 d=texelFetch(uD,p,0);','vec4 d=texture(uD,uv);').replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*2.0,gl_FragCoord.zw)');
   }
+  if(ballCrop)shader=replace(shader,'vec4 d=texelFetch(uD,p,0);','vec4 d=p.y<textureSize(uD,0).y?texelFetch(uD,p,0):vec4(0.);');
   const final=make(shader,{...U,...extra,uD:{value:balls.texture}});
   const legacy=hr.render,dispose=hr.dispose,readLinear=hr.readLinear;
   let enabled=true,disposed=false,probeValid=false;
@@ -155,7 +158,7 @@ vec4 prebakeC(ivec2 p){
     if(validProof)fieldInitialized.add(key);else fieldInitialized.delete(key);
   }
   const restored=()=>{fieldInitialized.clear();invalidate();};
-  const api={setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,compositeResolution:[RW,RH],ballResolution:[RW,RH],ballSamples:balls.samples,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  const api={ballCrop,setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
   hr.prebakeRelight=api;
   hr.render=function(){
     const plate=getPlate();
@@ -169,7 +172,8 @@ vec4 prebakeC(ivec2 p){
     if(hr.balls.count){if(probeChanged()){compact.compose(hr.frame);stats.probeUpdates++;}else stats.probeReuses++;}
     extra.uPBLCDOn.value=plate?.mesh.visible?1:0;
     if(plate){extra.uPBLCD.value=plate.mat.uniforms.uT.value;extra.uPBRect.value.copy(plate.mat.uniforms.uRect.value);extra.uPBPanel.value.copy(plate.mat.uniforms.uPanel.value);extra.uPBGain.value=plate.mat.uniforms.uGain.value;}
-    r.setRenderTarget(balls);r.setViewport(0,0,balls.width,balls.height);r.setClearColor(0x000000,0);r.clear(true,true,false);
+    balls=ballCrop?.select()??balls;final.material.uniforms.uD.value=balls.texture;
+    r.setRenderTarget(balls);r.setViewport(0,0,RW,RH);r.setClearColor(0x000000,0);r.clear(true,true,false);
     const oldBallMaterial=hr.balls.material;hr.balls.material=ballMaterial;
     try{if(hr.balls.count||hr.trayVisual)r.render(hr.sBalls,hr.camera);}finally{hr.balls.material=oldBallMaterial;}
     U.uUseLut.value=hr.lutEnabled?1:0;
