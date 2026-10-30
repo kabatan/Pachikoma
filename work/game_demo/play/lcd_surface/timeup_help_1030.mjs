@@ -2,6 +2,8 @@
 // 戻す: ?timeuphelp=0（何も付けない＝従来）。規則・秒数・入力は変えない。液晶の字と指し示しだけを足す。
 // 重ねる先: 追加の受付（Continue・timeup_surface が全面を描いている間）。スタッフ待ち／再開の字は staff_call_1030.mjs 側。
 // 座標は timeup_surface と同じ 1152×1268（PX=34,PY=28）。良しとされた構図（左の札・右の砂時計・終わる／続ける）は動かさない。
+import * as THREE from '../../web/vendor/three/three.module.js';
+import { layerTexture } from './lcd_split_1030.mjs';
 const W = 1152, PX = 34, PY = 28;
 
 export function timeupHelpMode(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('timeuphelp') === '0' ? 'old' : 'new'; }
@@ -58,38 +60,38 @@ export function continueFacts(game) {
 
 export async function attachTimeupHelp(lcd, { controller } = {}) {
   if (!lcd?.production || !lcd.timeupSurface || lcd.timeupHelp || timeupHelpMode() === 'old') return lcd;
-  const ctx = lcd.canvas.getContext('2d'), g = () => controller.game;
+  const ctx = lcd.canvas.getContext('2d'), g = () => controller.game, mainCtx = ctx;
   const st = { since: null, drawn: 0 };
   const base = { frame: lcd.frame.bind(lcd) };
   const revision = Object.getOwnPropertyDescriptor(lcd, 'uploadRevision')?.get;
   let drawing = false;
 
-  function draw(now) {
-    const game = g(), f = continueFacts(game), t = (now - st.since) / 1000, left = Math.ceil(game.offerLeft ?? 0);
-    ctx.save(); ctx.translate(PX, PY);
+  function draw(now, ctx = mainCtx, only = 0, tFixed = null, tx = PX, ty = PY) {   // only: 0=全部 1=上の札 2=それ以外。tFixed: 時刻を固定(入りが終わった絵)。tx,ty: 原点(分割描画では小さい canvas の左上)
+    const game = g(), f = continueFacts(game), t = tFixed ?? (now - st.since) / 1000, left = Math.ceil(game.offerLeft ?? 0);
+    ctx.save(); ctx.translate(tx, ty);
     // 1) 上の札: いま何が起きているか（時間切れ）と、できること（100円で20秒）
-    { const k = ease(t / .35); ctx.save(); ctx.globalAlpha = k; ctx.translate(0, (1 - k) * -40);
+    if (!only || only === 1) { const k = ease(t / .35); ctx.save(); ctx.globalAlpha = k; ctx.translate(0, (1 - k) * -40);
       plate(ctx, 60, 4, 1016, 126, 30);
       richLine(ctx, [['時間切れ！ ', WHITE, '#8a5cff'], [`100円で${f.extra}秒`, GOLD, '#ff9a20'], [' 追加できます', WHITE]], 540, 68, 60, 930);
       richLine(ctx, [['押さないと あと', WHITE], [`${left}秒`, GOLD], [' で おしまい', WHITE]], 540, 116, 46, 930);
       ctx.restore(); }
     // 2) 左の札の上: あと少しで届く賞（あと◯玉）を見せる。TOTAL の上に載せ、「いまの玉」と読ませる
-    { const k = ease((t - .25) / .35); ctx.save(); ctx.globalAlpha = k; ctx.translate(0, (1 - k) * 30);
+    if (!only || only === 2) { const k = ease((t - .25) / .35); ctx.save(); ctx.globalAlpha = k; ctx.translate(0, (1 - k) * 30);
       plate(ctx, 78, 290, 366, 216, 26);
       textPath(ctx, 'いまの玉で賞が決まる', 261, 334, 34, { fill: WHITE, silver: false });
       if (f.top) { textPath(ctx, '最高賞！', 261, 410, 66, { fill: GOLD, glow: '#ffb030' }); textPath(ctx, 'すごい！', 261, 478, 52, { fill: GOLD }); }
       else { textPath(ctx, `${f.rankName}まで`, 261, 396, 52, { fill: WHITE, glow: '#8a5cff' }); textPath(ctx, `あと${f.need}玉！`, 261, 476, 74, { fill: GOLD, glow: '#ff9a20' }); }
       ctx.restore(); }
     // 3) 右の札の上: 100円で今の続きから（灯の数・あと1灯）
-    { const k = ease((t - .5) / .35), c = f.ctx; ctx.save(); ctx.globalAlpha = k; ctx.translate((1 - k) * 40, 0);
+    if (!only || only === 2) { const k = ease((t - .5) / .35), c = f.ctx; ctx.save(); ctx.globalAlpha = k; ctx.translate((1 - k) * 40, 0);
       const h = 52 + c.lines.length * 44 + (c.sub ? 36 : 0); plate(ctx, 690, 232, 380, h, 24, 'rgba(255,220,120,.95)', .88);
       let y = 232 + 58; c.lines.forEach((ln, i) => { richLine(ctx, ln.map(p => [p[0], p[1]]), 880, y, i === 0 ? 36 : 40); y += 46; });
       if (c.sub) textPath(ctx, c.sub, 880, y - 2, 28, { fill: CYAN, silver: false });
       ctx.restore(); }
     // 4) 砂時計の数字の上: これが「100円で入る分」
-    { const k = ease((t - .8) / .3); ctx.save(); ctx.globalAlpha = k; textPath(ctx, '100円で', 965, 430, 40, { fill: GOLD, glow: '#ff9a20' }); ctx.restore(); }
+    if (!only || only === 2) { const k = ease((t - .8) / .3); ctx.save(); ctx.globalAlpha = k; textPath(ctx, '100円で', 965, 430, 40, { fill: GOLD, glow: '#ff9a20' }); ctx.restore(); }
     // 5) ボタンの指し示し（絵は動かさず、ボタンの字のすぐ上に札で）
-    { const k = ease((t - 1) / .3); ctx.save(); ctx.globalAlpha = k;
+    if (!only || only === 2) { const k = ease((t - 1) / .3); ctx.save(); ctx.globalAlpha = k;
       plate(ctx, 60, 728, 404, 70, 20, 'rgba(200,210,255,.95)', .94); textPath(ctx, '左ボタンで 終わる', 262, 778, 46, { fill: WHITE, silver: false });
       plate(ctx, 566, 728, 480, 70, 20, 'rgba(255,205,90,.95)', .94); textPath(ctx, '右ボタンで 続ける', 806, 778, 48, { fill: GOLD, silver: false });
       ctx.restore(); }
@@ -99,11 +101,26 @@ export async function attachTimeupHelp(lcd, { controller } = {}) {
   lcd.frame = (dt, F) => {
     base.frame(dt, F);
     const now = performance.now(), on = g().phase === 'Continue' && lcd.timeupSurface.active && (g().offerLeft ?? 0) > 0;
-    if (!on) { st.since = null; drawing = false; return; }
+    if (!on) { st.since = null; drawing = false; sp.on = false; return; }
     if (st.since == null) st.since = now;
+    if (SPLIT_ON && lcd.timeupSurface.splitActive && !sp.fail) {   // 継続の分割描画中: 液晶 canvas へは描かず、小さい層(字・板)を必要な時だけ描き直す
+      try { buildSplit(); sp.on = true; drawing = false; if (!SPLIT_CHECK) return; } catch (e) { sp.fail = true; sp.on = false; console.warn('[timeuphelp] 分割描画を止めて従来へ戻します', e); }
+    } else sp.on = false;
     drawing = true; st.drawn++; draw(now);
   };
+  // ---- 分割描画 ----
+  const SPLIT_ON = new URLSearchParams(globalThis.location?.search ?? '').get('timeupvideo') !== '0';
+  const SPLIT_CHECK = new URLSearchParams(globalThis.location?.search ?? '').has('splitcheck');
+  const sp = { on: false, fail: false, c1: null, c2: null, t1: null, t2: null, key1: null, key2: null };
+  const R1 = [20, 0, 1100, 160], R2 = [20, 220, 1100, 620], T_SETTLED = 10;
+  function buildSplit() {
+    const game = g(), f = continueFacts(game), left = Math.ceil(game.offerLeft ?? 0), k2 = JSON.stringify([f.top, f.rankName, f.need, f.ctx, f.lamps, f.extra]);
+    if (!sp.c1) { sp.c1 = document.createElement('canvas'); sp.c1.width = R1[2]; sp.c1.height = R1[3]; sp.c2 = document.createElement('canvas'); sp.c2.width = R2[2]; sp.c2.height = R2[3]; sp.t1 = layerTexture(THREE, sp.c1); sp.t2 = layerTexture(THREE, sp.c2); }
+    if (sp.key1 !== left) { const x = sp.c1.getContext('2d'); x.clearRect(0, 0, R1[2], R1[3]); draw(0, x, 1, T_SETTLED, -R1[0], -R1[1]); sp.t1.needsUpdate = true; sp.key1 = left; }
+    if (sp.key2 !== k2) { const x = sp.c2.getContext('2d'); x.clearRect(0, 0, R2[2], R2[3]); draw(0, x, 2, T_SETTLED, -R2[0], -R2[1]); sp.t2.needsUpdate = true; sp.key2 = k2; }
+  }
+  const splitLayers = () => (sp.on && !sp.fail ? [{ tex: sp.t1, w: R1[2], h: R1[3], ax: 0, ay: 0, x: PX + R1[0], y: PY + R1[1], rot: 0, sc: 1, alpha: 1, add: false }, { tex: sp.t2, w: R2[2], h: R2[3], ax: 0, ay: 0, x: PX + R2[0], y: PY + R2[1], rot: 0, sc: 1, alpha: 1, add: false }] : null);
   if (revision) Object.defineProperty(lcd, 'uploadRevision', { configurable: true, enumerable: true, get: () => drawing ? undefined : revision.call(lcd) });
-  lcd.timeupHelp = { state: st, get drawing() { return drawing; }, continueFacts: () => continueFacts(g()) };
+  lcd.timeupHelp = { splitLayers, state: st, get drawing() { return drawing; }, continueFacts: () => continueFacts(g()) };
   return lcd;
 }

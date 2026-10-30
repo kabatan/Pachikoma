@@ -1,10 +1,16 @@
 // 10/30 追加（チケット100円）の流れ：StaffWait の液晶「スタッフにチケットを渡してください」＋呼び出し音＋囲いの呼び出し電飾＋再開の「+20秒 再開！」＋再開直後の誤発射の保護。
 // 戻す: ?staffflow=old（何も付けない＝従来の流れ）。規則（ゲームの進行）は変えない。液晶の絵・音・電飾・入力の保護だけを足す。
 // 液晶: lcd.frame の後ろに重ねて描く（timeup_surface が先に付いている前提）。下の液晶座標は timeup_surface と同じ 1152×1268（PX=34,PY=28）。
+import * as THREE from '../../web/vendor/three/three.module.js';
+import { layerTexture } from './lcd_split_1030.mjs';
 import { timeupHelpMode, richLine, textPath as helpText, GOLD as HGOLD, WHITE as HWHITE } from './timeup_help_1030.mjs';
 const HELP = timeupHelpMode() === 'new';   // 10/30 初見向けの文（?timeuphelp=0 で従来）
 const W = 1152, H = 1268, PX = 34, PY = 28;
 const RESUME_SECONDS = 1.9, GUARD_SECONDS = 1.0;
+// スタッフ待ち画面の転送削減(10/30): 動かない絵は一度だけ、動く絵は行列で、動的な小片だけ小さい canvas で毎フレーム。?staffsplit=0 で従来(全面 canvas を毎回転送)
+const SPLIT_ON = new URLSearchParams(globalThis.location?.search ?? '').get('staffsplit') !== '0';
+const SPLIT_CHECK = new URLSearchParams(globalThis.location?.search ?? '').has('splitcheck');
+const SPLIT_SETTLE = 1.35;   // 入りの動き(最長 1.2 秒)が終わってから分割に切り替える
 
 export function staffFlowMode(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('staffflow') === 'old' ? 'old' : 'new'; }
 
@@ -169,6 +175,84 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     ctx.restore(); return true;
   }
 
+  // ---- スタッフ待ちの分割描画(転送削減) ----
+  // 下の el* は drawCall の該当部分を「入りの動きが終わった後(k=1)」の状態で別 canvas へ描く。drawCall 本体は変えない(検証と戻し用)。
+  const sp = { stage: 0, layers: null, fail: false, tex: {}, cv: {}, panelKey: null, built: false };
+  const spCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = Math.ceil(w); c.height = Math.ceil(h); return c; };
+  const spTex = (key, canvas, opts) => { const t = layerTexture(THREE, canvas, opts); sp.tex[key] = t; sp.cv[key] = canvas; return t; };
+  // 静止片: 液晶座標(panel 座標 = canvas から (PX,PY) を引いた座標)の矩形 rx,ry,rw,rh
+  const RECT = { A: [W / 2 - 420, 225, 840, 270], T2: [W / 2 - 650, 300, 1300, 470], B: [W / 2 - 600, 560, 1200, 330], C: [W / 2 - 520, 1038, 1040, 244], BAND: [W / 2 - 500, 60, 1000, 180], ARR: [590, 855, 240, 160] };
+  const spDraw = (key, fn) => {   // 矩形の canvas を作り、panel 座標で fn を描く
+    const [rx, ry, rw, rh] = RECT[key]; const c = sp.cv[key] ?? spCanvas(rw, rh), x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height);
+    x.save(); x.translate(-rx, -ry); fn(x); x.restore(); return c;
+  };
+  const elA = (x) => { x.globalAlpha = 1; textPath(x, 'スタッフに', W / 2, 395, 120, { fill: WHITE, glow: '#8a5cff' }); };
+  const elT2 = (x) => { x.globalAlpha = 1; x.save(); x.translate(W / 2, 520); textPath(x, 'チケットを', 0, 80, 210, { fill: GOLD, glow: '#ff9a20' }); x.restore(); };
+  const elB = (x) => { x.globalAlpha = 1; textPath(x, '渡してください', W / 2, 760, 136, { fill: GOLD, glow: '#ff9a20' }); };
+  const elC = (x) => {
+    const r = g().rules ?? {};
+    x.save(); x.globalAlpha = 1; x.translate(W / 2, HELP ? 1158 : 1160);
+    const pg = x.createLinearGradient(0, -80, 0, 80); pg.addColorStop(0, 'rgba(20,6,40,.9)'); pg.addColorStop(1, 'rgba(60,14,70,.9)');
+    x.fillStyle = pg; x.strokeStyle = 'rgba(255,205,90,.9)'; x.lineWidth = 5; x.beginPath(); x.roundRect(-500, HELP ? -100 : -88, 1000, HELP ? 202 : 176, 30); x.fill(); x.stroke();
+    if (HELP) {
+      helpText(x, '時間も玉も止まっています', 0, -38, 46, { fill: WHITE, silver: false });
+      helpText(x, `受け取り後に +${r.ExtraSeconds ?? 20}秒  +${r.ExtraLoanBalls ?? 10}玉 で再開！`, 0, 20, 46, { fill: GOLD, silver: false });
+      const l = g().lampCount ?? 0;
+      richLine(x, [[l > 0 ? `${l}灯のまま 続きから。 ` : 'いまの玉のまま 続きから。 ', HWHITE], ['やめるなら 左ボタン', HGOLD]], 0, 76, 36);
+    } else {
+      textPath(x, '時間も玉も止まっています', 0, -14, 54, { fill: WHITE, silver: false });
+      textPath(x, `受け取り後に +${r.ExtraSeconds ?? 20}秒  +${r.ExtraLoanBalls ?? 10}玉 で再開`, 0, 62, 54, { fill: GOLD, silver: false });
+    }
+    x.restore();
+  };
+  const elBand = (x, pulse) => {
+    x.save(); x.globalAlpha = 1; x.translate(W / 2, 150);
+    const bg2 = x.createLinearGradient(-300, 0, 300, 0); bg2.addColorStop(0, 'rgba(160,10,30,.0)'); bg2.addColorStop(.2, `rgba(${170 + 70 * pulse},20,40,.95)`); bg2.addColorStop(.8, `rgba(${170 + 70 * pulse},20,40,.95)`); bg2.addColorStop(1, 'rgba(160,10,30,0)');
+    x.fillStyle = bg2; x.fillRect(-460, -50, 920, 100);
+    textPath(x, HELP ? 'スタッフを呼んでいます' : '係員をお呼びします', 0, 30, 62, { fill: WHITE, glow: '#ff3050' });
+    x.restore();
+  };
+  const elArrows = (x, t) => {
+    x.save(); x.translate(655, 935);
+    for (let i = 0; i < 3; i++) { x.globalAlpha = (t * 3 - i) % 3 < 1 ? 1 : .3; x.fillStyle = '#ffd23a'; x.shadowColor = '#ff9a20'; x.shadowBlur = 24; x.beginPath(); x.moveTo(i * 52 - 20, -34); x.lineTo(i * 52 + 20, 0); x.lineTo(i * 52 - 20, 34); x.closePath(); x.fill(); }
+    x.restore();
+  };
+  const upaScale = () => { const s = Math.max(1, Math.floor(260 / upa.naturalWidth)); return { s, uw: upa.naturalWidth * s, uh: upa.naturalHeight * s }; };
+  const stages = [
+    () => { const c = spCanvas(W, H), x = c.getContext('2d'); const bg = x.createRadialGradient(W / 2, 560, 80, W / 2, 620, 900); bg.addColorStop(0, '#5a1456'); bg.addColorStop(.55, '#2a0a3e'); bg.addColorStop(1, '#0a0216'); x.fillStyle = bg; x.fillRect(0, 0, W, H); spTex('bg', c); },
+    () => { spTex('rays', rays); spTex('ticket', ticket); },
+    () => { sp.cv.A = spCanvas(RECT.A[2], RECT.A[3]); spDraw('A', elA); spTex('A', sp.cv.A); sp.cv.B = spCanvas(RECT.B[2], RECT.B[3]); spDraw('B', elB); spTex('B', sp.cv.B); },
+    () => { sp.cv.T2 = spCanvas(RECT.T2[2], RECT.T2[3]); spDraw('T2', elT2); spTex('T2', sp.cv.T2); },
+    () => { sp.cv.C = spCanvas(RECT.C[2], RECT.C[3]); spDraw('C', elC); spTex('C', sp.cv.C); sp.panelKey = panelKey(); },
+    () => { if (upa.naturalWidth) { const { uw, uh } = upaScale(), c = spCanvas(uw, uh), x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(upa, 0, 0, uw, uh); spTex('upa', c); }
+      sp.cv.BAND = spCanvas(RECT.BAND[2], RECT.BAND[3]); spTex('BAND', sp.cv.BAND); sp.cv.ARR = spCanvas(RECT.ARR[2], RECT.ARR[3]); spTex('ARR', sp.cv.ARR); sp.built = true; },
+  ];
+  const panelKey = () => { const r = g().rules ?? {}; return `${g().lampCount ?? 0}|${r.ExtraSeconds}|${r.ExtraLoanBalls}`; };
+  const L = (key, w, h, o) => ({ tex: sp.tex[key], w, h, ax: 0, ay: 0, rot: 0, sc: 1, alpha: 1, add: false, ...o });
+  function splitStep(now, t) {
+    if (!sp.built) { if (sp.stage < stages.length) stages[sp.stage++](); sp.layers = null; return; }
+    if (t < SPLIT_SETTLE) { sp.layers = null; return; }
+    const pulse = .5 + .5 * Math.sin(t * 5.2);
+    if (sp.panelKey !== panelKey()) { spDraw('C', elC); sp.tex.C.needsUpdate = true; sp.panelKey = panelKey(); }
+    spDraw('BAND', (x) => elBand(x, pulse)); sp.tex.BAND.needsUpdate = true;
+    spDraw('ARR', (x) => elArrows(x, t)); sp.tex.ARR.needsUpdate = true;
+    const sc = 1 + .025 * pulse, bob = Math.sin(t * 3.1) * 12;
+    const R = (k) => [PX + RECT[k][0], PY + RECT[k][1], RECT[k][2], RECT[k][3]];
+    const rc = (k, o = {}) => { const [x, y, w, h] = R(k); return L(k, w, h, { x, y, ...o }); };
+    const layers = [
+      L('bg', W, H, { x: PX, y: PY }),
+      L('rays', 1400, 1400, { ax: 700, ay: 700, x: PX + W / 2, y: PY + 560, rot: t * .22, alpha: .55 + .2 * pulse, add: true }),
+      rc('BAND'),
+      rc('A'),
+      L('T2', RECT.T2[2], RECT.T2[3], { ax: W / 2 - RECT.T2[0], ay: 520 - RECT.T2[1], x: PX + W / 2, y: PY + 520, sc }),
+      rc('B'),
+      L('ticket', 560, 300, { ax: 280, ay: 150, x: PX + 360, y: PY + 925 + bob, rot: -.07 + Math.sin(t * 2.4) * .035 }),
+    ];
+    if (sp.tex.upa) { const { uw, uh } = upaScale(); layers.push(L('upa', uw, uh, { ax: uw / 2, ay: uh / 2, x: PX + 850, y: PY + 890 + Math.sin(t * 4.1) * 10 })); }
+    layers.push(rc('ARR'), rc('C'));
+    sp.layers = layers;
+  }
+
   // ---- lcd へ重ねる（timeup_surface のあと）----
   const base = { frame: lcd.frame.bind(lcd) };
   const revision = Object.getOwnPropertyDescriptor(lcd, 'uploadRevision')?.get;
@@ -179,13 +263,16 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     if (waiting) {
       if (st.waitingSince == null) { st.waitingSince = now; if (st.chimeAt < 0) st.chimeAt = now + 250; }
       if (now >= st.chimeAt) { chime(st.chimes >= 8); st.chimes++; st.chimeAt = now + (st.chimes >= 8 ? 2200 : 3000); }
-      st.active = true; drawing = true; drawCall(now);
+      st.active = true; drawing = true;
+      if (SPLIT_ON && !sp.fail && !lcd.splitBroken) { try { splitStep(now, (now - st.waitingSince) / 1000); } catch (e) { sp.fail = true; sp.layers = null; console.warn('[staffsplit] 分割描画を止めて従来へ戻します', e); } } else sp.layers = null;
+      if (!sp.layers || SPLIT_CHECK) drawCall(now);   // 分割描画中は全面 canvas を描かない(転送しないので不要)。検証時は両方描く
     } else {
-      st.waitingSince = null; st.chimeAt = -1; st.chimes = 0;
+      st.waitingSince = null; st.chimeAt = -1; st.chimes = 0; sp.layers = null;
       drawing = drawResume(now); st.active = drawing;
     }
   };
   if (revision) Object.defineProperty(lcd, 'uploadRevision', { configurable: true, enumerable: true, get: () => drawing ? undefined : revision.call(lcd) });
+  (lcd.splitSources ??= []).push(() => (SPLIT_ON && !sp.fail && !lcd.splitBroken && g().phase === 'StaffWait' ? sp.layers : null));
   lcd.staffCall = { state: st, get drawing() { return drawing; }, chime, resumeSound, GUARD_SECONDS, RESUME_SECONDS, dispose() { if (controller.listeners.delete) controller.listeners.delete(onAction); else controller.listeners.splice(controller.listeners.indexOf(onAction), 1); controller.fireGate = prevGate; const a = globalThis.__cabinetLightScript; if (a?.after === lightOverride) a.after = null; } };
   return lcd;
 }

@@ -184,6 +184,17 @@ export async function createTimeupTotal({ ctx, PX, PY, getValues, parts = null, 
   };
   return {
     enter() { since = 0; },
+    // 分割描画用(液晶 canvas へ描かず、層として GPU で重ねる)。draw と同じ式。?timeupvideo=0 では使われない
+    split: {
+      tick(dt) { since += Math.max(0, dt); },
+      plate(idx) { const k = ((Math.round(idx) % meta.period) + meta.period) % meta.period; return { k, img: plates[k], x: PX + rx, y: PY + ry }; },
+      row() {
+        const v = getValues(); if (!v) return null;
+        const k = String(v.total); if (k !== key) { key = k; row = build(v.total); }
+        const t = since / .2, pop = t < 1 ? 1.35 - .35 * ease(t) : 1, a = Math.min(1, since / .15);
+        return { key: k, canvas: row.canvas, w: row.w, h: row.h, x: PX + row.ox + row.w / 2, y: PY + row.oy + row.h / 2, pop, a, settled: since >= .2 };
+      },
+    },
     // idx: 映像に出ているコマの絶対番号。dt: 経過秒
     draw(idx, dt) {
       since += Math.max(0, dt);

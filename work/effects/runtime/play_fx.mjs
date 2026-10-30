@@ -13,6 +13,8 @@ import * as THREE from '../../game_demo/web/vendor/three/three.module.js';
 import { Stage2cLightAdapter } from '../../assembly/sol61_v36_pack/stage2c/cabinet_adapter.mjs';   // LightAdapter + 筐体の7セグ/ロゴ/ボタン(setCabinet)
 import { ballCountToDigits } from '../../assembly/pack_envcheck/seg_digits.mjs';
 import { makeBoardWash } from './board_wash.mjs';
+import { createSplitCompositor } from '../../game_demo/play/lcd_surface/lcd_split_1030.mjs';   // 液晶板の重ね合わせ描画(スタッフ待ち・継続の転送削減)
+const SPLIT_CHECK = new URLSearchParams(globalThis.location?.search ?? '').has('splitcheck');   // 検証用: 分割と全面canvasを同時に用意し、__splitAB で切り替えて比べる
 import { installBallLights } from './ball_light.mjs';
 
 const here = new URL('.', import.meta.url);
@@ -190,7 +192,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   };
   // LCD板: 最初のフレームで中身ができてから作る
   lcd?.attractSurface?.connectGpu({THREE,renderer:hr.renderer});
-  let plate = null, last = null,uploadCanvas=null,uploadTexture=null,uploadRevision;
+  let plate = null, splitComp = null, last = null,uploadCanvas=null,uploadTexture=null,uploadRevision;
   const api = {
     get BL() { return BL; },
     get digitsShown() { return digitsShown; },
@@ -211,6 +213,15 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
       }
       if (last.lcd) {
         if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain });
+        {   // 重ね合わせ描画: 動かない絵は一度だけ送り、動く絵は行列だけ更新する。小さな render target へ合成して uT に渡す(液晶 canvas 7.5MB の毎回転送を省く)。層を出す画面だけ(?staffsplit=0 等で各画面が無効化)
+          let layers = null;
+          if (!lcd?.displayRecoveryActive && lcd?.splitSources?.length) for (const f of lcd.splitSources) { layers = f(); if (layers) break; }
+          if (layers) {
+            let tex = null;
+            try { tex = (splitComp ??= createSplitCompositor(THREE, hr.renderer)).compose(layers); } catch (e) { lcd.splitBroken = true; console.warn('[lcdsplit] 合成に失敗。従来の全面 canvas に戻します', e); }
+            if (tex) { window.__splitTexture = tex; if (!SPLIT_CHECK) { plate.mat.uniforms.uT.value = tex; uploadRevision = undefined; uploadCanvas = null; return last; } }
+          }
+        }
         const choice=lcd?.choiceV20;
         if(!lcd?.displayRecoveryActive&&lcd?.attractSurface?.directActive){
           const texture=lcd.attractSurface.compose();
