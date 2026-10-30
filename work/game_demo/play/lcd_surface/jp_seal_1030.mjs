@@ -56,7 +56,7 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
 
   const off = controller.onAction((action) => {
     const e = controller.lastGameEvent ?? {};
-    if (action === 'meterReady') { S.final = false; S.lastCount = 0; S.reserved = null; }
+    if (action === 'meterReady') { S.final = false; S.lastCount = 0; S.reserved = null; S.chainInit = false; }
     else if (action === 'meterEnd') { if (e.success) S.final = true; else S.final = false; }
     else if (action === 'reset') { S.final = false; S.lastCount = 0; setDelay(); }
   });
@@ -111,6 +111,7 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
     const g = controller.game, st = g.meterStatus, name = model.name ?? '';
     // 10/30 どの経路で旧の狙い(jp_aim_d*)が始まっても（start の差し替えを通らない経路があった：初回のチュートリアルの後）、ここで封印へ乗り換える
     { const am = /^jp_aim_d(\d)$/.exec(name); if (am && !model.chainMode && st?.kind !== 'chain' && ms.byD[am[1]] && man.scenes[nm(am[1], 'in')]) { const before = S.swaps; model.start(name); if (S.swaps !== before) { note('redirect:tick', { from: name }); return; } } }
+    { const cm = /^chain_jp_aim_d(\d)$/.exec(name); if (cm && model.chainMode && chainOn && st?.kind === 'chain' && st.threshold > 0) { const before = S.swaps; model.start(name); if (S.swaps !== before) { note('redirect:tick:chain', { from: name }); return; } } }
     if (st?.kind === 'jp' || st?.kind === 'chain') S.lastCount = st.count | 0;
     const m = RE.exec(name);
     if (!m) return;
@@ -128,6 +129,22 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
     if (kind === 's' && S.reserved !== name) { S.reserved = name; try { jp.reserve?.(nextFor(d, k)); } catch {} }
   };
 
+  // 10/30 継続の連打（meterStatus.kind==='chain'）の間、JPの映像が動いていなければ封印の扉を始める。
+  //   最初の継続（JP直後・ChainFirstAuto）は選択なしで規則が自動で継続へ進み、'chainContinue' の操作が無い＝ effects_bus が chain_continue を出さない。
+  //   すると JP の映像が chainMode にならず、通常背景（idle）に灯と秒数を重ねた画のままだった。ここで同じ chain_continue を液晶へ渡して、選んだときと同じ流れ（start → 封印へ乗り換え）にする。
+  //   jp.frame は JP の映像が動いている間しか呼ばれないので、毎フレーム呼ばれる lcd.frame で見る。?chainseal=0/v02 では何もしない。
+  const chainEnsure = () => {
+    if (!chainOn || S.chainInit) return;
+    const g = controller.game, st = g?.meterStatus;
+    if (st?.kind !== 'chain' || !(st.threshold > 0) || (st.stage !== 'intro' && st.stage !== 'firing')) return;
+    if (model.active) { if (model.chainMode || RE.test(model.name ?? '')) S.chainInit = true; return; }   // 継続の映像が既に動いている（選んだ経路）なら済み。告知・配当などが流れている間は待つ（終わったら ここへ来る）
+    const c = g.chainStatus ?? {};
+    S.chainInit = true; note('chain:ensure', { stage: st.stage, count: st.count | 0, T: st.threshold });
+    lcd.onEvent('chain_continue', { chain: c.successes, lamps: g.lampCount, pending: c.pendingAward, base: c.baseAward });
+  };
+  const frame0 = lcd.frame.bind(lcd);
+  lcd.frame = (dt, F) => { chainEnsure(); return frame0(dt, F); };
+
   const jpFrame = jp.frame.bind(jp);
   jp.frame = (dt) => {
     tick();
@@ -137,7 +154,7 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
     else if (P && !P.done && /^jp_aim_seal_d\d_(in|s\d+|b\d+)$/.test(model.name ?? '') && P.at - rh.state.clock < 0.5) P.at = rh.state.clock + 0.5;   // 満タンが続けて入っても、open（扉が開く）より先に jp_rush を出さない
     return jpFrame(dt);
   };
-  lcd.jpSeal = { state: S, ms, N, dispose() { off?.(); model.start = start0; jp.frame = jpFrame; if (end0) rh.meter.end = end0; } };
+  lcd.jpSeal = { state: S, ms, N, dispose() { off?.(); model.start = start0; jp.frame = jpFrame; lcd.frame = frame0; if (end0) rh.meter.end = end0; } };
   note('attached', { d: Object.keys(ms.byD), openSec });
   return lcd;
 }
