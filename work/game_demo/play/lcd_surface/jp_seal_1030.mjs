@@ -39,7 +39,7 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
   for (const [k, v] of Object.entries(ms.scenes)) man.scenes[k] = v;
   // 10/31 カットイン第3版（?jpcut=0 で旧）
   const cutQ = qs.get('jpcut');
-  if (!(cutQ === '0' || cutQ === 'off')) {
+  if (cutQ === '1') {
     try {
       const r = await fetch(new URL('./jp1029/seal_jp_cut/manifest_cut.json', import.meta.url));
       if (r.ok) {

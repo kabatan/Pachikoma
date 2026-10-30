@@ -36,7 +36,7 @@ export async function attachChainSeal(lcd, { controller, log = () => {} } = {}) 
   const fps = man.fps ?? 30;
   // 10/31 カットイン第3版（?jpcut=0 で旧）：b{k}・open の映像を seal_jp_cut/ の新しい版へ（jp_seal_1030.mjs と同じ。file / frames / skipF だけ差し替え）
   const cutQ = new URLSearchParams(globalThis.location?.search ?? '').get('jpcut');
-  if (!(cutQ === '0' || cutQ === 'off')) {
+  if (cutQ === '1') {
     try {
       const r = await fetch(new URL('./jp1029/seal_jp_cut/manifest_cut.json', import.meta.url));
       if (r.ok) {
