@@ -74,20 +74,23 @@ export async function attachFinalResultSurface(lcd,{controller,finalResultImageF
  const HELP=new URLSearchParams(globalThis.location?.search??'').get('resulthelp')!=='0';
  const trk={game:null,maxLamps:0,lastJp:null,phase:null};
  const track=()=>{const g=controller.game;if(!g)return;if(trk.game!==g||(g.phase==='Attract'&&trk.phase!=='Attract')){trk.game=g;trk.maxLamps=0;trk.lastJp=null;}trk.phase=g.phase;const l=g.lampCount??0;if(l>trk.maxLamps)trk.maxLamps=l;const m=g.meter;if(m&&m.kind==='jp'&&m.threshold)trk.lastJp={count:m.count??0,threshold:m.threshold};};
- const PRAISE=['遊んでくれて ありがとう！','ナイスプレイ！','いい調子！','すごい！ 上級者！','最高賞！ 神プレイ！'];
+ const PRAISE=[[['遊んでくれて'],['ありがとう！']],[['ナイスプレイ！']],[['いい調子！']],[['すごい！ 上級者！']],[['最高賞！'],['神プレイ！']]];
  const withExtras=(st,g)=>{
   if(!HELP)return st;try{
-   const names=g.rules?.PrizeNames??[],pj=g.jackpotSuccesses??0,ml=trk.maxLamps,jp=trk.lastJp,line=(key,parts,w=800,h=130,size=70)=>({key:key+':'+parts.map(p=>p[0]).join(''),w,h,size,parts});
+   const names=g.rules?.PrizeNames??[],pj=g.jackpotSuccesses??0,ml=trk.maxLamps,jp=trk.lastJp;
+   // rows=行の配列（各行は [文字,'g'|'w'] の並び）。1行は 64px 前後（「次のA賞まで」と同じ大きさ）、長い文は2行にする
+   const line=(key,rows,w=800,size=rows.length===1?72:58,pitch=62)=>({key:key+':'+rows.map(r=>r.map(p=>p[0]).join('')).join('|'),w,h:rows.length*pitch+50,size,pitch,rows});
    const prize=st.rankIndex>0?names[st.rankIndex]:'';const lines={};
-   lines.total=line('t',[['TOTAL＝いま手元に残った玉の数','w']],780,64,34);
-   lines.praise=line('p',[[prize?prize+' ':'','g'],[PRAISE[st.rankIndex]??'ナイスプレイ！','w']]);
+   lines.total=line('t',[[['TOTAL＝いま手元に残った玉の数','w']]],800,42,0);lines.total.h=64;
+   const pr=PRAISE[st.rankIndex]??[['ナイスプレイ！']];
+   lines.praise=line('p',pr.map((r,i)=>i===0&&prize?[[prize+' ','g'],[r[0],'w']]:[[r[0],'w']]));
    let miss=null;
-   if(pj>0)miss=[['JACKPOT ','g'],[`${pj}回！ すごい！`,'w']];
-   else if(jp&&ml>=6&&jp.threshold-jp.count>0&&jp.threshold-jp.count<=3)miss=[['封印あと','w'],[`${jp.threshold-jp.count}本`,'g'],['だった！ おしい！','w']];
-   else if(ml>=5)miss=[['5灯！ あと1つで ','w'],['JACKPOT CHANCE','g'],['！','w']];
-   else if(ml>=1)miss=[[`最高${ml}灯！ 次は `,'w'],['6灯','g'],[' をねらおう！','w']];
+   if(pj>0)miss=[[['JACKPOT ','g'],[`${pj}回！`,'w']],[['すごい！','w']]];
+   else if(jp&&ml>=6&&jp.threshold-jp.count>0&&jp.threshold-jp.count<=3)miss=[[['封印あと','w'],[`${jp.threshold-jp.count}本`,'g'],['だった！','w']],[['おしい！','w']]];
+   else if(ml>=5)miss=[[['5灯！ あと1つで','w']],[['JACKPOT CHANCE','g'],['！','w']]];
+   else if(ml>=1)miss=[[[`最高${ml}灯！`,'w']],[['次は ','w'],['6灯','g'],[' をねらおう！','w']]];
    if(miss)lines.miss=line('m',miss);
-   lines.bye=line('b',st.nextIndex!=null?[['またね！ 次は ','w'],[names[st.nextIndex],'g'],[' をねらおう！','w']]:[['またね！ ','w'],['最高賞','g'],[' おめでとう！','w']]);
+   lines.bye=line('b',st.nextIndex!=null?[[['またね！','w']],[['次は ','w'],[names[st.nextIndex],'g'],[' をねらおう！','w']]]:[[['またね！','w']],[['最高賞','g'],[' おめでとう！','w']]]);
    return {...st,extras:{lines}};}catch(e){return st;}
  };
  lcd.onEvent=(id,...args)=>{const value=delegatePrevious('final-event:'+id,()=>original.onEvent(id,...args));if(id==='finish_count'||id==='timeup')warm();if(id==='result')start();if(['start','attract','title','ticket','howto'].includes(id))exit();return value;};

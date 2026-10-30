@@ -28,12 +28,12 @@ export const WHITE = [[0, '#ffffff'], [.55, '#e8e0ff'], [1, '#a9a0d8']];
 export const CYAN = [[0, '#f0ffff'], [.5, '#8fe8ff'], [1, '#3aa8e8']];
 
 // 色の違う語を1行に並べる（地の文は白、大事な語だけ金）
-export function richLine(ctx, parts, cx, y, size, maxWidth = 0) {
+export function richLine(ctx, parts, cx, y, size, maxWidth = 0, opt = {}) {
   const meas = sz => { ctx.save(); ctx.font = fontFor(sz); const w = parts.map(p => ctx.measureText(p[0]).width); ctx.restore(); return w; };
   let ws = meas(size), total = ws.reduce((a, b) => a + b, 0);
   if (maxWidth && total > maxWidth) { size = Math.floor(size * maxWidth / total); ws = meas(size); total = ws.reduce((a, b) => a + b, 0); }   // 枠からはみ出さない
   let x = cx - total / 2;
-  parts.forEach((p, i) => { textPath(ctx, p[0], x, y, size, { fill: p[1] ?? WHITE, glow: p[2] ?? null, align: 'left' }); x += ws[i]; });
+  parts.forEach((p, i) => { textPath(ctx, p[0], x, y, size, { fill: p[1] ?? WHITE, glow: p[2] ?? null, align: 'left', silver: opt.silver ?? true }); x += ws[i]; });
   return total;
 }
 function plate(ctx, x, y, w, h, r = 26, edge = 'rgba(255,205,90,.95)', a = .84) {
