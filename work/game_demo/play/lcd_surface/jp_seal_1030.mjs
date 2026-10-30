@@ -83,7 +83,9 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
     return best;
   };
   // 入賞数 → 段（0..n-1 が待機 s{k}、n が open）。n==T は 1 対 1、n<T は比例（最後の1本は規定数に届いたときだけ）
-  const stageOf = (count, T, n) => (count >= T ? n : count <= 0 ? 0 : T === n ? count : Math.min(n - 1, Math.max(1, Math.round((count * n) / T))));
+  // 10/31 T>n（継続の N=6,7。鎖の映像は N=5 まで）は比例をやめ、残り個数（T-count）が映像の残り（n-段）と一致する入賞だけ映像を切る
+  //   例 N=7,n=5：3個目→b1、4→b2、5→b3、6→b4、7→open。それより前（1〜2個目）は段0のまま＝今の場面を続けて、火花と音だけ。T<n は従来どおり比例。
+  const stageOf = (count, T, n) => (count >= T ? n : count <= 0 ? 0 : T === n ? count : T > n ? Math.max(0, count - (T - n)) : Math.min(n - 1, Math.max(1, Math.round((count * n) / T))));
   const nm = (d, p) => `jp_aim_seal_d${d}_${p}`;
   // JACKPOT CHANCE の次を封印の「in」に（チュートリアルの有無にかかわらず。チュートリアルの最後の次は毎フレーム下で直す）
   for (const d of Object.keys(ms.byD)) { const cs = man.scenes[`jp_chance_d${d}`]; if (cs && man.scenes[nm(d, 'in')]) cs.next = nm(d, 'in'); }
@@ -170,9 +172,12 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
     const count = S.final ? n : stageOf(S.lastCount, T, n);
     const sc = man.scenes[name], f = (model.time ?? 0) * (man.fps ?? 30);
     const k = kind === 'in' ? -1 : +(m[3] ?? m[4]);
+    // 10/31 満タン（成功確定）なら b の途中でも（skipF を待たず）すぐ open へ。古い「あと◯本」のカットインを成功後に残さない
+    if (kind === 'b' && count >= n) { start(nm(d, 'open'), 'full'); return; }
     const canAdvance = kind === 's' || ((kind === 'b' || kind === 'in') && f >= (sc.seal?.skipF ?? 30));
     // in は 1 個も入っていない間は流し続ける（count>0 で初めて b1 へ）。満タン（count>=N）なら残りの切断を飛ばして open へ
-    if (canAdvance && count > Math.max(0, k)) { start(count >= n ? nm(d, 'open') : nextFor(d, Math.max(0, k)), kind === 'in' ? 'in→' : 'hit'); return; }
+    //   10/31 続けて入ったときは貯まった分を順に流さず、最新の残りの場面（b{count}）へ飛ぶ。b の skipF は「あと◯本」のカットインが読める所まで（manifest_gb.json）
+    if (canAdvance && count > Math.max(0, k)) { start(count >= n ? nm(d, 'open') : nm(d, `b${count}`), kind === 'in' ? 'in→' : 'hit'); return; }
     if (kind === 'in' && count > 0) { /* in の叩きつけの途中は最後まで。skipF 以降は上で進む */ }
     // 次の切断の映像を先に読み込んでおく（待機の間に）
     if (kind === 's' && S.reserved !== name) { S.reserved = name; try { jp.reserve?.(nextFor(d, k)); } catch {} }
