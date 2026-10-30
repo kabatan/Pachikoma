@@ -1,6 +1,8 @@
 // 10/30 追加（チケット100円）の流れ：StaffWait の液晶「スタッフにチケットを渡してください」＋呼び出し音＋囲いの呼び出し電飾＋再開の「+20秒 再開！」＋再開直後の誤発射の保護。
 // 戻す: ?staffflow=old（何も付けない＝従来の流れ）。規則（ゲームの進行）は変えない。液晶の絵・音・電飾・入力の保護だけを足す。
 // 液晶: lcd.frame の後ろに重ねて描く（timeup_surface が先に付いている前提）。下の液晶座標は timeup_surface と同じ 1152×1268（PX=34,PY=28）。
+import { timeupHelpMode, richLine, GOLD as HGOLD, WHITE as HWHITE } from './timeup_help_1030.mjs';
+const HELP = timeupHelpMode() === 'new';   // 10/30 初見向けの文（?timeuphelp=0 で従来）
 const W = 1152, H = 1268, PX = 34, PY = 28;
 const RESUME_SECONDS = 1.9, GUARD_SECONDS = 1.0;
 
@@ -123,7 +125,7 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     ctx.save(); ctx.globalAlpha = bandIn; ctx.translate(W / 2, bandY + (1 - bandIn) * -60);
     const bg2 = ctx.createLinearGradient(-300, 0, 300, 0); bg2.addColorStop(0, 'rgba(160,10,30,.0)'); bg2.addColorStop(.2, `rgba(${170 + 70 * pulse},20,40,.95)`); bg2.addColorStop(.8, `rgba(${170 + 70 * pulse},20,40,.95)`); bg2.addColorStop(1, 'rgba(160,10,30,0)');
     ctx.fillStyle = bg2; ctx.fillRect(-460, -50, 920, 100);
-    textPath(ctx, '係員をお呼びします', 0, 30, 62, { fill: WHITE, glow: '#ff3050' });
+    textPath(ctx, HELP ? 'スタッフを呼んでいます' : '係員をお呼びします', 0, 30, 62, { fill: WHITE, glow: '#ff3050' });
     ctx.restore();
     // ほんぶん: 「スタッフに」「チケットを」「渡してください」
     const rise = (d, y) => { const k = ease((t - d) / .4); return [y + (1 - k) * 70, k]; };
@@ -140,11 +142,18 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     ctx.restore();
     // 下の説明板: 止まっていて損しない
     const info = ease((t - .8) / .4), r = g().rules ?? {};
-    ctx.save(); ctx.globalAlpha = info; ctx.translate(W / 2, 1160 + (1 - info) * 50);
+    ctx.save(); ctx.globalAlpha = info; ctx.translate(W / 2, (HELP ? 1158 : 1160) + (1 - info) * 50);
     const pg = ctx.createLinearGradient(0, -80, 0, 80); pg.addColorStop(0, 'rgba(20,6,40,.9)'); pg.addColorStop(1, 'rgba(60,14,70,.9)');
-    ctx.fillStyle = pg; ctx.strokeStyle = 'rgba(255,205,90,.9)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.roundRect(-500, -88, 1000, 176, 30); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = pg; ctx.strokeStyle = 'rgba(255,205,90,.9)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.roundRect(-500, HELP ? -100 : -88, 1000, HELP ? 202 : 176, 30); ctx.fill(); ctx.stroke();
+    if (HELP) {   // 初見向け: 何を待っているか／待つと何が起きるか／やめたいときはどうするか
+      textPath(ctx, '時間も玉も止まっています', 0, -40, 44, { fill: WHITE, silver: false });
+      textPath(ctx, `受け取り後に +${r.ExtraSeconds ?? 20}秒  +${r.ExtraLoanBalls ?? 10}玉 で再開！`, 0, 18, 44, { fill: GOLD, silver: false });
+      const l = g().lampCount ?? 0;
+      richLine(ctx, [[l > 0 ? `${l}灯のまま 続きから。 ` : 'いまの玉のまま 続きから。 ', HWHITE], ['やめるなら 左ボタン', HGOLD]], 0, 74, 34);
+    } else {
     textPath(ctx, '時間も玉も止まっています', 0, -14, 54, { fill: WHITE, silver: false });
     textPath(ctx, `受け取り後に +${r.ExtraSeconds ?? 20}秒  +${r.ExtraLoanBalls ?? 10}玉 で再開`, 0, 62, 54, { fill: GOLD, silver: false });
+    }
     ctx.restore();
     ctx.restore();
   }
@@ -156,6 +165,7 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     // 既存の追加演出（20秒の銀の数字・玉）はそのまま見せる。ここは「再開！」の一言だけを下に重ねる
     const k2 = 1 + .1 * Math.pow(Math.max(0, 1 - (t - .12) / .25), 2); ctx.translate(0, 330); ctx.scale(pop * k2, pop * k2);
     textPath(ctx, '再開！', 0, 0, 190, { fill: GOLD, glow: '#ffb030' });
+    if (HELP) { const l = g().lampCount ?? 0; richLine(ctx, [[l > 0 ? `${l}灯のまま ` : 'いまの玉で ', HWHITE], ['続きから スタート！', HGOLD]], 0, 160, 60); }
     ctx.restore(); return true;
   }
 
