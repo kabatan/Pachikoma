@@ -16,7 +16,7 @@ export class MedalController extends GController {
   if(action==='reset'&&g.phase===MedalPhase.Result){
    if(this._lastActionFrame===this.frame||!(this.hooks.canReset?.()??true))return false;
    this.hooks.cancelFlights?.();this.game=new MedalGame(this.rules,this.seed==null?undefined:this.seed+1+this.sessionId);
-   this.aimClock=0;this.confirmFinish=false;this.fireBuffer=this.preBuffer=null;return this._notifyG('reset');
+   this.aimClock=0;this.confirmFinish=false;this.fireBuffer=this.preBuffer=null;this.repeatVisit=false;return this._notifyG('reset');   // 10/31 新しい客(自動・スタッフのreset)は初回扱いに戻す。客用の「もう一度」(replay)は reset の後で true にする
   }
   if(g.phase===HPhase.Roulette){
    // ルーレット中は 'fire'（左）も 'challenge'（右）も「止める」。受け付け前（回り始めの押し残し）は無視する。

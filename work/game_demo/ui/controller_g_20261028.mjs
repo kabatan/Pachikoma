@@ -18,7 +18,7 @@ export class MedalController extends BaseController {
   if(action==='reset'&&g.phase===MedalPhase.Result){
    if(this._lastActionFrame===this.frame||!(this.hooks.canReset?.()??true))return false;
    this.hooks.cancelFlights?.();this.game=new MedalGame(this.rules,this.seed==null?undefined:this.seed+1+this.sessionId);
-   this.aimClock=0;this.confirmFinish=false;this.fireBuffer=this.preBuffer=null;return this._notifyG('reset');
+   this.aimClock=0;this.confirmFinish=false;this.fireBuffer=this.preBuffer=null;this.repeatVisit=false;return this._notifyG('reset');   // 10/31 新しい客(自動・スタッフのreset)は初回扱いに戻す。客用の「もう一度」(replay)は reset の後で true にする
   }
   if(g.phase===MedalPhase.Continue){
    if(this._lastActionFrame===this.frame)return false;
