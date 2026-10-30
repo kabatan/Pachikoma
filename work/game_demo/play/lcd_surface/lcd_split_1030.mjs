@@ -16,7 +16,7 @@ function splitUniforms(T) {
   return u;
 }
 
-function splitShaderChunks() {
+function splitShaderChunks(front = false) {
   const decl = 'uniform float uSplit; uniform vec2 uCv; uniform mat3 uLM[' + SPLIT_N + ']; uniform vec4 uLP[' + SPLIT_N + ']; ' + Array.from({ length: SPLIT_N }, (_, i) => 'uniform sampler2D uLt' + i + ';').join(' ');
   const body = Array.from({ length: SPLIT_N }, (_, i) => `
         { vec3 q = uLM[${i}] * vec3(p, 1.0);
@@ -24,6 +24,20 @@ function splitShaderChunks() {
             vec4 s = texture2D(uLt${i}, vec2(q.x / uLP[${i}].z, 1.0 - q.y / uLP[${i}].w));
             if (uLP[${i}].y > 0.5) col += s.rgb * uLP[${i}].x; else col = col * (1.0 - s.a * uLP[${i}].x) + s.rgb * uLP[${i}].x;
           } }`).join('\n');
+  // 10/31 上の層から順に重ねる版（?splitfront=0 で従来）：下の層から重ねる式 col = col*(1-a)+c は、上から見ると
+  //  各層の寄与 c×（その上の「不透明度つき」層の (1-a) の積 T）の和と同じ。T が 0（全面を覆う不透明な層）になったら、その下の層の
+  //  texture 読みと計算を省いて終わる。加算の層は T を変えない。浮動小数の丸めの順が変わるだけで、8bit の結果は同等。
+  if (front) {
+    const blocks = Array.from({ length: SPLIT_N }, (_, k) => { const i = SPLIT_N - 1 - k; return `
+        { vec3 q = uLM[${i}] * vec3(p, 1.0);
+          if (uLP[${i}].x > 0.0 && q.x >= 0.0 && q.y >= 0.0 && q.x <= uLP[${i}].z && q.y <= uLP[${i}].w) {
+            vec4 s = texture2D(uLt${i}, vec2(q.x / uLP[${i}].z, 1.0 - q.y / uLP[${i}].w));
+            col += s.rgb * uLP[${i}].x * T;
+            if (uLP[${i}].y <= 0.5) { T *= 1.0 - s.a * uLP[${i}].x; if (T <= 0.0) return min(col, vec3(1.0)); }
+          } }`; }).join('\n');
+    return { decl, body: `vec3 splitColor(vec2 vU) { vec2 p = vec2(vU.x * uCv.x, (1.0 - vU.y) * uCv.y); vec3 col = vec3(0.0); float T = 1.0;${blocks}
+        return min(col, vec3(1.0)); }` };
+  }
   return { decl, body: `vec3 splitColor(vec2 vU) { vec2 p = vec2(vU.x * uCv.x, (1.0 - vU.y) * uCv.y); vec3 col = vec3(0.0);${body}
         return min(col, vec3(1.0)); }` };
 }
@@ -61,22 +75,31 @@ export function layerTexture(T, source, { nearest = false } = {}) {
 // 層の見た目を決めるもの（各層の texture の id・version・source.version と、位置・拡大・回転・透明度・加算・大きさ）が前回の合成と同じなら、
 // target の中身は前回のまま（target は合成器だけが描く）。texture が render target の絵（version が絵の更新を表さない）のときは常に描く。
 // コンテキストの復帰・最初の 1 回も描く。
-const SPLIT_SKIP = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('splitskip'); } catch { return null; } })();
-export function createSplitCompositor(T, renderer) {
-  const u = splitUniforms(T), chunks = splitShaderChunks();
+const splitParam = (k) => { try { return new URLSearchParams(globalThis.location?.search ?? '').get(k); } catch { return null; } };
+const SPLIT_SKIP = splitParam('splitskip');
+// 10/31 試験：?splitalt=1 は低性能時（照明の半頻度に入った／画質の段が low 以下）だけ、液晶の層の合成を 2 フレームに 1 回にする（動く層は 30Hz 更新）。
+//  ?splitalt=2 は性能に関係なく常にそうする（確認用）。既定は無効。層の数・texture の id が変わったとき（画面の切り替わり）は省かず描く。
+const SPLIT_ALT = splitParam('splitalt'), SPLIT_FRONT = splitParam('splitfront') !== '0';
+const lowPerf = () => { const q = globalThis.window?.__prebakeRelight?.quality; return !!q && (q.lightHalf || q.index >= 2); };
+export function createSplitCompositor(T, renderer, opts = {}) {
+  const front = opts.front ?? SPLIT_FRONT, altMode = opts.alt ?? SPLIT_ALT;
+  const u = splitUniforms(T), chunks = splitShaderChunks(front);
   const skipMode = SPLIT_SKIP === '0' ? 'off' : SPLIT_SKIP === 'check' ? 'check' : 'on';
-  const stats = { composed: 0, skipped: 0, checked: 0, mismatch: 0, mode: skipMode, diffAt: {} };   // diffAt: 変化した項目の番号（1 + 13*層 + 0:id 1:version 2:source.version 3:alpha 4:add 5:w 6:h 7:rot 8:sc 9:ax 10:ay 11:x 12:y）の回数
+  const stats = { composed: 0, skipped: 0, checked: 0, mismatch: 0, mode: skipMode, front, alt: altMode ?? 'off', altSkipped: 0, stepN: 0, stepSum: 0, stepMax: 0, diffAt: {} };   // diffAt: 変化した項目の番号（1 + 13*層 + 0:id 1:version 2:source.version 3:alpha 4:add 5:w 6:h 7:rot 8:sc 9:ax 10:ay 11:x 12:y）の回数
   if (typeof window !== 'undefined') window.__splitSkipStats = stats;
-  const prev = new Float64Array(SPLIT_N * 13 + 2); let prevValid = false, forceDraw = true;
+  const prev = new Float64Array(SPLIT_N * 13 + 2); let prevValid = false, forceDraw = true, structural = true, lastAltSkip = false, backupValid = false;
+  const prevBackup = new Float64Array(prev.length);
   const unchanged = (layers) => {   // prev を今の値に更新しながら、前回と同じか返す
     let i = 0, same = prevValid && !forceDraw, drawable = true;
-    const put = (v) => { if (prev[i] !== v) { prev[i] = v; same = false; stats.diffAt[i] = (stats.diffAt[i] ?? 0) + 1; } i++; };
-    put(layers.length);
+    structural = !prevValid;
+    const put = (v, st) => { if (prev[i] !== v) { prev[i] = v; same = false; if (st) structural = true; stats.diffAt[i] = (stats.diffAt[i] ?? 0) + 1; } i++; };
+    put(layers.length, true);
     for (let k = 0; k < SPLIT_N; k++) {
       const L = layers[k], t = L?.tex;
-      if (!L) { for (let j = 0; j < 13; j++) put(0); continue; }
+      if (!L) { for (let j = 0; j < 13; j++) put(0, j === 0); continue; }
       if (!t || t.isRenderTargetTexture || typeof t.version !== 'number') { drawable = false; stats.undrawable = (stats.undrawable ?? 0) + 1; }
-      put(t?.id ?? -1); put(t?.version ?? -1); put(t?.source?.version ?? -1);
+      if (prevValid && prev[i] === (t?.id ?? -1)) { const dx = (L.x ?? 0) - prev[i + 11], dy = (L.y ?? 0) - prev[i + 12], d = Math.hypot(dx, dy); if (d > 0) { stats.stepN++; stats.stepSum += d; if (d > stats.stepMax) stats.stepMax = d; } }   // 動く層の 1 回の更新での移動量（px）：隔フレームだと約 2 倍
+      put(t?.id ?? -1, true); put(t?.version ?? -1); put(t?.source?.version ?? -1);
       put(L.alpha ?? 1); put(L.add ? 1 : 0); put(L.w ?? 0); put(L.h ?? 0); put(L.rot ?? 0); put(L.sc ?? 1); put(L.ax ?? 0); put(L.ay ?? 0); put(L.x ?? 0); put(L.y ?? 0);
     }
     prevValid = true;
@@ -109,8 +132,12 @@ export function createSplitCompositor(T, renderer) {
     compose(layers) {
       if (disposed || !layers) return null;
       if (renderer.getRenderTarget() !== null) return null;   // フレーム境界(既定の描画先)でだけ
-      const same = skipMode !== 'off' ? unchanged(layers) : false;
-      if (same && skipMode === 'on') { stats.skipped++; return target.texture; }
+      if (altMode) { prevBackup.set(prev); backupValid = prevValid; }   // 隔フレームで省いたコマの値は「描いた内容」として覚えない
+      const same = skipMode !== 'off' || altMode ? unchanged(layers) : false;
+      if (same && skipMode === 'on') { stats.skipped++; lastAltSkip = false; return target.texture; }
+      // 低性能時の隔フレーム合成（試験）：前回が描いたコマで、画面の切り替わり（層の数・texture の違い）でなければ、このコマは省く。連続で省かない。
+      if (altMode && !structural && !forceDraw && !lastAltSkip && (altMode === '2' || (altMode === '1' && lowPerf()))) { stats.altSkipped++; lastAltSkip = true; prev.set(prevBackup); prevValid = backupValid; return target.texture; }
+      lastAltSkip = false;
       if (same) checkBefore();
       setSplitLayers(u, layers);
       const state = { target: renderer.getRenderTarget(), viewport: renderer.getViewport(new T.Vector4()), scissor: renderer.getScissor(new T.Vector4()), test: renderer.getScissorTest(), color: renderer.getClearColor(new T.Color()), alpha: renderer.getClearAlpha(), auto: renderer.autoClear };
