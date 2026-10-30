@@ -1,0 +1,9 @@
+Switch 2 の写真（intro v02 の景品の場面）
+ 画像: https://www.nintendo.com/jp/hardware/switch2/sns.png  (1200x630, 任天堂 公式サイト Nintendo Switch 2 ページの SNS 共有用画像)
+ 取得: 2026-10-31 curl（ページ https://www.nintendo.com/jp/hardware/switch2/ の og:image）
+ 保存先: /home/kabatan/work/scratch_1031/sw2/sns.png
+ 権利: 任天堂。試作の動画での参照のみ。本番で使う前に利用条件を確認すること。
+
+Dela Gothic One: SIL Open Font License 1.1（jp_film/fonts/ofl/DelaGothicOne-Regular.ttf）
+うぱ: r4_h_fx/upa_pixel のドット絵を艶つきにして焼いたもの（build: effects/upa_host/game_build/bake_assets.py）
+玉: 筐体の皿の玉の絵（base_idle の切り出し）

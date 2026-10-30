@@ -205,9 +205,13 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
         try { window.__jpAudio?.trigger?.('jp_intro_dopamine'); note('audio:startJp'); } catch (e) { console.warn('[jpstart-audio]', e); }
       }
       if (/^jp_chance_d\d$/.test(n)) S.spark = null;
-      if (!OLDTEXT && /^jp_aim_seal_d\d_s0$/.test(n) && !model.chainMode) { S.promptAt = S.clock; promptSound(); note('prompt'); }
+
       if (n) note('scene', { name: n });
     }
+    { // 連打を促す仮の合図は、メーターが撃てる状態になった瞬間（カウントダウンがあれば「開始」の直後）
+      const st = controller.game?.meterStatus, fire = st?.kind === 'jp' && st.stage === 'firing';
+      if (fire && !S.wasFire && !OLDTEXT && model.active && /^jp_aim_seal_d\d_s0$/.test(model.name ?? '')) { S.promptAt = S.clock; promptSound(); note('prompt'); }
+      S.wasFire = fire; }
     S.ph = phaseOf();
     driveVideo(S.ph);
   };
@@ -338,9 +342,10 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
         out.push({ tex: T.sp, w: SPW, h: SPH, ax: 0, ay: 0, x: PX + dx, y: PY + dy, rot: 0, sc: 2, alpha: 1, add: true });
       }
     }
-    if (!OLDTEXT && ph?.k === 'in' && ph.t < PROMPT.t0 + PROMPT.n * PROMPT.dt && !((controller.game?.meterStatus?.count | 0) > 0)) {   // メーターの帯が 0.3秒おきに温かく光る（連打を促す仮の合図）
-      const u = (ph.t - PROMPT.t0) % PROMPT.dt, a = ph.t < PROMPT.t0 ? 0 : Math.exp(-u / 0.1);
-      if (a > 0.02) out.push({ tex: T.pulse, w: 288, h: 90, ax: 0, ay: 0, x: PX + dx, y: PY + 905 + dy, rot: 0, sc: 4, alpha: 0.85 * a, add: true });
+    const pt = S.clock - (S.promptAt ?? -9);
+    if (!OLDTEXT && pt >= 0 && pt < PROMPT.t0 + PROMPT.n * PROMPT.dt && !((controller.game?.meterStatus?.count | 0) > 0)) {   // メーターの帯が 0.3秒おきに温かく光る（連打を促す仮の合図）
+      const u = (pt - PROMPT.t0) % PROMPT.dt, a = pt < PROMPT.t0 ? 0 : Math.exp(-u / 0.1);
+      if (a > 0.02) out.push({ tex: T.pulse, w: 288, h: 90, ax: 0, ay: 0, x: PX + dx, y: PY + 905 + dy, rot: 0, sc: 4, alpha: 1.0 * a, add: true });
     }
     const cl = cutLayer(dx, dy); if (cl) out.push(cl);
     if (!out.length && (dx || dy)) out.push(win(T.dark, W4, H4, 576, 634, 1, 0, false));   // 揺れだけでも合成を通す（基底の層を動かすため）

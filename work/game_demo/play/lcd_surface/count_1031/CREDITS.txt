@@ -1,0 +1,5 @@
+カウントダウン（jp_count_1031.mjs）の素材。YouTube の配布素材（Creative Commons Attribution、再利用可）。10/31 取得。
+- fx_flame.mp4 : 「Fire Explosion Background Effect | Exploding Fire Flame Overlay | No Copyright」 https://www.youtube.com/watch?v=SfyFvU6xtD8 （22〜24 秒を切り出し）
+- fx_embers.mp4: 「Fire particles embers sparks - 4k, Free Stock Footage, Copyright Free, Video Overlay Loop」 https://www.youtube.com/watch?v=Rduarg1MXs8 （60〜62 秒）
+- fx_flare.mp4 : 「God Rays, Black Screen, Devotional Lens, Free Optical Flare」 https://www.youtube.com/watch?v=hhrB9q5iBWM （6〜8 秒）
+字は Blender で描いた自作（work/effects/r4_h_fx/jp_start_1031/count_letters）。

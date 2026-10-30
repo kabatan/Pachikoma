@@ -133,7 +133,7 @@ export async function installAudioLift(engine, { lcd, controller, base = new URL
     const m = /^jp_aim_seal_d\d_(b\d|open)$/.exec(w.name);
     if (m) {
       if (m[1] === 'open') { play(THEMES[st.theme].brk(true), -2, { at: .8333 }); play('al_door', 0, { at: .9333 }); duck(7, 1.4, 1.2, .8); }
-      else { const k = +m[1].slice(1); play(THEMES[st.theme].brk(k >= 3), -1 + k * .5, { at: k === 1 ? .4667 : .4 }); duck(5, .6, .8, k === 1 ? .45 : .38); }
+      else { const k = +m[1].slice(1), gbf = lcd?.jp?.man?.scenes?.[w.name]?.seal?.gb, e1 = k === 1 || gbf; play(THEMES[st.theme].brk(k >= 3), -1 + k * .5, { at: e1 ? .4667 : .4 }); duck(5, .6, .8, e1 ? .45 : .38); }
     }
   }
 

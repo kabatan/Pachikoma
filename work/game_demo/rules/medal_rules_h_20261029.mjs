@@ -23,6 +23,7 @@ export class MedalRules extends GRules {
     // --- 連打メーター（JPチャンス） ---
     this.JpMeterThreshold = o.JpMeterThreshold ?? 3;          // 残り1穴に入った球がこの数に届いたら成功
     this.JpMeterSeconds = o.JpMeterSeconds ?? 9;              // 撃てる時間（導入の後、タイマーが動く間）
+    this.MeterCountdownSeconds = o.MeterCountdownSeconds ?? 0;   // 10/31 連打メーター（JP・継続）の開始前のカウントダウン（3→2→1→開始）の秒数。0で無し（既定）。液晶（jp_start_1031）が入れる。この間は制限時間も連打の数えも止める
     this.JpMeterIntroSeconds = o.JpMeterIntroSeconds ?? 2;    // 6灯が揃ってから撃てるまでの導入（時計は進む。この間の押しは1回だけ保持）
     // JPチャンスのチュートリアル（10/30）。導入のあと、撃てるようになる前に液晶が説明の映像を流す間、時計を止める（制限時間を食わない）。0で無し（既定）。
     //   液晶（lcd_surface/rules_h_20261029.mjs）が、映像があるときだけ秒数を入れる。JpTutorialEvery=false なら、その試合の最初のJPチャンスだけ。
@@ -186,7 +187,7 @@ export class MedalGame extends GGame {
     return { kind: m.kind, stage: m.stage, targets: [...m.targets], threshold: m.threshold, count: m.count, seconds: m.seconds,
       timeLeft: m.timeLeft, introLeft: m.introLeft, settleLeft: m.settleLeft, fired: m.fired, landed: m.landed, lastLane: m.lastLane,
       inFlight: this._meterInFlight(), chainStage: m.chainStage, free: true,
-      tutorialPlanned: !!m.tutorial, tutorialActive: m.stage === 'tutorial' };
+      tutorialPlanned: !!m.tutorial, tutorialActive: m.stage === 'tutorial', countLeft: m.countLeft ?? 0, countSeconds: m.countSeconds ?? 0 };
   }
   get rouletteStatus() {
     const r = this.roulette; if (!r) return null;
@@ -228,7 +229,7 @@ export class MedalGame extends GGame {
   get canAim() {
     if (this.advice) return false;
     const m = this.meter;
-    if (m) return m.stage === 'intro' || m.stage === 'tutorial' || m.stage === 'firing';   // 導入中の押しも1回保持できる
+    if (m) return m.stage === 'intro' || m.stage === 'tutorial' || m.stage === 'count' || m.stage === 'firing';   // 導入中の押しも1回保持できる
     if (this.phase === HPhase.Roulette) return false;
     if (this.lampCount === 6 && !this.jackpotChain) return false;   // 同上
     return super.canAim;
@@ -410,12 +411,18 @@ export class MedalGame extends GGame {
     t.acked = true; return true;
   }
   _beginFiring() {
-    const m = this.meter; m.stage = 'firing'; this._sinceFire = Infinity;
+    const m = this.meter;
+    if (!m.counted && this.rules.MeterCountdownSeconds > 0) {   // カウントダウン：時計も制限時間も動かさず、撃てない（押しは1回保持）
+      m.counted = true; m.stage = 'count'; m.countLeft = m.countSeconds = this.rules.MeterCountdownSeconds;
+      this._emit('meterCountdown', { kind: m.kind, seconds: m.countSeconds }); return;
+    }
+    m.stage = 'firing'; this._sinceFire = Infinity;
     this._emit('meterStart', { kind: m.kind, targets: [...m.targets], threshold: m.threshold, seconds: m.seconds });
   }
   _advanceMeter(dt) {
     const m = this.meter;
     if (m.stage === 'intro') { m.introLeft = Math.max(0, m.introLeft - dt); if (m.introLeft <= 1e-9) this._endIntro(); return; }
+    if (m.stage === 'count') { m.countLeft = Math.max(0, m.countLeft - dt); if (m.countLeft <= 1e-9) this._beginFiring(); return; }
     if (m.stage === 'tutorial') {   // 時計は止まっている（advance）。液晶の終わりの知らせ、または打ち切りで撃てるようにする
       m.tutorial.left = Math.max(0, m.tutorial.left - dt);
       if (m.tutorial.acked || m.tutorial.left <= 1e-9) { m.tutorial.acked = true; this._beginFiring(); }
@@ -598,7 +605,7 @@ export class MedalGame extends GGame {
       this._displayClock += s; this._resetDisplays = this._resetDisplays.filter((d) => d.expiresAt > this._displayClock);
       this._sinceFire += s; this._settlementLeft = Math.max(0, this._settlementLeft - s); this._loanLeft = Math.max(0, this._loanLeft - s);
       this.endPending = false; this.endGraceLeft = 0;
-      if (this.meter ? (this.rules.ClockStopOnMeter || this.meter.stage === 'tutorial') : this.rules.ClockStopOnRoulette) this.clockStoppedSeconds += s;
+      if (this.meter ? (this.rules.ClockStopOnMeter || this.meter.stage === 'tutorial' || this.meter.stage === 'count') : this.rules.ClockStopOnRoulette) this.clockStoppedSeconds += s;
       else this.secondsLeft = Math.max(0, this.secondsLeft - s);
       if (this.meter) this._advanceMeter(s); else this._advanceRoulette(s);
     }
