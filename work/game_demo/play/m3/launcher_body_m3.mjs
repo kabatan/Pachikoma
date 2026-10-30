@@ -81,21 +81,23 @@ export function createLauncherBody({ stage, canvas, camera, xRange }, opts = {})
   const v = camera.position.clone();
   const proj = (x, y, z) => { v.set(x, y, z).project(camera); return [(v.x * 0.5 + 0.5) * W, (0.5 - v.y * 0.5) * H]; };
   let had = null, tFire = -1, shown = [];
+  // 10/30 毎フレームの style 書き込みを、値が変わったときだけに（見た目は同じ。style の再計算を減らす）
+  const css = (e, k, v) => { const c = e.__css ??= {}; if (c[k] !== v) { c[k] = v; e.style[k] = v; } };
   const setState = (P, s, op) => {
     for (const st of STATES) for (const l of LIGHTS) {
       const im = P.img[st][l], on = st === s && (l === '0' || light > 0.01);
-      im.style.display = on ? '' : 'none';
-      if (on && l === '4') im.style.opacity = light.toFixed(3);
+      css(im, 'display', on ? '' : 'none');
+      if (on && l === '4') css(im, 'opacity', light.toFixed(3));
     }
-    P.box.style.opacity = op.toFixed(3);
+    css(P.box, 'opacity', op.toFixed(3));
     const lamp = opts.getLamp?.();
-    if (lamp?.color && lamp.alpha > 0.01) { P.lens.style.background = lamp.color; P.lens.style.boxShadow = `0 0 7px 2px ${lamp.color}`; P.lens.style.opacity = Math.min(1, lamp.alpha).toFixed(3); }
-    else if (P.lens.style.opacity !== '0') P.lens.style.opacity = '0';
+    if (lamp?.color && lamp.alpha > 0.01) { css(P.lens, 'background', lamp.color); css(P.lens, 'boxShadow', `0 0 7px 2px ${lamp.color}`); css(P.lens, 'opacity', Math.min(1, lamp.alpha).toFixed(3)); }
+    else css(P.lens, 'opacity', '0');
   };
   return {
     update(shuttle) {
-      if (!shuttle?.position_m || !man || !pos.length) { el.style.display = 'none'; return; }
-      el.style.display = '';
+      if (!shuttle?.position_m || !man || !pos.length) { css(el, 'display', 'none'); return; }
+      css(el, 'display', '');
       const now = opts.now ? opts.now() : performance.now() / 1000;
       const has = !!shuttle.hasBall;
       if (had === true && !has) tFire = now;
@@ -109,13 +111,13 @@ export function createLauncherBody({ stage, canvas, camera, xRange }, opts = {})
       let i = 0; while (i < xs.length - 2 && cx > xs[i + 1]) i++;
       const t = Math.min(1, Math.max(0, (cx - xs[i]) / (xs[i + 1] - xs[i])));
       const use = t < 0.02 ? [[i, 1]] : t > 0.98 ? [[i + 1, 1]] : [[i, 1], [i + 1, t]];
-      for (const P of shown) if (!use.some(([j]) => pos[j] === P)) P.box.style.display = 'none';
+      for (const P of shown) if (!use.some(([j]) => pos[j] === P)) css(P.box, 'display', 'none');
       shown = [];
       use.forEach(([j, op], n) => {
         const P = pos[j], p = P.p;
-        P.box.style.display = ''; P.box.style.zIndex = String(n);
-        P.box.style.left = pct(cx - p.anchor_x, W);
-        P.box.style.top = pct(cy - (man.muzzle_y - man.y0), H);
+        css(P.box, 'display', ''); css(P.box, 'zIndex', String(n));
+        css(P.box, 'left', pct(cx - p.anchor_x, W));
+        css(P.box, 'top', pct(cy - (man.muzzle_y - man.y0), H));
         setState(P, s, op); shown.push(P);
       });
     },

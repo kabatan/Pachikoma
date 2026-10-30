@@ -93,16 +93,16 @@ void main(){
   // 区画の値が変わったときだけ 1/4 解像度で「重みの和」の形に焼く。最後の合成は和を補間して元の解像度で割るので、
   // 筐体の輪郭で照明が暗く縁取られない。筐体の絵・輪郭・ロゴは元の解像度のまま。
   const frameBake=pq.get('framebake')!=='0';
-  const frameF=frameBake?rt(W/S,H/S,2):null;
+  const frameF=frameBake?rt(2*W/S,H/S):null;   // 左半分＝和(S0,S1,S3,S4)、右半分＝色の和。1 回の描画で両方焼く
   const sumK=(v,w)=>`ra.x*${v}[0]${w(0)}+ra.y*${v}[1]${w(1)}+ra.z*${v}[2]${w(2)}+ra.w*${v}[3]${w(3)}+rb.x*${v}[4]${w(4)}+rb.y*${v}[5]${w(5)}+rb.z*${v}[6]${w(6)}+rb.w*${v}[7]${w(7)}`;
   const bakeFrame=frameBake?make(declarations+`
-uniform int uPBLayer;
 void main(){
- vec2 uvA=vec2(gl_FragCoord.x*4.,2560.-gl_FragCoord.y*4.)/vec2(1440.,2560.);
+ int uPBLayer=gl_FragCoord.x<${W/S}.?0:1;
+ vec2 uvA=vec2(mod(gl_FragCoord.x,${W/S}.)*4.,2560.-gl_FragCoord.y*4.)/vec2(1440.,2560.);
  vec4 ra=texture(uMF,vec3(uvA,0.)),rb=texture(uMF,vec3(uvA,1.));ra*=ra;rb*=rb;
  if(uPBLayer==0)gl_FragColor=vec4(ra.x+ra.y+ra.z+ra.w+rb.x+rb.y+rb.z+rb.w,${sumK('uK',()=>'')},${sumK('uRecolor',()=>'')},ra.x+ra.y);
  else gl_FragColor=vec4(${sumK('uK',i=>`*uKc[${i}]`)},0.);
-}`,{...U,uPBLayer:{value:0}}):null;
+}`,{...U}):null;
   const frameDirty=frameBake?watch(U,['uMF','uK','uKc','uRecolor']):null;
   // Eight-bit sRGB storage, hardware-decoded to linear light once per sample.
   // These fixed F0/F4/B4/W4 bases replace repeated pow conversions over the frame.
@@ -136,7 +136,7 @@ void main(){
     uPBLCD:{value:null},uPBRect:{value:new THREE.Vector4()},uPBPanel:{value:new THREE.Vector4()},uPBGain:{value:1},uPBLCDOn:{value:0}};
   const load=`
 uniform sampler2D uPBBack,uPBFront,uPBTau,uPBLCD;
-uniform highp sampler2DArray uPBFields,uPBFrame,uPBFrameL;
+uniform highp sampler2DArray uPBFields,uPBFrame;uniform sampler2D uPBFrameL;
 uniform vec4 uPBRect,uPBPanel;uniform float uPBGain;uniform int uPBLCDOn;
 vec4 prebakeC(ivec2 p){
  vec2 uv=(vec2(p)+.5)/vec2(1440.,2560.),px=vec2(gl_FragCoord.x,2560.-gl_FragCoord.y);
@@ -148,6 +148,7 @@ vec4 prebakeC(ivec2 p){
  float a=1.-d.a;
  return vec4(mix(tau,vec3(1.),d.a)*(d.rgb+a*bg)+a*texture(uPBFront,uv).rgb,a);
 }
+vec2 pbFL(float half_){vec2 u=gl_FragCoord.xy/vec2(1440.,2560.);return vec2(clamp(u.x*.5,.5/${2*W/S}.,.5-.5/${2*W/S}.)+half_,u.y);}
 `;
   let shader=replace(source,'vec3 frameLit(',load+'\nvec3 frameLit(');
   shader=replace(shader,'vec4 cc = uView == 1 ? texelFetch(uD, p, 0) : texelFetch(uC, p, 0);','vec4 cc = prebakeC(p);');
@@ -159,7 +160,7 @@ vec4 prebakeC(ivec2 p){
   shader=replace(shader,'vec3 dyed = l2s(mix(s2l(f0.rgb), pattern * hue * kk, 1.0));','vec3 dyed = l2s(pattern * hue * kk);');
   if(frameBake){
     shader=region(shader,'    vec4 ra = texture(uMF, vec3(uvA, 0.0)), rb = texture(uMF, vec3(uvA, 1.0));','    if (f0.a > 0.001) {',
-      '    vec4 pf0 = texture(uPBFrameL, vec3(gl_FragCoord.xy / vec2(1440.,2560.), 0.)); vec3 pf1 = texture(uPBFrameL, vec3(gl_FragCoord.xy / vec2(1440.,2560.), 1.)).rgb;\n'+
+      '    vec4 pf0 = texture(uPBFrameL, pbFL(0.)); vec3 pf1 = texture(uPBFrameL, pbFL(.5)).rgb;\n'+
       '    float wsum = pf0.x + 1e-4; float kk = pf0.y / wsum; vec3 col = pf1 / max(pf0.y, 1e-4); float rc = pf0.z / wsum;\n');
     shader=replace(shader,'lit = mix(lit, dyed, (ra.x + ra.y) / wsum);','lit = mix(lit, dyed, pf0.w / wsum);');
     shader=replace(shader,'frameLit(f0.rgb, f4, kk, col, rc)','frameLitL(texture(uPBFrame,vec3(uvA,0.)).rgb, texture(uPBFrame,vec3(uvA,1.)).rgb, kk, col, rc)');
@@ -252,7 +253,7 @@ vec4 prebakeC(ivec2 p){`);
     r.setScissorTest(false);
     if(backDirty.changed())drawField(back,bakeBack);else stats.fieldReuses++;
     if(frontDirty.changed())drawField(front,bakeFront);else stats.fieldReuses++;
-    if(frameBake){if(frameDirty.changed()){for(let i=0;i<2;i++){bakeFrame.material.uniforms.uPBLayer.value=i;r.setRenderTarget(frameF,i);r.setViewport(0,0,frameF.width,frameF.height);r.render(bakeFrame.scene,hr.fsCam);}stats.frameBakes=(stats.frameBakes??0)+1;}else stats.frameReuses=(stats.frameReuses??0)+1;}
+    if(frameBake){if(frameDirty.changed()){r.setRenderTarget(frameF);r.setViewport(0,0,frameF.width,frameF.height);r.render(bakeFrame.scene,hr.fsCam);stats.frameBakes=(stats.frameBakes??0)+1;}else stats.frameReuses=(stats.frameReuses??0)+1;}
     for(let i=1;i<3;i++){if(fieldDirty[i].changed()){bakeFields.material.uniforms.uPBLayer.value=i;drawField(fields,bakeFields,i);}else stats.fieldReuses++;}
     if(hr.balls.count){if(probeChanged()){compact.compose(hr.frame);stats.probeUpdates++;}else stats.probeReuses++;}
     extra.uPBLCDOn.value=plate?.mesh.visible?1:0;
