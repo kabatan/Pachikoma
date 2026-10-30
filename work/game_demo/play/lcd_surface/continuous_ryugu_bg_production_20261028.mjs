@@ -5,6 +5,7 @@ import {warmPausedVideo} from './startup_warm.mjs';
 export async function createSharedPalace({base,config,onError=()=>{},center=null,imageFactory=null}){
  const video=document.createElement('video');video.muted=true;video.playsInline=true;video.loop=true;video.preload='auto';
  const palacePause=new URLSearchParams(globalThis.location?.search??'').get('palacepause')!=='0';
+ const PAUSE_GUARD=new URLSearchParams(globalThis.location?.search??'').get('pauseguard')!=='0';   // 止まっている映像へ pause() を毎フレーム呼ばない。?pauseguard=0 で従来
  let startupWarmMute=false,warmBusy=false;const errors=[],events=[],audit=[];let clock=0,loops=0,lastAudit=-1,manual=false,presentedTime=0,lastPresented=0,visible=false,backgroundShown=false,segment=0;
  // Presentation callbacks are needed only while the palace is visible. The
  // Hidden background playback is paused by default; palacepause=0 keeps its old clock.
@@ -26,8 +27,8 @@ export async function createSharedPalace({base,config,onError=()=>{},center=null
    get canvas(){return image.rawCanvas('palace-canvas-consumer');},get imageBackend(){return image;},
    warm(){return image.warm();},
    advance(dt){startupWarmMute=false;trackMediaLoop();clock+=dt;if(!manual&&(!palacePause||visible&&backgroundShown)&&video.paused)video.play().catch(e=>{onError(e.message);});},
-   hidden(){visible=false;backgroundShown=false;if(palacePause)video.pause();if(lazyPresentation){stopPresentation();image.hidden?.();}},
-   render(current,previous,alpha,scene,frame,centerState=null,blackBg=false){backgroundShown=!blackBg;if(palacePause){if(blackBg)video.pause();else if(!manual&&video.paused)video.play().catch(e=>onError(e.message));}if(lazyPresentation){if(blackBg)stopPresentation();else startPresentation();}if(!visible){segment++;visible=true;}return image.render({current,previous,mixOld:previous?alpha:0,center:centerState,blackBg});},
+   hidden(){visible=false;backgroundShown=false;if(palacePause&&(!PAUSE_GUARD||!video.paused))video.pause();if(lazyPresentation){stopPresentation();image.hidden?.();}},
+   render(current,previous,alpha,scene,frame,centerState=null,blackBg=false){backgroundShown=!blackBg;if(palacePause){if(blackBg){if(!PAUSE_GUARD||!video.paused)video.pause();}else if(!manual&&video.paused)video.play().catch(e=>onError(e.message));}if(lazyPresentation){if(blackBg)stopPresentation();else startPresentation();}if(!visible){segment++;visible=true;}return image.render({current,previous,mixOld:previous?alpha:0,center:centerState,blackBg});},
    setManual(on){manual=!!on;lastMedia=video.currentTime;image.setManual(on);if(manual)video.pause();},
    async prepare(dt){if(!manual)return;const target=(clock+dt)%12;if(Math.abs(video.currentTime-target)<1e-4)return;await new Promise(resolve=>{video.addEventListener('seeked',resolve,{once:true});video.currentTime=target;});},
    diagnostics(){return {kind:'continuous_palace_injected',palacePause,idleUpdates:lazyPresentation,presentationActive,presentationCallbacks,time:video.currentTime,clock,loops,visible,segment,presentedTime,ready:video.readyState,src:video.currentSrc,errors:[...errors],image:image.diagnostics()};},
@@ -99,8 +100,8 @@ export async function createSharedPalace({base,config,onError=()=>{},center=null
    }
   },
   advance(dt){startupWarmMute=false;clock+=dt;if(!manual&&(!palacePause||visible&&backgroundShown)&&video.paused)video.play().catch(e=>{onError(e.message);});},
-  hidden(){visible=false;backgroundShown=false;if(palacePause)video.pause();},
-  render(current,previous,alpha,scene,frame,centerState=null,blackBg=false){backgroundShown=!blackBg;if(palacePause){if(blackBg)video.pause();else if(!manual&&video.paused)video.play().catch(e=>onError(e.message));}gl.uniform1f(U('bgOn'),blackBg?0:1);setCenter(centerState);if(!visible){segment++;visible=true;}upload(0,video);upload(1,current);if(previous)upload(2,previous);gl.uniform1f(U('mixOld'),previous?alpha:0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);sample(scene,frame);return canvas;},
+  hidden(){visible=false;backgroundShown=false;if(palacePause&&(!PAUSE_GUARD||!video.paused))video.pause();},
+  render(current,previous,alpha,scene,frame,centerState=null,blackBg=false){backgroundShown=!blackBg;if(palacePause){if(blackBg){if(!PAUSE_GUARD||!video.paused)video.pause();}else if(!manual&&video.paused)video.play().catch(e=>onError(e.message));}gl.uniform1f(U('bgOn'),blackBg?0:1);setCenter(centerState);if(!visible){segment++;visible=true;}upload(0,video);upload(1,current);if(previous)upload(2,previous);gl.uniform1f(U('mixOld'),previous?alpha:0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);sample(scene,frame);return canvas;},
   setManual(on){manual=!!on;if(manual)video.pause();},
   async prepare(dt){if(!manual)return;const target=(clock+dt)%12;if(Math.abs(video.currentTime-target)<1e-4)return;await new Promise(resolve=>{video.addEventListener('seeked',resolve,{once:true});video.currentTime=target;});},
   diagnostics(){return {uploads,uploadSkips,presentedTime,videoQuality:(()=>{const q=video.getVideoPlaybackQuality?.();return q?{totalVideoFrames:q.totalVideoFrames,droppedVideoFrames:q.droppedVideoFrames}:null;})(),kind:'continuous_palace',time:video.currentTime,clock,loops,visible,segment,ready:video.readyState,src:video.currentSrc,errors:[...errors]};},

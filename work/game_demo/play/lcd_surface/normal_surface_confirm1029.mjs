@@ -102,6 +102,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const lightFrames = man.lights ? await (await fetch(new URL(man.lights, base))).json() : {};
   const font = new FontFace('Dela1026', `url(${new URL('../../../effects/lcd/fonts/DelaGothicOne-Regular.ttf', import.meta.url).href})`);
   await font.load(); document.fonts.add(font);
+  const TIMEUP_COVER = new URLSearchParams(globalThis.location?.search ?? '').get('timeupcover') !== '0'; let coverKey = null;
   const attractPause = new URLSearchParams(globalThis.location?.search ?? '').get('attractpause') !== '0';
   let clock = 0, manual = false, shotOn = false, jpOwns = false, lastEvent = null;
   let mode = { id: 'attract', p: {}, at: 0, until: Infinity }, guard = null;
@@ -247,10 +248,10 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     recoverDisplayError,
     get displayRecoveryActive(){return displayRecovery.active;},
     renderRecoveredFrame(dt=0){if(!displayRecovery.active)return false;clock+=dt;drawRecovery(dt);return true;},
-    displayRecoveryDiagnostics(){return {...displayRecovery,cleanupErrors:[...displayRecovery.cleanupErrors]};},
     // 10/31 検証: 復旧モードは次の客へ持ち越さない（待機へ戻る 'attract'＝reset で frame_fault_boundary が呼ぶ）。復旧で捨てた GPU の履歴・映像の経路は戻さず（CPU 経路）、場面の状態だけを初期化して通常の描画へ戻す
     clearDisplayRecovery(){if(!displayRecovery.active)return false;displayRecovery.active=false;displayRecovery.cleared=(displayRecovery.cleared??0)+1;displayRecovery.reason=null;displayRecovery.cleanupErrors.length=0;
       gpuFrame=null;invalidateResult();fadeLeft=0;lastJpSerial=-1;jpOwns=false;mode=null;guard=null;shotOn=false;launchPulses=[];lastEvent=null;return true;},
+    displayRecoveryDiagnostics(){return {...displayRecovery,cleanupErrors:[...displayRecovery.cleanupErrors]};},
     get gpuPanelSource(){return fullPrevious?.wrap(gpuFrame)??gpuFrame;},
     withFullPanelPreviousSource(source,fn){return fullPrevious?fullPrevious.withSource(source,fn):fn();},
     get fullPanelPreviousManager(){return fullPanelPrevious;},
@@ -332,7 +333,10 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       // timeline and lighting updates, but omit its covered video-to-Canvas copy.
       const coveredPaint=this.attractCoveredPaint===true&&['attract','title','howto'].includes(mode?.id);
       const attractHidden=attractPause&&this.attractSurface?.active===true&&['attract','title','howto'].includes(mode?.id);
-      const videoSnapshot=clips.frame(dt,videoEligible||coveredPaint?null:hold,W,H,attractHidden);
+      // 10/31 CPU軽量化：継続・スタッフ待ちの画面(timeup)が全面を覆っている間は、下の通常映像を止め、映像の絵が変わった時だけ hold へ写す(毎フレームの 1152x1268 drawImage を無くす)。?timeupcover=0 で従来
+      const timeupCover=TIMEUP_COVER&&!videoEligible&&!coveredPaint&&this.timeupSurface?.active===true&&!manual;
+      const videoSnapshot=clips.frame(dt,videoEligible||coveredPaint||timeupCover?null:hold,W,H,attractHidden||timeupCover);
+      if(timeupCover){const key=videoSnapshot.layers.map(l=>l.name+'|'+l.generation+'|'+l.alpha+'|'+l.time).join(';');if(key!==coverKey){coverKey=key;drawClipSnapshot(videoSnapshot,hold,W,H);}}else coverKey=null;
       shotOn = !!clips.shot || clips.pending > 0;
       // Keep the original pulse lifetime and render equations; only its target changes.
       launchPulses = launchPulses.filter(t => clock - t < .8);
