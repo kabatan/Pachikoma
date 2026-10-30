@@ -94,7 +94,12 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     if (action === 'chainAnnounce') {   // JP後の継続の告知（規則 H: ChainAnnounceSeconds）。専用の映像があれば lcd 側が受ける。無ければ normal_surface の仮カード
       const p = { first: !!e.first, atRisk: e.atRisk ?? 0, rate: e.rate ?? '2/3', seconds: e.seconds ?? 2.5 };
       heldAnnounce = p;   // 配当・継続成功の映像が終わって液晶が空いてから出す（frame で）
-    } else if (action === 'meterReady') { meter.reset(); note('meterReady', { kind: e.kind }); }
+    } else if (action === 'meterReady') {
+      meter.reset(); note('meterReady', { kind: e.kind });
+      // 10/31 検証：6灯が時計0で揃い、追加入金のあとに規則がJPメーターを始めた場合は 'lamp6' の合図が来ず、導入の映像が出ない（約4秒、通常の画面のまま）。
+      // 着地での開始（直前の受け取りが6灯目のFresh）なら 'lamp6' が来るので何もしない。そうでなければ frame で、映像が無いときだけ 'lamp6' を補う
+      { const rc = controller.game.receipt; S.jpResume = e.kind === 'jp' && !(rc?.kind === 'Fresh' && rc.after?.length === 6) ? { at: S.wall, targets: e.targets ?? [] } : null; }
+    }
         else if (action === 'meterLand') { if (e.hit) meter.hit(e.lane); }
     else if (action === 'meterEnd') { note('meterEnd', { success: e.success, count: e.count }); if (e.success) meter.end(true); }
     else if (action === 'rouletteStart') {
@@ -208,6 +213,7 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     if (id === 'chain_choice' && controller.game.chainAnnouncing) { heldChoice = p; return true; }
     if (id === 'start') { mash?.reset(); S.normalT = 0; S.presses = 0; }   // プレイの始まり：うぱの促しの判定を最初から
     if (id === 'lamp6') {
+      S.jpResume = null;
       const handled = baseOn(id, p);
       // 導入は 雷 → 黒背景＋字 → JACKPOT CHANCE（字は G と同じく dopamine/reach を等確率。10/30 監督：消さない）。映像は 6灯目の瞬間から（規則の導入 6.3秒と同じ）
       if (model.active && !model.chainMode) { model.delay = 0; S.introFixes++; }
@@ -227,6 +233,10 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   lcd.frame = (dt, F) => {
     tutRescue();
     const r = base(dt, F);
+    if (S.jpResume && S.wall - S.jpResume.at > 0.3) {   // 追加入金後のJP開始：導入の映像（上の meterReady の注）
+      const J = S.jpResume; S.jpResume = null;
+      if (controller.game.meterStatus?.kind === 'jp' && !model.active && !lcd.choiceV20?.active) { const after = [1, 2, 3, 4, 5, 6, 7].filter((x) => !J.targets.includes(x)); note('jp:lamp6-resume', { after }); lcd.onEvent('lamp6', { after, pockets: after }); }
+    }
     if (heldAnnounce && !lcd.jp.claimed) { const p0 = heldAnnounce; heldAnnounce = null; S.announceOn = true; note('chain_announce', p0); baseOnRef('chain_announce', p0); }
     if (S.announceOn && !controller.game.chainAnnouncing) { S.announceOn = false; heldAnnounce = null; }
     if (heldChoice) { const g0 = controller.game; if (g0.phase !== 'ChainChoice') heldChoice = null; else if (!g0.chainAnnouncing) { const p0 = heldChoice; heldChoice = null; baseOn('chain_choice', p0); } }
