@@ -139,7 +139,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     const m = T2.meta, v = lvl >= 2 ? 'w' : 'n', DS = 1.03, FOX = (m.cw - m.dx) / 2 + 1, FOY = 12 + m.hf / 2;   // 面の中心（画像内）
     const put = (im, x, y, sc, ox, oy, al = 1) => { tx.globalAlpha = al; tx.drawImage(im, x - ox * sc, y - oy * sc, im.width * sc, im.height * sc); tx.globalAlpha = 1; };
     // 右：SS:cc（右端で揃える）
-    { const adv = 118 * DS, cwid = 72 * DS, tot = 4 * adv + cwid + 6; let x = TX.w / 2 - 46 - tot;
+    { const adv = 110 * DS, cwid = 70 * DS, tot = 4 * adv + cwid + 6; let x = TX.w / 2 - 46 - tot;
       const txt = timeText(st);
       for (let i = 0, di = 0; i < txt.length; i++) {
         const ch = txt[i];
