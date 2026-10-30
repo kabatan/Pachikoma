@@ -4,13 +4,16 @@ export function attachChainConnect(lcd,{controller}) {
   if(!lcd?.jp||lcd.chainConnect)return lcd;
   const dispatch=controller.dispatch;let game,advance;
   let forceReady=false;   // 10/31 保険：選択画面が長く出られないときは、入力と数えを通す（固まらない）
-  const ready=()=>forceReady||(!lcd.jp.claimed&&!!lcd.choiceV20?.active);
+  // 10/31 液晶が画面復旧（displayRecoveryActive。frame_fault_boundary）に入ると、lcd.frame の包み（告知の数え・選択画面・保険）も onEvent も通らない。
+  //   それでも規則は液晶の「告知が出ている／選択画面が出ている」を待つので、継続の告知・選択で永久に固まった。復旧中は液晶を待たない（告知は時計どおり、選択は制限時間どおり）。
+  const recovering=()=>!!lcd.displayRecoveryActive;
+  const ready=()=>forceReady||recovering()||(!lcd.jp.claimed&&!!lcd.choiceV20?.active);
   const bind=()=>{
     if(game===controller.game)return;
     if(game)game._advanceChainChoice=advance;
     game=controller.game;advance=game._advanceChainChoice;
     game._advanceChainChoice=function(seconds){
-      if(this.chainAnnouncing){if(!lcd.rulesH?.state?.announceOn&&!this.chainTooLate)return false;}   // H: 告知は液晶に出ている間だけ数える（配当・継続成功の映像が終わってから）。時計は止めない
+      if(this.chainAnnouncing){if(!lcd.rulesH?.state?.announceOn&&!this.chainTooLate&&!recovering())return false;}   // H: 告知は液晶に出ている間だけ数える（配当・継続成功の映像が終わってから）。時計は止めない
       else if(this.phase==='ChainChoice'&&!ready()&&!this.chainTooLate)return false;   // 時間切れ間近の確定は映像待ちで止めない
       return advance.call(this,seconds);
     };

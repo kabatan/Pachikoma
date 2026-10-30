@@ -38,7 +38,12 @@ export function r3ButtonAction(ctrl, name) {
 export function entryGuard(ctrl) {
   const g = ctrl.game, r = ctrl.rules ?? g?.rules;
   if (ctrl.phase === 'Continue' && typeof g.offerLeft === 'number' && typeof r?.ContinueSeconds === 'number') return r.ContinueSeconds - g.offerLeft < GUARD_SECONDS;
-  if (ctrl.phase === 'ChainChoice' && typeof g.choiceLeft === 'number' && typeof r?.ChainChoiceSeconds === 'number') return r.ChainChoiceSeconds - g.choiceLeft < GUARD_SECONDS;
+  if (ctrl.phase === 'ChainChoice' && typeof g.choiceLeft === 'number' && typeof r?.ChainChoiceSeconds === 'number') {
+    // 10/31 時計0の「100円で継続」の選択は 30 秒（ContinueSeconds）。ChainChoiceSeconds(12) との差で測ると、出てから 18.7 秒もボタンが効かなかった。実際の長さ(_chainChoiceSeconds)で測る。告知中は規則側が選べない。
+    if (g.chainAnnouncing) return true;
+    const full = typeof g._chainChoiceSeconds === 'function' ? g._chainChoiceSeconds() : r.ChainChoiceSeconds;
+    return Math.max(full, r.ChainChoiceSeconds) - g.choiceLeft < GUARD_SECONDS;
+  }
   if (ctrl.phase === 'StaffWait' && typeof g.staffWaitSeconds === 'number') return g.staffWaitSeconds < GUARD_SECONDS;
   return false;
 }
