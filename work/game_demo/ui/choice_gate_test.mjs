@@ -82,6 +82,9 @@ for (const [via, name, expect] of [['cabinet', 'CHALLENGE', 'StaffWait'], ['cabi
   assert.equal(r3ButtonAction(ctrl, 'FIRE'), 'fire'); assert.equal(r3ButtonAction(ctrl, 'CHALLENGE'), 'challenge');
   const { ctrl: c2 } = mk(); toChain(c2); c2.update(3);
   assert.equal(r3ButtonAction(c2, 'FIRE'), 'chainStop'); assert.equal(r3ButtonAction(c2, 'CHALLENGE'), 'chainContinue');
+  // キーボードも従来どおり：Space=左ボタン(開始・発射)、C=右(challenge)
+  const { KEY_ACTIONS } = await import('./input.mjs'); const { ctrl: c3 } = mk(); const km = KEY_ACTIONS(c3);
+  assert.equal(km.Space(), 'start'); c3.dispatch('start'); c3.update(6); assert.equal(km.Space(), 'fire'); assert.equal(km.KeyC(), 'challenge');
   delete globalThis.location; resetFireButtonMode();
 }
 console.log('PASS choice gate: either button fires, no wrong pick when mashing into 追加/継続 (cabinet + keyboard), idle unchanged, firebtn=old');

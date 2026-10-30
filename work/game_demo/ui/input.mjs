@@ -11,13 +11,16 @@ export function primaryButtonAction(ctrl) {
 
 // 10/31 Space=右ボタン、C(と←)=左ボタン、→=右ボタン。実機の r3ButtonAction と同じ対応（選択画面は 左=終わる/確定・右=追加/継続、それ以外はどちらも発射など）。?firebtn=old は従来。
 const keyButton = (ctrl, name) => {
-  if (fireButtonMode() === 'old') return name === 'FIRE' ? primaryButtonAction(ctrl) : (ctrl.phase === 'ChainChoice' ? 'chainStop' : 'challenge');
   if (ctrl.phase === 'StaffWait') return name === 'FIRE' ? 'cancelExtra' : 'fire';   // スタッフ待ち: 左=取り消し(従来のCと同じ)、右は何も起きない
   return r3ButtonAction(ctrl, name);
 };
+// ?firebtn=old は従来：Space=左ボタン(primaryButtonAction)、C=右ボタン(勝負。継続の選択では確定)
+const oldMode = () => fireButtonMode() === 'old';
 export const KEY_ACTIONS = (ctrl) => ({
-  Space: () => (ctrl.confirmFinish ? 'fire' : keyButton(ctrl, 'CHALLENGE')), ArrowRight: () => keyButton(ctrl, 'CHALLENGE'),
-  KeyC: () => keyButton(ctrl, 'FIRE'), ArrowLeft: () => keyButton(ctrl, 'FIRE'), KeyA: () => 'add',
+  Space: () => (oldMode() ? primaryButtonAction(ctrl) : ctrl.confirmFinish ? 'fire' : keyButton(ctrl, 'CHALLENGE')),   // 終了の確認はSpace連打で確定させない(従来どおり)。→ で確定、C/← で取消
+  ArrowRight: () => (oldMode() ? 'fire' : keyButton(ctrl, 'CHALLENGE')),
+  KeyC: () => (oldMode() ? (ctrl.phase === 'ChainChoice' ? 'chainStop' : 'challenge') : keyButton(ctrl, 'FIRE')),
+  ArrowLeft: () => (oldMode() ? 'fire' : keyButton(ctrl, 'FIRE')), KeyA: () => 'add',
   KeyB: () => (ctrl.phase === 'ChainChoice' ? 'chainStop' : ctrl.confirmFinish ? 'confirmFinish' : 'finish'),
   KeyR: () => 'reset',
   Escape: () => (ctrl.confirmFinish ? 'cancelFinish' : 'quit'),
