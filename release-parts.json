@@ -18,8 +18,8 @@
     },
     {
       "path": "work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4",
-      "bytes": 178752759,
-      "sha256": "ae98ab2a00c443a70fe6907953d99a137cad92ddf230147d88c2876161c69407",
+      "bytes": 178715424,
+      "sha256": "52bb9387c2f6548a0eb4d3cff9240320631e17d22cd83c76494f675a7d8201e0",
       "parts": [
         {
           "path": "work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4.part00",
@@ -27,7 +27,7 @@
         },
         {
           "path": "work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4.part01",
-          "bytes": 83752759
+          "bytes": 83715424
         }
       ]
     },
