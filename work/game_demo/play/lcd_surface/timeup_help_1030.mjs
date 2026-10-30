@@ -7,12 +7,13 @@ const W = 1152, PX = 34, PY = 28;
 export function timeupHelpMode(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('timeuphelp') === '0' ? 'old' : 'new'; }
 
 const ease = t => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+const fontFor = sz => sz <= 52 ? `${sz}px "MPLUS1p-ExtraBold","Dela Gothic One","Noto Sans JP",sans-serif` : `${sz}px "Dela Gothic One","MPLUS1p-ExtraBold","Noto Sans JP",sans-serif`;   // 小さい字は縁に潰れにくい太ゴシック
 export function textPath(ctx, text, x, y, size, { fill, silver = true, glow = null, align = 'center' }) {   // 激アツ風: 黒縁 + 白銀縁 + グラデ塗り + 上の照り
   ctx.save();
-  ctx.font = `${size}px "Dela Gothic One","MPLUS1p-ExtraBold","Noto Sans JP",sans-serif`;
+  ctx.font = fontFor(size);
   ctx.textAlign = align; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round'; ctx.miterLimit = 2;
   if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = size * .25; }
-  const small = size <= 48; ctx.lineWidth = size * (small ? .15 : .24); ctx.strokeStyle = '#08020f'; ctx.strokeText(text, x, y);
+  const small = size <= 52; ctx.lineWidth = size * (small ? .17 : .24); ctx.strokeStyle = '#08020f'; ctx.strokeText(text, x, y);
   ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
   if (silver && !small) { const g = ctx.createLinearGradient(0, y - size, 0, y); g.addColorStop(0, '#ffffff'); g.addColorStop(.5, '#aeb6d6'); g.addColorStop(1, '#f4f6ff'); ctx.lineWidth = size * .15; ctx.strokeStyle = g; ctx.strokeText(text, x, y); }
   const g = ctx.createLinearGradient(0, y - size * .85, 0, y + size * .05);
@@ -28,7 +29,7 @@ export const CYAN = [[0, '#f0ffff'], [.5, '#8fe8ff'], [1, '#3aa8e8']];
 
 // 色の違う語を1行に並べる（地の文は白、大事な語だけ金）
 export function richLine(ctx, parts, cx, y, size, maxWidth = 0) {
-  const meas = sz => { ctx.save(); ctx.font = `${sz}px "Dela Gothic One","MPLUS1p-ExtraBold","Noto Sans JP",sans-serif`; const w = parts.map(p => ctx.measureText(p[0]).width); ctx.restore(); return w; };
+  const meas = sz => { ctx.save(); ctx.font = fontFor(sz); const w = parts.map(p => ctx.measureText(p[0]).width); ctx.restore(); return w; };
   let ws = meas(size), total = ws.reduce((a, b) => a + b, 0);
   if (maxWidth && total > maxWidth) { size = Math.floor(size * maxWidth / total); ws = meas(size); total = ws.reduce((a, b) => a + b, 0); }   // 枠からはみ出さない
   let x = cx - total / 2;
@@ -70,12 +71,12 @@ export async function attachTimeupHelp(lcd, { controller } = {}) {
     { const k = ease(t / .35); ctx.save(); ctx.globalAlpha = k; ctx.translate(0, (1 - k) * -40);
       plate(ctx, 60, 4, 1016, 126, 30);
       richLine(ctx, [['時間切れ！ ', WHITE, '#8a5cff'], [`100円で${f.extra}秒`, GOLD, '#ff9a20'], [' 追加できます', WHITE]], 540, 68, 60, 930);
-      richLine(ctx, [['押さないと あと', WHITE], [`${left}秒`, GOLD], [' で終了。 玉の数で賞が決まります', WHITE]], 540, 114, 38, 930);
+      richLine(ctx, [['押さないと あと', WHITE], [`${left}秒`, GOLD], [' で おしまい', WHITE]], 540, 116, 46, 930);
       ctx.restore(); }
     // 2) 左の札の上: あと少しで届く賞（あと◯玉）を見せる。TOTAL の上に載せ、「いまの玉」と読ませる
     { const k = ease((t - .25) / .35); ctx.save(); ctx.globalAlpha = k; ctx.translate(0, (1 - k) * 30);
       plate(ctx, 78, 290, 366, 216, 26);
-      textPath(ctx, 'いまの玉で賞が決まる', 261, 332, 28, { fill: WHITE, silver: false });
+      textPath(ctx, 'いまの玉で賞が決まる', 261, 334, 34, { fill: WHITE, silver: false });
       if (f.top) { textPath(ctx, '最高賞！', 261, 410, 66, { fill: GOLD, glow: '#ffb030' }); textPath(ctx, 'すごい！', 261, 478, 52, { fill: GOLD }); }
       else { textPath(ctx, `${f.rankName}まで`, 261, 396, 52, { fill: WHITE, glow: '#8a5cff' }); textPath(ctx, `あと${f.need}玉！`, 261, 476, 74, { fill: GOLD, glow: '#ff9a20' }); }
       ctx.restore(); }
@@ -89,8 +90,8 @@ export async function attachTimeupHelp(lcd, { controller } = {}) {
     { const k = ease((t - .8) / .3); ctx.save(); ctx.globalAlpha = k; textPath(ctx, '100円で', 965, 430, 40, { fill: GOLD, glow: '#ff9a20' }); ctx.restore(); }
     // 5) ボタンの指し示し（絵は動かさず、ボタンの字のすぐ上に札で）
     { const k = ease((t - 1) / .3); ctx.save(); ctx.globalAlpha = k;
-      plate(ctx, 66, 738, 392, 56, 18, 'rgba(200,210,255,.9)', .9); textPath(ctx, '左ボタンで 終わる', 262, 777, 36, { fill: WHITE, silver: false });
-      plate(ctx, 584, 738, 456, 56, 18, 'rgba(255,205,90,.95)', .9); textPath(ctx, '右ボタンで 続ける', 812, 777, 38, { fill: GOLD, silver: false });
+      plate(ctx, 60, 728, 404, 70, 20, 'rgba(200,210,255,.95)', .94); textPath(ctx, '左ボタンで 終わる', 262, 778, 46, { fill: WHITE, silver: false });
+      plate(ctx, 566, 728, 480, 70, 20, 'rgba(255,205,90,.95)', .94); textPath(ctx, '右ボタンで 続ける', 806, 778, 48, { fill: GOLD, silver: false });
       ctx.restore(); }
     ctx.restore();
   }

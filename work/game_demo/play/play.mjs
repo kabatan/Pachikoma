@@ -208,6 +208,7 @@ if (!q.has('nofx')) {
   if(lcd?.timeupSurface)document.getElementById('g-credit-panel')?.setAttribute('data-lcd','1');   // 液晶が追加画面を出すのでHTMLの箱は隠す
   if(lcd?.timeupSurface&&q.get('staffflow')!=='old'){try{await (await import('./lcd_surface/staff_call_1030.mjs')).attachStaffCall(lcd,{controller:ctrl,canvas:document.getElementById('c')});}catch(e){console.warn('[staffflow] 追加の流れの追加表示を付けられませんでした（従来の流れで続行）',e);}}   // 10/30 追加の流れ：スタッフにチケットを渡す表示・呼び出し音と電飾・再開演出・再開直後の誤発射保護（?staffflow=old で従来）
   if(lcd?.timeupSurface&&q.get('timeuphelp')!=='0'){try{await (await import('./lcd_surface/timeup_help_1030.mjs')).attachTimeupHelp(lcd,{controller:ctrl});}catch(e){console.warn('[timeuphelp] 初見向けの説明文を付けられませんでした（従来で続行）',e);}}   // 10/30 時間切れ〜追加の受付の説明文（初見向け・?timeuphelp=0 で従来）
+  if(lcd?.choiceV20&&q.get('timeuphelp')!=='0'){try{await (await import('./lcd_surface/choice_help_1030.mjs')).attachChoiceHelp(lcd,{controller:ctrl});}catch(e){console.warn('[choicehelp] 継続／確定の説明文を付けられませんでした（従来で続行）',e);}}   // 10/30 継続／確定の選択の説明文（時計0なら100円・?timeuphelp=0 で従来）
   // 新しいJP尺の音も起動時に作り、着地のフレームで長い音声バッファを生成しない。
   if(lcd?.jp && r2Audio){
     const {winPlan,createWinSound}=await import('../../audio/runtime/win_sound.mjs');const engine=r2Audio.engine;
