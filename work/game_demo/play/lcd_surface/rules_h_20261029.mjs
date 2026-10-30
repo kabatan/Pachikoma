@@ -25,7 +25,12 @@ import {createMashHint, HINT, telop} from './hint_h_20261029.mjs';
 import {loadTutorialOverlay} from './tutorial_jp_overlay_1030.mjs';
 
 const PX = 34, PY = 28;                    // 液晶の面(1240x1510)の中の見える範囲(1152x1268)の左上
-const LOOP = [26, 38];                     // ルーレットの回転ループ（全配当の映像で共通の最高速付近のコマ）
+// ルーレットの回転ループ（10/31 修正）：映像ごとの [始め, 終わり) コマ。旧は全配当共通の 26→38（0.4秒・つなぎの差が通常の2.4倍）で、毎回の巻き戻しが
+//   GOP30・76Mbps の映像の途中コマへのシークとなり約8コマ固まった（かくかく）。映像側は始めのコマをキーフレームにし、終わり側 8 コマを始め側と混ぜ、
+//   終わりの後ろ 4 コマは始めの複製にしてある（production_20261028/roulette_*.mp4、元は orig_20261031/）。?roulooploop=old で旧ループ。
+const LOOPS = { roulette_30: [33, 78], roulette_40: [24, 62], roulette_100: [30, 75], roulette_200: [35, 82], roulette_500: [32, 77] };
+const LOOP_OLD = new URLSearchParams(globalThis.location?.search ?? '').get('roulooploop') === 'old';
+const loopOf = (name) => (LOOP_OLD ? [26, 38] : LOOPS[name] ?? [26, 38]);
 const SLIDE_FRAMES = 36;                   // 停止コマの手前のこの数のコマから滑って止まる（= RouletteSlideSeconds 1.2秒 × 30fps）
 // 選択画面の「継続」の札（右の札）の位置。字の幅は札の幅(枠いっぱい)の 90%。札の上半分（「続」の絵の上）に置く。
 //   cx,cy = 字の中心、w = 字の幅（枠の幅 × BADGE_RATIO）。3 状態の実測（1152x1268 の面）。切り替え中は choiceV20.transition の重みで補間する。
@@ -176,8 +181,13 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
       if (S.press && !S.press.applied) {
         // 押した瞬間：停止コマの手前 36 コマへ。ここから 1.2 秒で止まる。つなぎは白いブレーキ光で隠す
         S.press.applied = true; S.flashAt = S.clock; v.currentTime = Math.max(0, (sc.stop_frame - SLIDE_FRAMES) / man.fps); note('slide', { from: sc.stop_frame - SLIDE_FRAMES });
-      } else if (!S.press && (!ro || ro.stage === 'spinning') && t >= LOOP[1]) {
-        v.currentTime = LOOP[0] / man.fps; S.loops++;   // 回転を繰り返す（押されるまで）
+      } else if (!S.press && (!ro || ro.stage === 'spinning')) {
+        const [la, lb] = loopOf(name);
+        if (t >= lb) {
+          // 回転を繰り返す（押されるまで）。行き過ぎた分(最大 4 コマ)は始めに足して位相を保つ。タイムラインの時刻も同時に合わせ、jp_surface 側の巻き戻し検出による 2 度目のシークを防ぐ
+          const to = (la + Math.min(4, Math.max(0, t - lb))) / man.fps;
+          v.currentTime = to; model.time = to; model.lastF = Math.floor(to * man.fps + 1e-6) - 1; S.loops++;
+        }
       }
     } else if (!/^(roulette|jp_rush|jp_bridge)/.test(name) && S.press && !S.roulette) S.press = null;
     return v;
@@ -217,7 +227,9 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     const g = controller.game, st = g.meterStatus, name = model.active ? model.name : null;
     ctx.save(); ctx.translate(PX, PY); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
     // 赤い警報（連打中だけ。メーター部品の下）
-    const lv = alarmLevel(st);
+    // 10/31 JPチャンスの札・焦り(jp_hud_1031)が出ている間は、旧の液晶 canvas への警報・メーターは描かない（GPU の映像経路では見えず、2D の経路に落ちたときに二重になる）。?jphud=0 で旧
+    const hudOwned = !!lcd.jpHud?.active;
+    const lv = hudOwned ? 0 : alarmLevel(st);
     if (lv) drawAlarm(ctx, lv, S.clock);
     // メーター部品は、狙いの映像（jp_aim / chain_jp_aim、または JACKPOT CHANCE の終盤）が見えている間だけ出す。導入の雷・題字に重ねない
     const hudOk = !!name && (/^(jp_aim|chain_jp_aim)/.test(name) || (/^jp_chance/.test(name) && (model.time ?? 0) >= 2.4) || meter.finishing || (st?.stage === 'firing' && st.count > 0 && /^(jp_|chain_jp)/.test(name)));   // 1個でも入れば、映像が遅れていても HUD と入賞の演出は出す
@@ -225,7 +237,7 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     // チュートリアルが計画されている間は、導入〜説明の間ずっと「連打」の出番の前の状態にする（説明のあと、撃てるときに連打のカットインが出る）
     const stD = st?.tutorialPlanned && (st.stage === 'intro' || st.stage === 'tutorial') ? { ...st, stage: 'intro', introLeft: 9 } : st;
     if (tutOverlay && /^tutorial_jp_n\d$/.test(name ?? '')) tutOverlay.draw(ctx, model.time ?? 0, model.d);   // 残った穴の上に矢印・光柱・光の筋
-    meter.draw(ctx, dt, hudOk || meter.finishing ? stD : null);
+    meter.draw(ctx, dt, (hudOk && !hudOwned) || meter.finishing ? stD : null);
     // 連打のカットイン（ガンダム逆シャア）：雷の導入の間は出さない。それ以外の場面なら、HUD の条件を待たずに出す
     if (name && !/^jp_intro/.test(name) && /^(jp_|chain_jp)/.test(name)) meter.drawCut(ctx, stD);
     // 通常時、連打していなさそうな客へ、うぱの声かけ（字）。通常時だけ（JPチャンス中・継続中は出さない）
@@ -291,7 +303,8 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     old(); controller.onAction((action) => { if (action === 'reset') old(); });
   } else await (await import('./chain_announce_v09_1030.mjs')).attachChainAnnounceV09(lcd, { controller, log });
   await (await import('./fx_trim_1030.mjs')).attachFxTrim(lcd, { controller, log });   // 10/30 演出の短縮（溜めと間）。?fxtrim=0 で無し
-  await (await import('./jp_seal_1030.mjs')).attachJpSeal(lcd, { controller, log });   // 10/30 JPチャンス中の映像を封印の扉に。?jpseal=0 で旧（jp_aim）
+  await (await import('./jp_seal_1030.mjs')).attachJpSeal(lcd, { controller, log });
+  try { await (await import('./jp_hud_1031.mjs')).attachJpHud(lcd, { controller, log }); } catch (e) { console.warn('[jp-hud]', e); }   // 10/31 JPチャンス中の残り個数＋残り時間の札・焦り（心拍・赤い縁・警告灯・囲いの赤）。?jphud=0 で無し   // 10/30 JPチャンス中の映像を封印の扉に。?jpseal=0 で旧（jp_aim）
   if (new URLSearchParams(globalThis.location?.search ?? '').get('ft') !== '0') { try { await (await import('./first_timer_1030.mjs')).attachFirstTimer(lcd, { controller, log }); } catch (e) { console.warn('[first-timer]', e); } }   // 10/30 初見の客向けの小さな配慮（?ft1〜ft5=0 で個別に、?ft=0 で全部無し）
   if (new URLSearchParams(globalThis.location?.search ?? '').get('chainseal') === 'v02') await (await import('./chain_seal_1030.mjs')).attachChainSeal(lcd, { controller, log });   // 10/30 継続チャレンジも封印の扉に（JPと同じ経路）。?chainseal=v02 で旧の独自実装、?chainseal=0 で旧（chain_jp_aim）。既定は jp_seal_1030 が継続も担当
   return lcd;
