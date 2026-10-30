@@ -52,7 +52,7 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
         return results;
       });
     },
-    frame(dt,ctx,w,h) {
+    frame(dt,ctx,w,h,hidden=false) {   // hidden: 画面が別の面(待機・説明)に完全に覆われている間は再生中の映像を止める。覆いが外れれば run() が再開する(?attractpause=0 で止めない)
       const snapshot={owner:'normal',generation:0,serial:0,manual,layers:[]};
       const draw=(s,alpha)=>{const layer={video:s.v,name:s.name,generation:s.generation,alpha,time:s.v.currentTime,drawable:true};snapshot.layers.push(layer);if(ctx){ctx.globalAlpha=alpha;ctx.drawImage(s.v,0,0,w,h);ctx.globalAlpha=1;}};
       clock+=dt;
@@ -61,7 +61,7 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
         const req=queue[0], target=req?.name ?? ((!current || ended || current.name.startsWith('idle')) && current?.name!==idleName?idleName:null);
         if(target){const s=load(target,!!req);if(s?.ready && s!==current){if(req)queue.shift();start(s,req);}else if(s?.failed){if(req)queue.shift();emit('error',{name:target});}}
       }
-      run(current);run(incoming);
+      if(hidden&&!manual){for(const s of [current,incoming])if(s&&!s.v.paused)s.v.pause();}else{run(current);run(incoming);}
       if(current?.ready && current.v.readyState>=2)draw(current,1);
       if(incoming?.ready && !incoming.v.seeking && incoming.v.readyState>=2){
         // The decoder owns realtime. Do not skip a new clip's opening on a slow frame.

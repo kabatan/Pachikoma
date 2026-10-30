@@ -102,6 +102,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const lightFrames = man.lights ? await (await fetch(new URL(man.lights, base))).json() : {};
   const font = new FontFace('Dela1026', `url(${new URL('../../../effects/lcd/fonts/DelaGothicOne-Regular.ttf', import.meta.url).href})`);
   await font.load(); document.fonts.add(font);
+  const attractPause = new URLSearchParams(globalThis.location?.search ?? '').get('attractpause') !== '0';
   let clock = 0, manual = false, shotOn = false, jpOwns = false, lastEvent = null;
   let mode = { id: 'attract', p: {}, at: 0, until: Infinity }, guard = null;
   let variants = {}, normalN = 0, launchPulses = [], cards = null;   // cards: temp_cards_20261029 の本番差し替え(未接続なら従来の仮カード)
@@ -326,7 +327,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       // The attract wrapper owns every visible pixel here. Keep the player's
       // timeline and lighting updates, but omit its covered video-to-Canvas copy.
       const coveredPaint=this.attractCoveredPaint===true&&['attract','title','howto'].includes(mode?.id);
-      const videoSnapshot=clips.frame(dt,videoEligible||coveredPaint?null:hold,W,H);
+      const attractHidden=attractPause&&this.attractSurface?.active===true&&['attract','title','howto'].includes(mode?.id);
+      const videoSnapshot=clips.frame(dt,videoEligible||coveredPaint?null:hold,W,H,attractHidden);
       shotOn = !!clips.shot || clips.pending > 0;
       // Keep the original pulse lifetime and render equations; only its target changes.
       launchPulses = launchPulses.filter(t => clock - t < .8);

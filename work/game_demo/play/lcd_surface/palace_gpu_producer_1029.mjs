@@ -27,9 +27,11 @@ export function createPalaceGpuProducer({THREE,renderer,centerImages=null}) {
   if(centerImages&&(!centerImages.F?.width||!centerImages.T?.width||!centerImages.meta?.cell))throw Error('Invalid center images/meta');
   const context=renderer.getContext();
   const idleUpdates=new URLSearchParams(globalThis.location?.search??'').get('palaceidle')!=='0';
+  // ?palaceskip=0 redraws the panel every call. Otherwise an identical input (same textures at the same upload version, same mix/center) keeps the last panel.
+  const frameSkip=new URLSearchParams(globalThis.location?.search??'').get('palaceskip')!=='0';let drawnKey=null;
   const updateStats={callbacks:0,suspends:0,resumes:0,backgroundSkipped:0};
   const resources=[],videoTextures=new Map();let disposed=false,revision=0;
-  const stats={renders:0,videoTextures:0,videoUpdateRequests:0,readbacks:0,contextsCreated:0,canvasCopies:0,ownsClock:false,waitFrames:0,initialWaitFrames:0,recoveredWaits:0,waiting:false,waitReasonCounts:{},lastWait:[],lastVideoStates:[]};
+  const stats={renders:0,skippedDraws:0,videoTextures:0,videoUpdateRequests:0,readbacks:0,contextsCreated:0,canvasCopies:0,ownsClock:false,waitFrames:0,initialWaitFrames:0,recoveredWaits:0,waiting:false,waitReasonCounts:{},lastWait:[],lastVideoStates:[]};
   const own=x=>(resources.push(x),x);
   const configure=(texture,flipY)=>{
     texture.colorSpace=THREE.NoColorSpace;texture.minFilter=texture.magFilter=THREE.LinearFilter;
@@ -156,6 +158,9 @@ export function createPalaceGpuProducer({THREE,renderer,centerImages=null}) {
       uniforms.fg.value=videoTexture(current,sourceFrameKeys.current);
       uniforms.old.value=previous?videoTexture(previous,sourceFrameKeys.previous):placeholder;
       uniforms.mixOld.value=previous?mixOld:0;uniforms.bgOn.value=blackBg?0:1;
+      let key=null;
+      if(frameSkip){const t=[uniforms.bg.value,uniforms.fg.value,uniforms.old.value];key=[revision,previous?mixOld:0,blackBg?1:0,...t,...t.map(x=>x.version),...(center?[center.cell,center.x,center.y,center.scale,center.gain,center.smear,center.resid]:[null])];
+        if(revision&&drawnKey&&drawnKey.length===key.length&&drawnKey.every((v,i)=>Object.is(v,key[i]))){stats.skippedDraws++;return surface;}drawnKey=null;}
       withRendererState(THREE,renderer,()=>{
         renderer.autoClear=false;renderer.setRenderTarget(target);renderer.setScissorTest(false);
         renderer.setViewport(0,0,PANEL.width,PANEL.height);renderer.setClearColor(0,1);renderer.clear(true,false,false);
@@ -163,7 +168,7 @@ export function createPalaceGpuProducer({THREE,renderer,centerImages=null}) {
         renderer.setViewport(PANEL.x,PANEL.height-PANEL.y-PANEL.h,PANEL.w,PANEL.h);
         renderer.render(scene,camera);
       });
-      revision++;stats.renders++;return surface;
+      revision++;stats.renders++;if(key){key[0]=revision;drawnKey=key;}return surface;
     },
     hidden(){if(idleUpdates)for(const entry of videoTextures.values())entry.texture.suspendFrames();},
     // Temporary sampler selection for same-instant main screenshot only.

@@ -17,7 +17,9 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
  const load=async path=>{const r=await fetch(new URL(path,base));if(!r.ok)throw Error('Palace atlas HTTP '+r.status);const im=await createImageBitmap(await r.blob(),{premultiplyAlpha:'none',colorSpaceConversion:'none'});images.push(im);return im;};
  let palaceBoundary=null,producer,legacy=null,disposed=false,failed=false,legacyMode=false,manual=false,lastInput=null,flash={alpha:0,color:'#fff'},hud=null,hudTexture=null;
  let rawPanel=null,rawCtx=null,rawVisible=null,rawVisibleCtx=null;
- const stats={producerCalls:0,heldFrames:0,composites:0,boundaryMaterializations:0,legacyCalls:0,legacyCreates:0,legacyInitMs:0,legacyInitMaxMs:0,legacyDrawMs:0,legacyDrawMaxMs:0,boundaryReadMs:0,boundaryReadMaxMs:0,failures:[],boundaryReadbackMaySynchronize:true};
+ // ?palacecompose=0 restores one panel draw + one HUD upload per frame. Otherwise the panel is redrawn only when the producer image, HUD pixels or flash changed.
+ const composeCache=new URLSearchParams(globalThis.location?.search??'').get('palacecompose')!=='0';let hudRevision=0,hudCanvasRevision,outputValid=false,composedKey=null;
+ const stats={producerCalls:0,heldFrames:0,composites:0,composeReuses:0,hudUploads:0,boundaryMaterializations:0,legacyCalls:0,legacyCreates:0,legacyInitMs:0,legacyInitMaxMs:0,legacyDrawMs:0,legacyDrawMaxMs:0,boundaryReadMs:0,boundaryReadMaxMs:0,failures:[],boundaryReadbackMaySynchronize:true};
  try{
   const centerImages=center?{F:await load(center.F),T:await load(center.T),meta:center.meta}:null;
   producer=createPalaceGpuProducer({THREE,renderer,centerImages});
@@ -58,12 +60,15 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
    },
    setManual(on){manual=!!on;},setLegacyMode(on){legacyMode=!!on;},
    setFlash(alpha=0,color='miss'){flash={alpha:Math.max(0,Math.min(1,alpha||0)),color:color==='hit'?'#fff':'#736099'};},
-   setHudCanvas(canvas){hud=canvas;if(canvas){if(!hudTexture){hudTexture=new THREE.CanvasTexture(canvas);hudTexture.colorSpace=THREE.NoColorSpace;hudTexture.generateMipmaps=false;hudTexture.minFilter=hudTexture.magFilter=THREE.LinearFilter;}hudTexture.needsUpdate=true;}},
+   setHudCanvas(canvas,revision){if(canvas!==hud)hudRevision++;hud=canvas;if(canvas){if(!hudTexture||hudTexture.image!==canvas){hudTexture?.dispose();hudTexture=new THREE.CanvasTexture(canvas);hudTexture.colorSpace=THREE.NoColorSpace;hudTexture.generateMipmaps=false;hudTexture.minFilter=hudTexture.magFilter=THREE.LinearFilter;hudCanvasRevision=undefined;}if(!composeCache||!Number.isSafeInteger(revision)||revision<0||hudCanvasRevision!==revision){hudTexture.needsUpdate=true;hudRevision++;stats.hudUploads++;}hudCanvasRevision=revision;}},
    getComposedPanelContext(){return renderer.getContext();},
    compose(){if(disposed)throw Error('Palace live image disposed');if(failed||legacyMode)return null;
+    const key=composeCache?[producer.surface.revision,hudRevision,hud?1:0,flash.alpha,flash.color]:null;
+    if(key&&outputValid&&composedKey&&composedKey.every((v,i)=>Object.is(v,key[i]))){stats.composeReuses++;return output.texture;}
+    outputValid=false;
     uniforms.hud.value=hud?hudTexture:dummy;uniforms.hudOn.value=hud?1:0;uniforms.flashA.value=flash.alpha;
     uniforms.flashRGB.value.set(...(flash.color==='#fff'?[1,1,1]:[115/255,96/255,153/255]));
-    try{withRendererState(THREE,renderer,()=>{renderer.autoClear=false;renderer.setRenderTarget(output);renderer.setViewport(0,0,PANEL.width,PANEL.height);renderer.setScissorTest(false);renderer.render(scene,camera);});stats.composites++;return output.texture;}
+    try{withRendererState(THREE,renderer,()=>{renderer.autoClear=false;renderer.setRenderTarget(output);renderer.setViewport(0,0,PANEL.width,PANEL.height);renderer.setScissorTest(false);renderer.render(scene,camera);});stats.composites++;composedKey=key;outputValid=!!key;return output.texture;}
     catch(error){failed=true;stats.failures.push({reason:'compose',message:String(error?.message??error)});return null;}
    },
    materializeTo({panelCtx=null,heldCtx=null,reason='boundary'}={}){if(!lastInput)return null;
@@ -86,6 +91,7 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
      return {...result,imageComposeDraws:1,temporaryHudBytes:bytes.byteLength,imageTargetBytes:PANEL.width*PANEL.height*4};
     }catch(error){return {kind:'palace-draw-warm-incomplete',error:String(error?.message??error),playbackFallbackChanged:false};}
     finally{
+     outputValid=false;
      try{if(composeAttempted)withRendererState(THREE,renderer,()=>{renderer.setRenderTarget(output);renderer.setScissorTest(false);renderer.setViewport(0,0,PANEL.width,PANEL.height);renderer.setClearColor(0,1);renderer.clear(true,false,false);});}
      finally{uniforms.raw.value=saved.raw;uniforms.hud.value=saved.hud;uniforms.hudOn.value=saved.hudOn;uniforms.flashA.value=saved.flashA;uniforms.flashRGB.value=saved.flashRGB;saved.flashRGB.copy(saved.flashCopy);temporary?.dispose();}
     }
