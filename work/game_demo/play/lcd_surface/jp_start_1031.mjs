@@ -38,7 +38,8 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
   const black = qs.get('jpblack') === '1';
   const HOLD = clamp(+(qs.get('jpstart_hold') ?? 0.5), 0.1, 1.2);
   const SKIP = Math.round(clamp(+(qs.get('jpstart_open') ?? 30), 0, 50));
-  const SND = qs.get('jpstart_snd') !== '0', SHAKE = qs.get('jpstart_shake') !== '0', CUTL = qs.get('jpstart_cut') !== '0';
+  const OLDTEXT = qs.get('jpstart_oldtext') === '1';   // 10/31 導入の「PUSH 連打」「封印解除!!」「押せ！」の字。既定は出さず、題字のあと直接メーターへ。?jpstart_oldtext=1 で戻す
+  const SND = qs.get('jpstart_snd') !== '0', SHAKE = qs.get('jpstart_shake') !== '0', CUTL = qs.get('jpstart_cut') === '1' || (OLDTEXT && qs.get('jpstart_cut') !== '0');   // 押せ・連打のカットイン（層）。既定は出さない
   const S = { clock: 0, hold: HOLD, black, skip: SKIP, ph: null, name: '', serial: -1, t0: 0, audioKicked: -1, thumps: 0, frameN: 0, cutOn: false, cutFrames: 0, events: [], manual: false };
   const note = (k, d = {}) => { S.events.push({ k, at: +S.clock.toFixed(2), ...d }); if (S.events.length > 60) S.events.shift(); log('jpstart:' + k, d); };
 
@@ -54,6 +55,13 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
   const blackSec = black ? ((man.scenes.jp_intro_dopamine?.frames ?? 54) / fps - skipSec('jp_intro_dopamine')) : 0;
   const INTRO = +(HOLD + L.frames / fps + blackSec + openPlayed + TITLE.frames / fps).toFixed(3);
   S.intro = INTRO; S.parts = { hold: HOLD, lightning: L.frames / fps, black: +blackSec.toFixed(3), open: +openPlayed.toFixed(3), title: TITLE.frames / fps };
+
+  // ---- 題字のあと直接メーターへ：「封印解除!!」の場面（_in）を飛ばし、待機（_s0）へつなぐ ----
+  const inOf = /^jp_aim_seal_d(\d)_in$/;
+  const chainTo = {};
+  if (!OLDTEXT) for (const k of Object.keys(man.scenes)) { const m = /^jp_chance_d(\d)$/.exec(k); const sc = man.scenes[k]; if (m && inOf.test(sc.next ?? '') && man.scenes[`jp_aim_seal_d${m[1]}_s0`]) { chainTo[k] = sc.next; sc.next = `jp_aim_seal_d${m[1]}_s0`; } }
+  const start0 = model.start.bind(model);
+  if (!OLDTEXT) model.start = (name) => { const m = inOf.exec(name ?? ''); return start0(m && man.scenes[`jp_aim_seal_d${m[1]}_s0`] ? `jp_aim_seal_d${m[1]}_s0` : name); };
 
   // 規則の導入秒数（fx_trim が reset のたびに入れ直すので、reset の後にもう一度。onAction は登録順）
   const setRules = () => { for (const r of new Set([controller.rules, controller.game?.rules].filter(Boolean))) r.JpMeterIntroSeconds = INTRO; };
@@ -77,6 +85,18 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
       S.thumps++;
     } catch (err) { console.warn('[jpstart-snd]', err); }
   };
+  // 連打を促す仮の合図（文字の代わり）：メーターの点滅に合わせた「カッ・ドッ」を 0.3秒おきに4回
+  const click = (at, f = 1500, g = 1) => {
+    try {
+      const e = eng(), ctx = e?.ctx, d = direct(); if (!ctx || !d) return;
+      const t = ctx.currentTime + 0.02 + at, o = ctx.createOscillator(), env = ctx.createGain(), out = ctx.createGain(); out.gain.value = 10 ** (-12 / 20); out.connect(d);
+      o.type = 'triangle'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.5, t + 0.07);
+      env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(g, t + 0.002); env.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+      o.connect(env).connect(out); o.start(t); o.stop(t + 0.12); o.onended = () => { try { o.disconnect(); env.disconnect(); out.disconnect(); } catch {} };
+    } catch {}
+  };
+  const PROMPT = { n: 4, dt: 0.3, t0: 0.05 };
+  const promptSound = () => { if (!SND) return; for (let i = 0; i < PROMPT.n; i++) { click(PROMPT.t0 + i * PROMPT.dt, 1400 + 120 * i, 0.7 + 0.1 * i); thump(PROMPT.t0 + i * PROMPT.dt, 0.55); } };
   const TH = { buf: null, loading: false, silenced: false, plays: 0 };
   const loadThunder = async () => {
     if (TH.buf || TH.loading) return; const e = eng(); if (!e?.ctx) return; TH.loading = true;
@@ -134,11 +154,12 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
     for (let i = 0; i < 46; i++) { const a = (i / 46) * TAU + (rnd() - 0.5) * 0.12, len = 240 + rnd() * 260, w = 0.006 + rnd() * 0.022, c = ['255,255,255', '255,225,150', '190,230,255', '255,190,230'][Math.floor(rnd() * 4)];
       x.save(); x.rotate(a); const g = x.createLinearGradient(0, 0, len, 0); g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.25, `rgba(${c},0.6)`); g.addColorStop(1, `rgba(${c},0)`); x.fillStyle = g; x.beginPath(); x.moveTo(0, 0); x.lineTo(len, -len * w); x.lineTo(len, len * w); x.closePath(); x.fill(); x.restore(); }
     const bx = beamC.getContext('2d'); bx.filter = 'blur(1.4px)'; bx.drawImage(t, 0, 0); bx.filter = 'none'; }
+  const pulseC = mk(288, 90); { const x = pulseC.getContext('2d'); x.translate(144, 45); x.scale(1, 0.34); const g = x.createRadialGradient(0, 0, 0, 0, 0, 140); g.addColorStop(0, 'rgba(255,235,170,0.95)'); g.addColorStop(0.35, 'rgba(255,170,60,0.55)'); g.addColorStop(1, 'rgba(255,120,20,0)'); x.fillStyle = g; x.fillRect(-150, -150, 300, 300); }
   const seamC = mk(64, 192); { const x = seamC.getContext('2d'); x.translate(32, 96); x.scale(0.16, 1); const g = x.createRadialGradient(0, 0, 0, 0, 0, 96); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.25, 'rgba(255,215,130,0.85)'); g.addColorStop(0.6, 'rgba(255,120,30,0.3)'); g.addColorStop(1, 'rgba(255,90,10,0)'); x.fillStyle = g; x.beginPath(); x.arc(0, 0, 96, 0, TAU); x.fill(); }
   // 題字の破片（動く。窓の 1/2 の解像度）と、連打のカットイン（動く。窓の 3/4）
   const SPW = 576, SPH = 634, spC = mk(SPW, SPH), spx = spC.getContext('2d');
   const CK = 0.75, CW = Math.round(WW * CK), CH = Math.round(HH * CK), cutC = mk(CW, CH), cx2 = cutC.getContext('2d');
-  const T = { black: layerTexture(THREE, blackC), dark: layerTexture(THREE, darkC), vig: layerTexture(THREE, vigC), flash: layerTexture(THREE, flashC), core: layerTexture(THREE, coreC), lamp: layerTexture(THREE, lampC), beam: layerTexture(THREE, beamC), seam: layerTexture(THREE, seamC), sp: layerTexture(THREE, spC), cut: layerTexture(THREE, cutC) };
+  const T = { black: layerTexture(THREE, blackC), dark: layerTexture(THREE, darkC), vig: layerTexture(THREE, vigC), flash: layerTexture(THREE, flashC), core: layerTexture(THREE, coreC), lamp: layerTexture(THREE, lampC), beam: layerTexture(THREE, beamC), seam: layerTexture(THREE, seamC), pulse: layerTexture(THREE, pulseC), sp: layerTexture(THREE, spC), cut: layerTexture(THREE, cutC) };
 
   // 揃いの映像（通常時の lamp6：6つ目の灯が点く閃き）。手元の <video> を層に使う（GPU の映像経路は変えない）
   let vid = null, vidTex = null, vidOk = false;
@@ -160,7 +181,7 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
     if (n === 'jp_intro_lightning') return model.delay > 0 ? { k: 'hold', t: clamp(HOLD - model.delay, 0, HOLD) } : { k: 'light', t };
     if (/^jp_chance_open_d\d$/.test(n)) return { k: 'open', t, left: openPlayed - t };
     if (/^jp_chance_d\d$/.test(n)) return { k: 'title', t };
-    if (/^jp_aim_seal_d\d_in$/.test(n)) return { k: 'in', t };
+    if (OLDTEXT ? /^jp_aim_seal_d\d_in$/.test(n) : /^jp_aim_seal_d\d_s0$/.test(n)) return { k: 'in', t };
     return null;
   };
   // 揃いの映像の時刻：0.1秒で閃きの頂点（3コマ）まで → 0.1秒止まる（止め）→ 続き
@@ -184,6 +205,7 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
         try { window.__jpAudio?.trigger?.('jp_intro_dopamine'); note('audio:startJp'); } catch (e) { console.warn('[jpstart-audio]', e); }
       }
       if (/^jp_chance_d\d$/.test(n)) S.spark = null;
+      if (!OLDTEXT && /^jp_aim_seal_d\d_s0$/.test(n) && !model.chainMode) { S.promptAt = S.clock; promptSound(); note('prompt'); }
       if (n) note('scene', { name: n });
     }
     S.ph = phaseOf();
@@ -262,6 +284,7 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
 
   // ---- 連打のカットイン（連打→押せ！）：GPU 経路では見えていなかった旧の 2D 描きを、同じ関数で小さい層へ ----
   const dc0 = rh.meter?.drawCut?.bind(rh.meter);
+  if (dc0 && !OLDTEXT && !CUTL) rh.meter.drawCut = () => undefined;   // 既定：2D 経路（GPU でない面）にも「PUSH 連打」「押せ！」を描かない
   if (dc0 && CUTL) rh.meter.drawCut = (ctx, st) => (S.cutOn ? undefined : dc0(ctx, st));   // 層で出している間は液晶 canvas へ二重に描かない
   const cutLayer = (dx, dy) => {
     S.cutOn = false;
@@ -269,11 +292,13 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
     const g = controller.game, st0 = g?.meterStatus, name = model.active ? (model.name ?? '') : '';
     if (!st0 || !name || /^jp_intro/.test(name) || !/^(jp_|chain_jp)/.test(name)) return null;
     const st = st0.tutorialPlanned && (st0.stage === 'intro' || st0.stage === 'tutorial') ? { ...st0, stage: 'intro', introLeft: 9 } : st0;
-    const elapsed = st.stage === 'firing' ? st.seconds - st.timeLeft : -(st.introLeft ?? 9), age = elapsed + CUT.pre;
+    const elapsed = st.stage === 'firing' ? st.seconds - st.timeLeft : -(st.introLeft ?? 9);
+    const age = elapsed + CUT.pre;
     if (!(age >= 0 && age <= CUT.pre + CUT.hold)) return null;
+    const st1 = st;
     S.cutOn = true; S.cutFrames++;
     cx2.setTransform(1, 0, 0, 1, 0, 0); cx2.clearRect(0, 0, CW, CH); cx2.setTransform(CK, 0, 0, CK, 0, 0);
-    try { dc0(cx2, st); } catch (e) { console.warn('[jpstart] cutin', e); }
+    try { dc0(cx2, st1); } catch (e) { console.warn('[jpstart] cutin', e); }
     cx2.setTransform(1, 0, 0, 1, 0, 0); T.cut.needsUpdate = true;
     return { tex: T.cut, w: CW, h: CH, ax: 0, ay: 0, x: PX + dx, y: PY + dy, rot: 0, sc: 1 / CK, alpha: 1, add: false };
   };
@@ -313,6 +338,10 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
         out.push({ tex: T.sp, w: SPW, h: SPH, ax: 0, ay: 0, x: PX + dx, y: PY + dy, rot: 0, sc: 2, alpha: 1, add: true });
       }
     }
+    if (!OLDTEXT && ph?.k === 'in' && ph.t < PROMPT.t0 + PROMPT.n * PROMPT.dt && !((controller.game?.meterStatus?.count | 0) > 0)) {   // メーターの帯が 0.3秒おきに温かく光る（連打を促す仮の合図）
+      const u = (ph.t - PROMPT.t0) % PROMPT.dt, a = ph.t < PROMPT.t0 ? 0 : Math.exp(-u / 0.1);
+      if (a > 0.02) out.push({ tex: T.pulse, w: 288, h: 90, ax: 0, ay: 0, x: PX + dx, y: PY + 905 + dy, rot: 0, sc: 4, alpha: 0.85 * a, add: true });
+    }
     const cl = cutLayer(dx, dy); if (cl) out.push(cl);
     if (!out.length && (dx || dy)) out.push(win(T.dark, W4, H4, 576, 634, 1, 0, false));   // 揺れだけでも合成を通す（基底の層を動かすため）
     return out.length ? out : null;
@@ -330,7 +359,7 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
   const baseXform = () => { const [dx, dy] = shakeXY(); return dx || dy ? { x: dx, y: dy } : null; };
 
   lcd.jpStart = { state: S, splitLayers, baseXform, intro: INTRO, dispose() {
-    offAct?.(); lcd.onEvent = on0; lcd.frame = frame0; if (al0) lcd.applyLights = al0; if (prep0) lcd.prepare = prep0; if (man0) lcd.setManual = man0; if (dc0) rh.meter.drawCut = dc0;
+    offAct?.(); model.start = start0; for (const [k, v] of Object.entries(chainTo)) man.scenes[k].next = v; lcd.onEvent = on0; lcd.frame = frame0; if (al0) lcd.applyLights = al0; if (prep0) lcd.prepare = prep0; if (man0) lcd.setManual = man0; if (dc0) rh.meter.drawCut = dc0;
     restoreOld(); L.next = orig.lNext; if (orig.dFrames != null) man.scenes.jp_intro_dopamine.frames = orig.dFrames;
     for (const d of Object.keys(orig.openSkip)) { const s = man.scenes[`jp_chance_open_d${d}`]; if (s) { if (orig.openSkip[d]) s.skip = orig.openSkip[d]; else delete s.skip; } }
     try { vid?.pause(); vid?.removeAttribute('src'); } catch {}

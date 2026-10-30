@@ -273,7 +273,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     let vis = 1;
     if (S.on) {
       const u = ck - S.enterAt, T1 = 0.32;
-      if (u < T1) { grp.dy = -440 * (1 - (u / T1) ** 2); grp.rot += 0.03 * (1 - u / T1); }
+      if (u < T1) { vis = clamp(u / 0.08); }   // 10/31 札は最初から定位置（下から競り上がらない）。出だしは0.08秒の淡入りだけ
       else { const v = u - T1; grp.dy = 16 * Math.exp(-v * 8) * Math.cos(v * 26); grp.rot += 0.05 * Math.exp(-v * 3) * Math.sin(v * 9); }
     } else { const v = clamp((ck - S.exitAt) / 0.35); grp.dy = -440 * v * v; vis = 1 - v * v; }
     const ha = ck - S.hitAt; if (ha < 0.4) grp.dy += 12 * Math.exp(-ha * 14) * Math.cos(ha * 40);   // 入賞：札が弾む
