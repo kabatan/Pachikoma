@@ -9,13 +9,21 @@ const ease = k => 1 - (1 - Math.min(1, Math.max(0, k))) ** 3;
 const back = k => { k = Math.min(1, Math.max(0, k)); const c = 1.9; return 1 + (c + 1) * (k - 1) ** 3 + c * (k - 1) ** 2; };
 const clamp01 = v => Math.min(1, Math.max(0, v));
 
-export const CARD_DURATIONS = { ticket: 1.9, add100: 1.8, reset_fallback: 1.6, guard: 1.1, timeup_call: 1.4 };
+// 10/31 新スタート(軽い版・50コマ=1.67秒)。?startfx=0 で旧版(1.9秒)に戻す。
+export const NEW_START = typeof location === 'undefined' || new URLSearchParams(location.search).get('startfx') !== '0';
+export const CARD_DURATIONS = { ticket: NEW_START ? 50 / 30 : 1.9, add100: 1.8, reset_fallback: 1.6, guard: 1.1, timeup_call: 1.4 };
 
 export async function createTempCards({warmContext = null} = {}) {
   const load = n => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(Error('temp card asset ' + n)); i.src = new URL(n, DIR).href; });
   const names = ['start_main', 'start_sub', 'count_main', 'count_jp', 'more_main', 'more_sub', 'guard_main', 'guard_sub', 'dup_main', 'dup_sub', 'timeup_main', 'ballout_main'];
   const P = {}; await Promise.all(names.map(async n => { P[n] = await load(n + '.png'); }));
   const atlas = await load('digits_gold.png');
+  // 新スタート用の素材（題字＋影／光の帯のマスク／副題／数字の面と太い黒縁）。build_ticket_assets.py で焼いたもの。
+  let V4 = null; const N4 = {};
+  if (NEW_START) {
+    V4 = await (await fetch(new URL('ticket_v4.json', DIR))).json();
+    await Promise.all([['title', 'start_main_v4'], ['face', 'start_main_face'], ['sub', 'start_sub_v4'], ['numf', 'num_face'], ['numo', 'num_ol']].map(async ([k, n]) => { N4[k] = await load(n + '.png'); }));
+  }
   const receipt = await (await fetch(new URL('plates_receipt.json', DIR))).json();
   const meta = receipt.digits.meta, cell = receipt.digits.cell;
   // やわらかい光のスプライト（金・白・水）
@@ -61,8 +69,91 @@ export async function createTempCards({warmContext = null} = {}) {
   };
   const env = (t, dur, out = .25) => clamp01(Math.min(t / .08, (dur - t) / out));
 
+    // ---------------------------------------------------------------- 新スタート（v4）：旧版の字を土台に、速い入り・着地の小さな弾み・光の帯・「玉」の数上がり・副題。1.67秒。
+  const sstep = (a, b, x) => { const u = clamp01((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+  const eOut = (u, pw) => 1 - (1 - clamp01(u)) ** pw;
+  const plate4 = (ctx, img, core, cx, cy, w, { s = 1, rot = 0, a = 1 } = {}) => {
+    const k = w / core[0], dw = img.width * k, dh = img.height * k;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(cx, cy); if (rot) ctx.rotate(rot * Math.PI / 180); if (s !== 1) ctx.scale(s, s);
+    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh); ctx.restore();
+  };
+  const sheen4 = (ctx, img, core, cx, cy, w, sh, { s = 1, rot = 0, a = 1 } = {}) => {   // 光の帯：面の上だけ
+    if (sh < 0 || sh > 1) return;
+    const k = w / core[0], dw = Math.ceil(img.width * k), dh = Math.ceil(img.height * k);
+    sx.clearRect(0, 0, 1152, 700); sx.globalCompositeOperation = 'source-over'; sx.drawImage(img, 0, 0, dw, dh);
+    sx.globalCompositeOperation = 'source-in';
+    const bx = -dw * .25 + dw * 1.5 * sh, gr = sx.createLinearGradient(bx - dw * .08, 0, bx + dw * .08, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    sx.fillStyle = gr; sx.fillRect(0, 0, dw, dh); sx.globalCompositeOperation = 'source-over';
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(cx, cy); if (rot) ctx.rotate(rot * Math.PI / 180); if (s !== 1) ctx.scale(s, s);
+    ctx.drawImage(scratch, 0, 0, dw, dh, -dw / 2, -dh / 2, dw, dh); ctx.restore();
+  };
+  const numRow4 = (ctx, str, cx, cy, h, maxW, { s = 1, a = 1 } = {}) => {
+    const d = V4.digits, chars = [...str], unit = h / d.orig[1], adv = c => d.meta[c].adv * .94 * unit;
+    let w = chars.reduce((q, c) => q + adv(c), 0); const fit = Math.min(1, maxW / w); w *= fit;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(cx, cy); if (s !== 1) ctx.scale(s, s);
+    for (const img of [N4.numo, N4.numf]) {           // 太い黒縁を先に全部、面を後に（隣の字の縁が面にかぶらない）
+      let x = -w / 2;
+      for (const c of chars) { const m = d.meta[c], aw = adv(c) * fit, dw = d.cell[0] * unit * fit, dh = d.cell[1] * unit * fit; ctx.drawImage(img, m.x, 0, m.w, d.cell[1], x + aw / 2 - dw / 2, -dh / 2, dw, dh); x += aw; }
+    }
+    ctx.restore();
+  };
+  const ticketNew = (ctx, p, t, s) => {
+    const balls = p.balls ?? s.rules?.LoanBalls ?? 18, f = t * 30;
+    const outK = sstep(43, 49.5, f), aOut = 1 - sstep(47.2, 49.4, f), lift = -14 * outK, scOut = 1 + .04 * outK;
+    // 泡のしぶき（控えめ）：着地の少し前に中心から広がり、あとは薄い泡が上がる
+    const sp = sstep(1, 4, f) * (1 - sstep(8, 18, f));
+    if (sp > .01) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 26; i++) {
+        const h = Math.sin((i + 1) * 91.7 + 3.1) * 43758.5453, r1 = h - Math.floor(h), h2 = Math.sin((i + 3) * 47.3 + 1) * 2754.1, r2 = h2 - Math.floor(h2);
+        const ang = -Math.PI / 2 + (r1 - .5) * 3.0, sp_ = 260 + 420 * r2, tt = Math.max(0, t - .03), x = CX + Math.cos(ang) * sp_ * tt * .9, y = 500 + Math.sin(ang) * sp_ * tt - 60 * tt, rad = 9 + 20 * r2;
+        ctx.globalAlpha = Math.min(1, sp * .55); ctx.drawImage(S.aqua, x - rad, y - rad, rad * 2, rad * 2);
+      }
+      ctx.restore();
+    }
+    if (f >= 6) sparkles(ctx, t, 8, 880, 600, 430, .5 * sstep(6, 12, f) * aOut, 'aqua', 6);
+    // 題字
+    if (f >= 2) {
+      let sc, rot = 0;
+      if (f < 6) { const u = (f - 2) / 4; sc = .93 + .6 * (1 - eOut(u, 2)); rot = -3 * (1 - eOut(u, 2)); }
+      else { const d = f - 6; sc = 1 - .07 * Math.exp(-d / 3) * Math.cos(.85 * d); }
+      const o = { s: sc * scOut, rot, a: aOut };
+      plate4(ctx, N4.title, V4.title, CX, 470 + lift, 920, o);
+      sheen4(ctx, N4.face, V4.title, CX, 470 + lift, 920, (f - 10) / 14, o);
+    }
+    // 「60玉」（LoanBalls）：弾んで出て、数が上がる
+    if (f >= 9) {
+      const u = (f - 9) / 5, shown = Math.round(balls * Math.min(1, (f - 9) / 12));
+      const sc = u < 1 ? .7 + .3 * back(u) : 1 + .035 * Math.exp(-(f - 14) / 3) * Math.sin(1.1 * (f - 14));
+      numRow4(ctx, `${shown}玉`, CX, 690 + lift, 200, 780, { s: sc * scOut, a: aOut });
+    }
+    // 副題（読める大きさ・太い黒縁）
+    if (f >= 16) plate4(ctx, N4.sub, V4.sub, CX, 870 + lift + 22 * (1 - eOut((f - 16) / 6, 3)), 960, { s: scOut, a: aOut });
+    // 着地の輪と火花、玉の出の小さな閃き
+    const dl = f - 6;
+    if (dl >= 0 && dl < 9) {
+      const u = dl / 8, R = (.10 + .55 * (1 - (1 - Math.min(u, 1)) ** 2.2)) * 1268 * .9, w = (.012 + .03 * u) * 1268, al = .5 * (1 - Math.min(u, 1)) ** 1.5;   // 10/31 検証: dl が 8〜9 のとき u>1 で負の累乗→NaN→addColorStop が例外→液晶が復旧モードに落ち以後の映像が全部消える
+      const gr = ctx.createRadialGradient(CX, 470, Math.max(0, R - w), CX, 470, R + w);
+      gr.addColorStop(0, 'rgba(200,240,255,0)'); gr.addColorStop(.5, `rgba(210,245,255,${al})`); gr.addColorStop(1, 'rgba(200,240,255,0)');
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = gr; ctx.fillRect(0, 0, 1152, 1268); ctx.restore();
+    }
+    if (f >= 6 && f < 24) {
+      const tt = (f - 6) / 30; ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 18; i++) {
+        const h = Math.sin((i + 1) * 12.9898 + 4.7) * 43758.5453, r1 = h - Math.floor(h), h2 = Math.sin((i + 5) * 78.233) * 2754.1, r2 = h2 - Math.floor(h2);
+        const ang = r1 * Math.PI * 2, dist = (80 + 380 * r2) * (1 - Math.exp(-tt * 5)), life = 1 - tt / .6; if (life <= 0) continue;
+        const rad = 8 + 12 * r2; ctx.globalAlpha = Math.min(1, life * .8); ctx.drawImage(S.gold, CX + Math.cos(ang) * dist - rad, 470 + Math.sin(ang) * dist * .7 - rad, rad * 2, rad * 2);
+      }
+      ctx.restore();
+    }
+    const dn = f - 14; if (dn >= 0 && dn < 8) glow(ctx, CX, 690 + lift, 150 * (.7 + .5 * dn / 8), 'gold', .55 * (1 - dn / 8) * aOut);
+    return true;
+  };
+
   const scenes = {
-    ticket(ctx, p, t, s) {
+    ticket(ctx, p, t, s) { return NEW_START ? ticketNew(ctx, p, t, s) : scenes.ticketOld(ctx, p, t, s); },
+    ticketOld(ctx, p, t, s) {
       const dur = CARD_DURATIONS.ticket, e = env(t, dur), balls = p.balls ?? s.rules?.LoanBalls ?? 18;
       glow(ctx, CX, 560, 620, 'gold', .5 * e * (.8 + .2 * Math.sin(t * 6)));
       glow(ctx, CX, 520, 360, 'white', .35 * e * Math.max(0, 1 - t * 1.6));   // 出た瞬間の閃き
@@ -121,7 +212,7 @@ export async function createTempCards({warmContext = null} = {}) {
   // Factory-only: no card/model/event clock exists yet. Keep no extra resource.
   if (warmContext) {
     try {
-      for (const image of [P.start_main, P.start_sub, P.count_main, P.count_jp, atlas]) await image.decode?.();
+      for (const image of [P.start_main, P.start_sub, P.count_main, P.count_jp, atlas, ...Object.values(N4)]) await image.decode?.();
       await withRestored2D(warmContext, async () => {
         sx.save();
         try {
