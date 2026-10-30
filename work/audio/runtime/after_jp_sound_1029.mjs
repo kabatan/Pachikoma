@@ -76,9 +76,14 @@ export async function installAfterJpSound(engine, { lcd, controller, cuesUrl = n
 
   // ---- 継続/確定の選択画面 ----
   let chActive = false, chSel = 'neutral', chEv = 0, chN = null;
+  // 決定の音。実機の左右ボタン(ESP32→controller.dispatch)は選択画面の commit を通らない(commit はマウス/キー専用)ので、
+  // 受理された操作(chainContinue/chainStop)そのものからも鳴らす。マウス/キーは両方から来るので、同じ決定は 0.5 秒以内の重複を捨てる。
+  const lastCommit = { state: null, at: -1e9 };
+  const commitFire = (state, at) => { if (lastCommit.state === state && Math.abs(at - lastCommit.at) < 500) return; lastCommit.state = state; lastCommit.at = at; for (const [n, d] of cues.choice['commit_' + state] ?? []) fire(n, d); };
+  const offCommit = controller.onAction?.(act => { if (act === 'chainContinue') commitFire('right', performance.now()); else if (act === 'chainStop') commitFire('left', performance.now()); });
   function choiceTick() {
     const c = lcd.choiceV20; if (!c) return; const g = controller.game;
-    for (const e of c.events) if (e.at > chEv) { chEv = e.at; if (e.kind === 'commit' && e.accepted !== false) for (const [n, d] of cues.choice['commit_' + e.state] ?? []) fire(n, d); }   // 決定の瞬間は画面が切り替わるので、先に拾う
+    for (const e of c.events) if (e.at > chEv) { chEv = e.at; if (e.kind === 'commit' && e.accepted !== false) commitFire(e.state, e.at); }   // 決定の瞬間は画面が切り替わるので、先に拾う
     if (c.active !== chActive) {
       chActive = c.active; chSel = c.selected ?? 'neutral'; chN = Math.ceil(g.choiceLeft ?? 12);
       if (chActive) for (const [n, d] of cues.choice.in) play(n, d);
@@ -139,6 +144,6 @@ export async function installAfterJpSound(engine, { lcd, controller, cuesUrl = n
   }
 
   const timer = setInterval(() => { if (ctx.state !== 'running') return; try { jpTick(); choiceTick(); phaseTick(); resultTick(); pulseTick(tuPulse ?? jpPulse); } catch (e) { if (!api.error) { api.error = e.message; console.error('[after-jp]', e); } } }, 12);
-  api.dispose = () => { clearInterval(timer); stopScene(); out.disconnect(); };
+  api.dispose = () => { clearInterval(timer); try { offCommit?.(); } catch { } stopScene(); out.disconnect(); };
   return api;
 }

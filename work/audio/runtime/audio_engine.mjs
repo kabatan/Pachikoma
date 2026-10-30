@@ -32,6 +32,18 @@ export class AudioEngine {
     this.bgm.ready.catch(()=>{});
     this.ready=this.load();
     if(autoTick) this.timer=setInterval(()=>this.flush(),20);
+    if(new URLSearchParams(globalThis.location?.search??'').get('audiotrace')==='1')this._installTrace();
+  }
+  // ?audiotrace=1: 発火の記録(QA用)。window.__audioTrace に最新 4000 件。event=受けた合図と結果、play=engine._play の受理/打ち切り(group/priority/長さ)、out=出力レベル(0.1秒ごとのピーク)。音は変えない。
+  _installTrace() {
+    const log=this.trace=[],ctx=this.ctx,push=r=>{log.push({t:+ctx.currentTime.toFixed(3),...r});if(log.length>4000)log.splice(0,1000);};
+    const h0=this.handleEvent.bind(this),p0=this._play.bind(this);
+    this.handleEvent=e=>{const s0={...this.stats},r=h0(e);push({k:'event',id:e.id,ok:r,merged:this.stats.merged-s0.merged,unknown:this.stats.unknown-s0.unknown});return r;};
+    this._play=(buffer,spec,o)=>{const d0=this.stats.dropped,ok=p0(buffer,spec,o);push({k:'play',g:spec.group,pr:spec.priority,ok,nobuf:!buffer,dur:buffer?+buffer.duration.toFixed(2):null});return ok;};
+    const buf=new Float32Array(this.analyser.fftSize);let pk=0;
+    this.traceTimer=setInterval(()=>{this.analyser.getFloatTimeDomainData(buf);for(const x of buf)pk=Math.max(pk,Math.abs(x));},20);
+    this.traceTimer2=setInterval(()=>{push({k:'out',pk:+pk.toFixed(4),st:ctx.state});pk=0;},100);
+    globalThis.__audioTrace=log;
   }
   async load() {
     await Promise.all(CUES.filter(name=>!this.legacy||(name!=='payout'&&!name.startsWith('win_'))).map(async name=>{
@@ -236,5 +248,5 @@ export class AudioEngine {
     }
     this.stats.dropped+=Math.max(0,contacts.length-available); this._duck();
   }
-  dispose() { clearInterval(this.timer); this.stopAll();this.bgm.dispose(); this.analyser.disconnect(); this.ctx.close?.(); }
+  dispose() { clearInterval(this.timer); clearInterval(this.traceTimer); clearInterval(this.traceTimer2); this.stopAll();this.bgm.dispose(); this.analyser.disconnect(); this.ctx.close?.(); }
 }

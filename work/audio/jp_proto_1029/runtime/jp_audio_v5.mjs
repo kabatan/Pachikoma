@@ -197,7 +197,11 @@ export async function installJpAudioV5(engine, opts = {}) {
       if (st.scheduledL != null) st.drift.push({ scene: name, expected: +st.scheduledL.toFixed(3), actual: +t.toFixed(3), ms: Math.round((t - st.scheduledL) * 1000) });
       thunder(t); return;
     }
-    if (!st.inJp && !/^fail_/.test(name)) return;
+    // H の継続(2連目以降)は JP と同じ映像(jp_rush・jp_bridge・roulette_N・reward_N)を使う。JP曲は告知(chain_announce)で場面が途切れた時に endJp で終わっているので
+    // st.inJp は偽。以前はここで黙って return していて、継続成功の突入・ルーレット・配当(reward_40 等 4 秒)が無音だった。JP曲は始めず、一撃の音だけ JP と同じ表で鳴らす(once の印は JP ごとに戻す)。
+    const reuse = !st.inJp && /^(jp_rush|jp_bridge|roulette_\d+|reward_\d+)$/.test(name);
+    if (reuse && name === 'jp_rush') st.done.delete('rush');
+    if (!st.inJp && !/^fail_/.test(name) && !reuse) return;
     // JP後(継続 chain_* と失敗 fail_*)の音は window.__afterJp(JP後担当、?afterjp=0 で無効)が鳴らす。有効なときは二重発音を避けて鳴らさない(失敗ではJP曲の終わりだけ行う)
     if (window.__afterJp?.enabled && (chain || /^fail_/.test(name))) { if (/^fail_/.test(name) && st.inJp) endJp(t, 'E3', true); return; }
     const key = keyOf(name);
