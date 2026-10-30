@@ -91,7 +91,7 @@ if (initialEnvironment) {
 // H(?rules=h): 連打中の無料の球(shot.free)。持ち玉は減らさないので、物理側の玉の台帳を合わせるため、撃つ前に予備球を1つ補給し、盤から消えた(外れて返らない)ときは取り消す。既定(G)では shot.free が無く何も起きない
 const freeShotIds = new Set();
 const app = await createMedalApp(document.getElementById('stage'), {
-  hooks: { launchBall(shot, aim, dir) { if (shot.free) { pa.stock++; freeShotIds.add(shot.id); } pa.setAim(aim, dir); pa.launch(shot.id); }, cancelFlights() { freeShotIds.clear(); pa.reset(); }, canReset() { return app.presenter.count.done; } },
+  hooks: { launchBall(shot, aim, dir) { if (shot.free) { pa.stock++; freeShotIds.add(shot.id); } pa.setAim(aim, dir); pa.launch(shot.id); }, cancelFlights() { freeShotIds.clear(); pa.reset(); }, canReset() { return app.presenter.count.done || (app.ctrl.resultAge ?? 0) > 45; } },
   rulesUrl: config.rules, seed, quiet: q.has('quiet'), music: false, log: !q.has('nolog'), human: !q.has('nolog') && !q.has('qa') && !q.has('manual'), manual: true,
 });
 const { ctrl, presenter } = app, effects = new EffectsBus();
