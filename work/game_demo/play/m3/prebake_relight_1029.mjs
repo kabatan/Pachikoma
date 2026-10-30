@@ -83,9 +83,16 @@ void main(){
   // 10/30 応急：合成の倍率を指定できる（?renderscale=1.333 など）。既定 1.333（1080×1920 で合成して 1440×2560 へ）。
   // ?renderscale=1 か ?quality=high で従来の元解像度、?renderlite=1 は従来どおり 2（720×1280、球 MSAA2）。
   const pq=new URLSearchParams(globalThis.location?.search??'');
-  const scaleArg=pq.has('renderscale')?Number(pq.get('renderscale')):pq.get('quality')==='high'?1:pq.get('renderlite')==='1'?2:pq.get('renderlite')==='0'?1:1.333;
+  // 10/30 段式の画質（?quality=auto|high|medium|low|lower|lowest、既定 auto）。
+  //  high＝元解像度・球MSAA4（従来の経路）／medium＝1.333・MSAA4／low＝1.333・MSAA2／lower＝1.6・MSAA2／lowest＝2・MSAA2。
+  //  auto は medium から始め、起動直後とプレイ中の fps を見て下の段へだけ移る（上げない）。?renderscale= / ?ballmsaa= を指定するとその値で固定。
+  const TIERS=[{name:'high',scale:1,msaa:4},{name:'medium',scale:1.333,msaa:4},{name:'low',scale:1.333,msaa:2},{name:'lower',scale:1.6,msaa:2},{name:'lowest',scale:2,msaa:2}];
+  const qName=pq.get('quality')??'auto',msaaQ=pq.get('ballmsaa');
+  const tierQ=TIERS.findIndex(t=>t.name===qName);
+  const scaleArg=pq.has('renderscale')?Number(pq.get('renderscale')):tierQ>=0?TIERS[tierQ].scale:pq.get('renderlite')==='1'?2:pq.get('renderlite')==='0'?1:TIERS[1].scale;
   const renderScaleQ=Number.isFinite(scaleArg)&&scaleArg>1.001?Math.min(4,scaleArg):1;
   const renderLite=renderScaleQ>1;
+  const autoQuality=renderLite&&qName==='auto'&&!pq.has('renderscale')&&!pq.has('renderlite')&&!['0','2','4'].includes(msaaQ);
   // 10/30 表示実寸描画（?dispfit=0 で従来）：球と最終合成を「画面に実際に映る画素数」（上限1440×2560）で描く。
   // 素材と座標は元の1440×2560のまま、表示の画素の中心（=ブラウザが縮小で読む位置）で読むので、映る画は同じ。
   const dispFit=!renderLite&&new URLSearchParams(globalThis.location?.search??'').get('dispfit')!=='0';
@@ -114,24 +121,23 @@ void main(){
   // Render the expensive sphere/composite passes at 720x1280, then present to
   // the native canvas. Keep all artwork, layout and occlusion in native coords.
   const renderScale=renderScaleQ;let RW=Math.round(W/renderScale),RH=Math.round(H/renderScale);
-  const KX=(W/RW).toFixed(6),KY=(H/RH).toFixed(6),KFC=`vec4(gl_FragCoord.xy*vec2(${KX},${KY}),gl_FragCoord.zw)`;
+  const KFC='vec4(gl_FragCoord.xy*uPBK,gl_FragCoord.zw)';   // 倍率は uniform（段を切り替えてもシェーダを作り直さない）
   const fit={size:[W,H],wanted:[W,H],since:0,resizes:0,legacyRestores:0,canvasFull:true,applied:false};
-  const uPBK={value:new THREE.Vector2(1,1)};
+  const uPBK={value:new THREE.Vector2(W/RW,H/RH)};
   // 10/30 球の軽量化：倍率 1〜2 未満の合成でも球バッファの上の空き行を切り詰め（?ballcrop=0 で従来）、
   // 合成は球バッファを画素そのまま読む（同じ大きさなので補間なし）。?ballmsaa=0|2|4 で球の MSAA を選ぶ（既定は従来どおり）。
-  const liteCrop=renderLite&&renderScale<2;
-  const msaaArg=pq.get('ballmsaa'),ballSamples=['0','2','4'].includes(msaaArg)?Number(msaaArg):renderScale>=2?2:hr.rtMain.samples;
+  const liteCrop=renderLite;
+  const msaaArg=msaaQ;let ballSamples=['0','2','4'].includes(msaaArg)?Number(msaaArg):tierQ>=0?TIERS[tierQ].msaa:renderScale>=2?2:hr.rtMain.samples;
   let balls=renderLite?new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples:ballSamples}):hr.rtMain;
-  if(renderLite)owned.push(balls);
-  let ballCrop=renderLite&&!liteCrop?null:createBallTargetCrop(hr,balls);if(ballCrop&&!dispFit)owned.push(ballCrop);
+  let liteBalls=renderLite?balls:null;
+  let ballCrop=createBallTargetCrop(hr,balls);
   let fitBalls=null;   // dispFit のときだけ：映る大きさの MSAA の球バッファ（大きさが変わるたびに作り直し、古いのは捨てる）
-  const display=renderLite?rt(RW,RH):null;
-  if(display)display.texture.type=THREE.UnsignedByteType;
+  const displayRT=(w,h)=>{const t=new THREE.WebGLRenderTarget(w,h,{type:THREE.UnsignedByteType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:false});return t;};
+  let display=renderLite?displayRT(RW,RH):null;
   const present=display?make('uniform sampler2D uImage;void main(){gl_FragColor=texture2D(uImage,gl_FragCoord.xy/vec2(1440.,2560.));}',{uImage:{value:display.texture}}):null;
   const ballMaterial=new hr.ballMat.constructor().copy(Object.create(hr.ballMat,{uniforms:{value:{}}}));ballMaterial.uniforms={...hr.ballMat.uniforms,uAtlas:{value:compact.atlas.texture}};
   ballMaterial.fragmentShader=replace(ballMaterial.fragmentShader,'const float PS = 64.0, PT = 66.0;',`const float PS = ${compact.faceSize}.0, PT = ${compact.tileSize}.0;`);materials.push(ballMaterial);
-  if(renderLite)ballMaterial.fragmentShader=ballMaterial.fragmentShader.replaceAll('gl_FragCoord',KFC);
-  if(dispFit){ballMaterial.fragmentShader='uniform vec2 uPBK;\n'+ballMaterial.fragmentShader.replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*uPBK,gl_FragCoord.zw)');ballMaterial.uniforms.uPBK=uPBK;}
+  if(renderLite||dispFit){ballMaterial.fragmentShader='uniform vec2 uPBK;\n'+ballMaterial.fragmentShader.replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*uPBK,gl_FragCoord.zw)');ballMaterial.uniforms.uPBK=uPBK;}
   const extra={uPBBack:{value:back.texture},uPBFront:{value:front.texture},uPBFields:{value:fields.texture},uPBFrame:{value:linear},uPBFrameL:{value:frameF?.texture??null},uPBTau:hr.composeMat.uniforms.uTau,
     uPBLCD:{value:null},uPBRect:{value:new THREE.Vector4()},uPBPanel:{value:new THREE.Vector4()},uPBGain:{value:1},uPBLCDOn:{value:0}};
   const load=`
@@ -172,8 +178,7 @@ vec2 pbFL(float half_){vec2 u=gl_FragCoord.xy/vec2(1440.,2560.);return vec2(clam
 float logoBox(vec2 uv)`);
   }
   if(renderLite){
-    if(liteCrop)shader=replace(shader,'vec4 d=texelFetch(uD,p,0);','ivec2 pd=ivec2(__RAWFC__.xy);vec4 d=pd.y<textureSize(uD,0).y?texelFetch(uD,pd,0):vec4(0.);').replaceAll('gl_FragCoord',KFC).replaceAll('__RAWFC__','gl_FragCoord');
-    else shader=shader.replace('vec4 d=texelFetch(uD,p,0);','vec4 d=texture(uD,uv);').replaceAll('gl_FragCoord',KFC);
+    shader='uniform vec2 uPBK;\n'+replace(shader,'vec4 d=texelFetch(uD,p,0);','ivec2 pd=ivec2(__RAWFC__.xy);vec4 d=pd.y<textureSize(uD,0).y?texelFetch(uD,pd,0):vec4(0.);').replaceAll('gl_FragCoord',KFC).replaceAll('__RAWFC__','gl_FragCoord');
   }
   if(dispFit){
     // 球は映る大きさのバッファをそのまま、τ は元の画素を双線形で（元の大きさでは texelFetch と同じ値）。
@@ -190,7 +195,40 @@ vec4 prebakeC(ivec2 p){`);
     shader=shader.replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*uPBK,gl_FragCoord.zw)').replaceAll('__RAWFC__','gl_FragCoord');
   }
   else if(ballCrop&&!renderLite)shader=replace(shader,'vec4 d=texelFetch(uD,p,0);','vec4 d=p.y<textureSize(uD,0).y?texelFetch(uD,p,0):vec4(0.);');
-  const final=make(shader,{...U,...extra,uD:{value:balls.texture},...(dispFit?{uPBK}:{})});
+  const final=make(shader,{...U,...extra,uD:{value:balls.texture},...(dispFit||renderLite?{uPBK}:{})});
+  // 段の切り替え：合成・球のバッファを作り直す（シェーダはそのまま）。古いバッファは捨てる。
+  function setLite(scale,samples){
+    if(!renderLite)return;
+    const w=Math.round(W/scale),h=Math.round(H/scale);
+    if(w===RW&&h===RH&&samples===liteBalls.samples)return;
+    ballCrop?.dispose();liteBalls.dispose();display.dispose();
+    RW=w;RH=h;ballSamples=samples;uPBK.value.set(W/RW,H/RH);
+    liteBalls=balls=new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples});
+    ballCrop=createBallTargetCrop(hr,balls);api.ballCrop=ballCrop;
+    display=displayRT(RW,RH);present.material.uniforms.uImage.value=display.texture;
+  }
+  // 自動の段：起動直後（1.5 秒待って 2.5 秒）と、その後のプレイ中（3 秒ごと）の平均のフレーム間隔を見る。
+  // 1 回の大きな引っかかりで段が落ちないよう、1 フレームは 50ms で頭打ち、250ms 超（非表示・読み込み）は数えない。
+  const quality={auto:autoQuality,tier:tierQ>=0?TIERS[tierQ].name:autoQuality?'medium':null,index:tierQ>=0?tierQ:autoQuality?1:-1,history:[],last:0,sum:0,cpu:0,n:0,since:0,startedAt:0,cpuBound:0};
+  const qLimitTest=Number(pq.get('qualitylimit'))||0;   // 確認用：判定のしきい値(ms)を差し替える
+  function qualityTick(){
+    if(!quality.auto)return;
+    const now=performance.now();
+    if(!quality.startedAt){quality.startedAt=now;quality.last=now;quality.since=now+1500;return;}
+    const dt=now-quality.last;quality.last=now;
+    if(now<quality.since||dt>250)return;
+    quality.sum+=Math.min(dt,50);quality.cpu+=Math.min(globalThis.window?.__play?.lastTiming?.totalMs??0,50);quality.n++;
+    const windowMs=quality.history.length||now-quality.startedAt>6000?3000:2500;
+    if(quality.sum<windowMs)return;
+    const mean=quality.sum/quality.n,cpu=quality.cpu/quality.n;quality.sum=0;quality.cpu=0;quality.n=0;
+    const limit=qLimitTest||(now-quality.startedAt<8000?18.5:20);   // 起動直後は 54fps 未満、その後は 50fps 未満で一段下げる
+    // 遅れの主因が主スレッドの処理（物理・液晶の CPU）なら、画質を下げても速くならないので下げない
+    if(mean>limit&&cpu>.75*mean){quality.cpuBound++;return;}
+    if(mean>limit&&quality.index<TIERS.length-1){
+      const t=TIERS[++quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
+      quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name});quality.since=now+700;
+    }
+  }
   // 映る大きさ：canvas の CSS の箱（回転前の大きさ）× devicePixelRatio、1440×2560 が上限。大きさが 0.2 秒落ち着いてから切り替える。
   function wantedSize(){
     const c=r.domElement,dpr=globalThis.devicePixelRatio||1,cw=c.clientWidth,ch=c.clientHeight;
@@ -242,12 +280,13 @@ vec4 prebakeC(ivec2 p){`);
     if(validProof)fieldInitialized.add(key);else fieldInitialized.delete(key);
   }
   const restored=()=>{fieldInitialized.clear();invalidate();};
-  const api={ballCrop,setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,renderScale,liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();if(dispFit){ballCrop?.dispose();if(fitBalls)fitBalls.dispose();}r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  const api={ballCrop,quality,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();display?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
   hr.prebakeRelight=api;
   hr.render=function(){
     const plate=getPlate();
     if(!enabled||hr.viewMode!==0||U.uM3Off.value!==0||!plate?.mat.uniforms.uPanel){stats.legacyFrames++;restoreFull();return legacy.call(hr);}
     if(dispFit)applyFit();
+    qualityTick();
     hr.trayVisualHandle?.update();stats.frames++;
     hr._updateEnvUniforms();
     r.setScissorTest(false);
