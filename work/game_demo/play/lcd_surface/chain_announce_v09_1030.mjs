@@ -108,12 +108,16 @@ export async function attachChainAnnounceV09(lcd, { controller, log = () => {} }
   const S = { pending: null, shown: null, key: null, starts: 0, overlays: 0, events: [] };
   const note = (k, d = {}) => { S.events.push({ k, at: +(performance.now() / 1000).toFixed(3), ...d }); if (S.events.length > 100) S.events.shift(); log(k, d); };
   const rulesH = () => lcd.rulesH?.state;
+  // 10/31 告知の「もう流した」印は試合をまたいで残るので、試合（MedalGame）ごとの番号を鍵に入れる。
+  //   以前は _chainSerial（試合ごとに 1 から）だけで、前の客と同じ鍵「1:0」の初回JPでは告知の映像が出ず（継続の説明が飛ばされる）、規則の告知の数えも止まったまま固まった。
+  const gameIds = new WeakMap(); let gameSeq = 0;
+  const gameId = (g) => { if (!g || typeof g !== 'object') return 0; if (!gameIds.has(g)) gameIds.set(g, ++gameSeq); return gameIds.get(g); };
   const isAnnounce = (n = model.name) => n === ANNOUNCE_SCENES.first || n === ANNOUNCE_SCENES.repeat;
   // 規則の告知（chainAnnounce）。数字の字はここで作っておく（場面の頭で作らない）
   const off = controller.onAction((action) => {
     if (action !== 'chainAnnounce') return;
     const e = controller.lastGameEvent ?? {}, first = !!e.first || !(e.atRisk > 0);
-    S.pending = { first, atRisk: first ? 0 : Math.round(e.atRisk), stage: e.stage ?? null, key: `${controller.game?._chainSerial ?? 0}:${e.stage ?? 0}` };
+    S.pending = { first, atRisk: first ? 0 : Math.round(e.atRisk), stage: e.stage ?? null, key: `${gameId(controller.game)}:${controller.game?._chainSerial ?? 0}:${e.stage ?? 0}` };
     if (!first) number.build(S.pending.atRisk);
     note('chainAnnounce', S.pending);
   });
