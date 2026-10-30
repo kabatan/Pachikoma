@@ -3,7 +3,7 @@
 // ルールのhowto(開始ボタン→howto→ticket→開始、押すと飛ばせる)は ctrl 側のまま。?tutorial=old のとき play.mjs はこのファイルを使わず従来の attract_surface_20261029 を使う。
 import {createAttractGpu,suppressCanvasPaint} from './attract_gpu_1030.mjs';
 import {warmPausedVideo,withRestored2D} from './startup_warm.mjs';
-import {createSkipOverlay,OV_H} from './tutorial_skip_overlay_1030.mjs';   // 10/30 説明中の「長押しでスキップ」ゲージ(controller.tutSkipView を getState().skip で受ける)
+import {createSkipOverlay,OV_VIDEO_X,OV_Y_MAIN} from './tutorial_skip_overlay_1030.mjs';   // 10/30 説明中の「長押しでスキップ」ゲージ(controller.tutSkipView を getState().skip で受ける)
 const W=1152,H=1268,PX=34,PY=28;
 async function loadVideo(url,{loop,label,errors}) {
   const v=document.createElement('video');
@@ -45,7 +45,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
     if(gpuEnabled&&typeof s.v.requestVideoFrameCallback==='function')s.watch();
     s.v.addEventListener('seeked',s.decoded);s.v.addEventListener('loadeddata',s.decoded);
   }
-  const skipOv=sources.tutorial&&query.get('tutskip')!=='0'?createSkipOverlay({x:PX+22,y:PY+H-OV_H-22}):null;
+  const skipOv=sources.tutorial&&query.get('tutskip')!=='0'?createSkipOverlay({x:PX+OV_VIDEO_X,y:PY+OV_Y_MAIN,videoTop:PY}):null;
   let active=false,kind=null,manual=false,time=0,published=false,cur=sources.attract;
   const paint=skipEnabled?suppressCanvasPaint(ctx):{stats:{skipped:0},run:fn=>fn(),dispose(){}};
   const refresh=()=>{
@@ -65,7 +65,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   const draw=(boundary=false)=>{
     ctx.fillStyle='#000';ctx.fillRect(0,0,lcd.canvas.width,lcd.canvas.height);
     if(cur.v.readyState>=2)ctx.drawImage(boundary?(cur.heldFrame??cur.v):cur.v,PX,PY,W,H);
-    if(skipOv?.visible&&cur===sources.tutorial)ctx.drawImage(skipOv.canvas,skipOv.x,skipOv.y);
+    if(skipOv?.visible&&cur===sources.tutorial)ctx.drawImage(skipOv.canvas,skipOv.x,skipOv.y,skipOv.w,skipOv.h);
     stats.canvasDraws++;
   };
   const materialize=()=>{draw(true);published=false;stats.boundaryCopies++;};
@@ -85,7 +85,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   };
   lcd.frame=(dt,F)=>{
     sync();
-    if(skipOv)skipOv.update(kind==='tutorial'?getState().skip:null);
+    if(skipOv)skipOv.update(kind==='tutorial'?getState().skip:null,kind==='tutorial'?cur.v.currentTime:0);
     // Only these fully covered title modes use the simple normal Canvas path.
     // JP/choice/result and all transition ownership still execute unmodified.
     const skip=active&&skipEnabled&&cur.v.readyState>=2&&(kind==='attract'?['attract','title']:['howto']).includes(lcd.current?.mode);

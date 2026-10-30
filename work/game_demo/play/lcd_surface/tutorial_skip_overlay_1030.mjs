@@ -3,10 +3,14 @@
 // update(view) は絵が変わったときだけ再描画して revision を進める(GPU側はそれで再合成)。映像の上に重ねるだけで、映像・操作は変えない。
 export const OV_W = 470, OV_H = 176;
 const FONT = "'Noto Sans JP','Noto Sans CJK JP','Hiragino Sans','Yu Gothic','Meiryo',sans-serif";
-export function createSkipOverlay({ x, y }) {
+// 置き場所(10/30 全コマ解析)：説明の映像は字が上端・下端・中央に出るので、字が出ない左の帯(映像の高さの24.5〜33%)に小さく置く。
+//   2行の字(〜23%)と JACKPOT CHANCE の題字(34%〜)の間。5灯の大きな字(t≈8.0〜8.7秒)の間は 52%(字の下・泡の上)へ、最後の「パチコマ」ロゴ(t≥14.4秒)では押していなければ出さない。
+export const OV_SCALE = 0.6, OV_VIDEO_X = 22, OV_Y_MAIN = 311, OV_Y_FIVE = 660;
+export function createSkipOverlay({ x, y, videoTop = 28 }) {
   const canvas = document.createElement('canvas'); canvas.width = OV_W; canvas.height = OV_H;
   const c = canvas.getContext('2d');
   let key = '', rev = 0, visible = false;
+  const self = { canvas, x, y, w: Math.round(OV_W * OV_SCALE), h: Math.round(OV_H * OV_SCALE) };
   const ease = (t) => t * t * (3 - 2 * t);
   function plate(a) {   // 暗い曲面ガラス＋走査線。平らな箱にしない
     const r = 26, w = OV_W - 6, h = OV_H - 6;
@@ -66,10 +70,14 @@ export function createSkipOverlay({ x, y }) {
     c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,255,255,.55)'; c.strokeText(text, tx, ty); c.restore();
   }
   return {
-    canvas, x, y, get revision() { return rev; }, get visible() { return visible; },
+    canvas, get x() { return self.x; }, get y() { return self.y; }, get w() { return self.w; }, get h() { return self.h; }, get revision() { return rev; }, get visible() { return visible; },
     /** view = controller.tutSkipView()。見えるべきなら true。 */
-    update(view) {
-      const a = view?.active ? Math.min(1, Math.max(0, (view.t - 0.3) / 0.5)) : 0;
+    update(view, vt = 0) {
+      const busy = !!view && (view.holding || view.level > 0.02 || view.done || view.flash > 0);
+      const last = vt >= 14.4 && !busy;   // 最後のロゴの場面は字と重なるので、押していなければ出さない
+      const a = view?.active && !last ? Math.min(1, Math.max(0, (view.t - 0.3) / 0.5)) : 0;
+      const yy = videoTop + (vt >= 7.95 && vt < 8.75 ? OV_Y_FIVE : OV_Y_MAIN);
+      if (yy !== self.y) { self.y = yy; key = ''; }
       visible = a > 0.001;
       const level = view?.level ?? 0, tap = view?.tap ?? 0, flash = view?.flash ?? 0, done = !!view?.done, holding = !!view?.holding;
       const k = `${visible ? 1 : 0}|${(a * 30) | 0}|${(level * 120) | 0}|${(tap * 12) | 0}|${(flash * 12) | 0}|${done ? 1 : 0}|${holding ? 1 : 0}`;
