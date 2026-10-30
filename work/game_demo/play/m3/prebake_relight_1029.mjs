@@ -343,10 +343,10 @@ vec4 prebakeC(ivec2 p){`);
   }
   const final=make(shader,{...U,...extra,uD:{value:balls.texture},...(dispFit||renderLite?{uPBK}:{}),...(staticBake?staticUni:{})});
   // 段の切り替え：合成・球のバッファを作り直す（シェーダはそのまま）。古いバッファは捨てる。
-  // 10/31 次の段のバッファを先に用意する（?tierprep=0 で従来）：段を下げる瞬間に、新しい球バッファ（MSAA 付き）と切り詰め用の 2 枚を
+  // 10/31 次の段のバッファを先に用意する（既定オフ：stablecanvas で段切替の主因が無くなり、確保 0.5〜1.9ms の差しか出なかった。?tierprep=1 で有効）：段を下げる瞬間に、新しい球バッファ（MSAA 付き）と切り詰め用の 2 枚を
   //  確保して最初に描くと 1 フレームが引っかかる。段を下げそうになった時点（半頻度の追加時と、段を下げた直後）から、次の段の分を
   //  1 フレームに 1 手ずつ（球バッファ→切り詰め用）確保し、一度クリアして GPU に実体を持たせておく。段を下げるときはそれを使う。
-  const tierPrep=pq.get('tierprep')!=='0'&&renderLite;
+  const tierPrep=pq.get('tierprep')==='1'&&renderLite;
   const tierSize=(scale)=>[Math.round(W/scale),Math.round(H/scale)];
   const makeBalls=(w,h,samples)=>new THREE.WebGLRenderTarget(w,h,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples,resolveDepthBuffer:!ballZSkip});
   let spare=null;const prepStats={prepared:0,hits:0,misses:0,steps:0,disposed:0,setLiteMs:[]};
