@@ -328,15 +328,43 @@ vec4 prebakeC(ivec2 p){`);
   }
   const final=make(shader,{...U,...extra,uD:{value:balls.texture},...(dispFit||renderLite?{uPBK}:{}),...(staticBake?staticUni:{})});
   // 段の切り替え：合成・球のバッファを作り直す（シェーダはそのまま）。古いバッファは捨てる。
+  // 10/31 次の段のバッファを先に用意する（?tierprep=0 で従来）：段を下げる瞬間に、新しい球バッファ（MSAA 付き）と切り詰め用の 2 枚を
+  //  確保して最初に描くと 1 フレームが引っかかる。段を下げそうになった時点（半頻度の追加時と、段を下げた直後）から、次の段の分を
+  //  1 フレームに 1 手ずつ（球バッファ→切り詰め用）確保し、一度クリアして GPU に実体を持たせておく。段を下げるときはそれを使う。
+  const tierPrep=pq.get('tierprep')!=='0'&&renderLite;
+  const tierSize=(scale)=>[Math.round(W/scale),Math.round(H/scale)];
+  const makeBalls=(w,h,samples)=>new THREE.WebGLRenderTarget(w,h,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples,resolveDepthBuffer:!ballZSkip});
+  let spare=null;const prepStats={prepared:0,hits:0,misses:0,steps:0,disposed:0,setLiteMs:[]};
+  function prepareNext(){   // 次の段（今の段の 1 つ下）を用意する対象に決める
+    if(!tierPrep||quality.index<0||quality.index>=TIERS.length-1)return;
+    const t=TIERS[quality.index+1],[w,h]=tierSize(t.scale);
+    if(w===RW&&h===RH&&t.msaa===ballSamples)return;
+    if(spare&&spare.w===w&&spare.h===h&&spare.samples===t.msaa)return;
+    dropSpare();spare={w,h,samples:t.msaa,stage:0,balls:null,crop:null};
+  }
+  function dropSpare(){if(!spare)return;spare.crop?.dispose();spare.balls?.dispose();spare=null;prepStats.disposed++;}
+  function prepareStep(){   // 1 フレームに 1 手
+    if(!spare||spare.stage>=2)return;
+    if(spare.stage===0){
+      spare.balls=makeBalls(spare.w,spare.h,spare.samples);r.initRenderTarget?.(spare.balls);
+      const old=r.getRenderTarget();r.setRenderTarget(spare.balls);r.setClearColor(0x000000,0);r.clear(true,true,false);r.setRenderTarget(old);
+      spare.stage=1;
+    }else{spare.crop=createBallTargetCrop(hr,spare.balls);spare.stage=2;prepStats.prepared++;}
+  }
   function setLite(scale,samples){
     if(!renderLite)return;
+    const t0=performance.now();
     const w=Math.round(W/scale),h=Math.round(H/scale);
     if(w===RW&&h===RH&&samples===liteBalls.samples)return;
     ballCrop?.dispose();liteBalls.dispose();display?.dispose();
     RW=w;RH=h;ballSamples=samples;uPBK.value.set(W/RW,H/RH);
-    liteBalls=balls=new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples,resolveDepthBuffer:!ballZSkip});
-    ballCrop=createBallTargetCrop(hr,balls);api.ballCrop=ballCrop;
+    const sp=spare&&spare.stage>=2&&spare.w===w&&spare.h===h&&spare.samples===samples?spare:null;
+    if(sp){spare=null;prepStats.hits++;liteBalls=balls=sp.balls;ballCrop=sp.crop;}
+    else{prepStats.misses++;liteBalls=balls=makeBalls(RW,RH,samples);ballCrop=createBallTargetCrop(hr,balls);}
+    api.ballCrop=ballCrop;
     if(present){display=displayRT(RW,RH);present.material.uniforms.uImage.value=display.texture;}
+    prepStats.steps++;prepStats.setLiteMs.push(+(performance.now()-t0).toFixed(2));if(prepStats.setLiteMs.length>16)prepStats.setLiteMs.shift();
+    prepareNext();
   }
   // 自動の段：起動直後（1.5 秒待って 2.5 秒）と、その後のプレイ中（3 秒ごと）の平均のフレーム間隔を見る。
   // 1 回の大きな引っかかりで段が落ちないよう、1 フレームは 50ms で頭打ち、250ms 超（非表示・読み込み）は数えない。
@@ -376,7 +404,7 @@ vec4 prebakeC(ivec2 p){`);
     if(quality.guard&&quality.locked)return;
     if(mean>limit&&cpu>.75*(quality.guard?Math.min(mean,limit):mean)){quality.cpuBound++;return;}
     if(mean>limit&&halfBake&&!halfBakeForce&&!quality.lightHalf&&quality.index<2){   // 解像度を下げる前に、まず照明の焼きを半分の頻度に（画は等倍のまま、光の変化が最大 1 フレーム遅れるだけ）
-      quality.lightHalf=true;quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:'halfbake'});quality.since=now+700;return;
+      quality.lightHalf=true;quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:'halfbake'});quality.since=now+700;prepareNext();return;
     }
     if(mean>limit&&quality.index<TIERS.length-1){
       const t=TIERS[++quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
@@ -407,6 +435,28 @@ vec4 prebakeC(ivec2 p){`);
     setCanvas(RW,RH);
   }
   function restoreFull(){if((dispFit||liteCanvas)&&!fit.canvasFull){setCanvas(W,H);fit.legacyRestores++;}}
+  // 10/31 球が 0 個で筒の可動部・カメラ・描く先が前回と同じなら、球バッファのクリアと描画（解決）を省く（?ballskip=0 で従来、
+  //  ?ballskip=check は省ける場面でも描いて前の中身と読み比べ、食い違いを stats に数える検証用）。球バッファには球のほかに皿（trayVisual）の
+  //  固定部と可動部（フラップ）も描かれるので、可動部の位置・向きとカメラの行列を前回と比べ、同じなら前回の中身がそのまま正しい。
+  const ballSkipArg=pq.get('ballskip'),ballSkipMode=ballSkipArg==='0'?'off':ballSkipArg==='check'?'check':'on';
+  const ballStats={drawn:0,skipped:0,checked:0,mismatch:0,mode:ballSkipMode};
+  let ballEmptyDrawn=false,ballDrawnTarget=null,ballBefore=null;const ballSig=new Float64Array(2048);let ballSigN=-1;
+  function ballsUnchanged(){
+    if(hr.balls.count||!hr.trayVisual||!hr.trayVisualHandle){ballSigN=-1;return false;}
+    let i=0,same=ballEmptyDrawn&&ballDrawnTarget===balls&&ballSigN>=0;
+    const put=v=>{if(i>=ballSig.length){same=false;return;}if(ballSig[i]!==v){ballSig[i]=v;same=false;}i++;};
+    hr.camera.updateMatrixWorld(true);
+    for(const v of hr.camera.matrixWorld.elements)put(v);for(const v of hr.camera.projectionMatrix.elements)put(v);
+    put(RW);put(RH);put(balls.samples);
+    const g=hr.trayVisualHandle.group;put(g.children.length);
+    for(const c of g.children){put(c.visible?1:0);put(c.position.x);put(c.position.y);put(c.position.z);put(c.quaternion.x);put(c.quaternion.y);put(c.quaternion.z);put(c.quaternion.w);put(c.scale.x);put(c.scale.y);put(c.scale.z);}
+    put(hr.sBalls.children.length);
+    if(ballSigN!==i)same=false;ballSigN=i;
+    return same;
+  }
+  const readBalls=()=>{const a=new Uint16Array(balls.width*balls.height*4);r.readRenderTargetPixels(balls,0,0,balls.width,balls.height,a);return a;};
+  function ballCheckBefore(){try{ballBefore=readBalls();}catch(e){ballBefore=null;ballStats.checkError=String(e?.message??e);}}
+  function ballCheckAfter(){try{const a=readBalls();ballStats.checked++;if(ballBefore){let bad=0,first=null;for(let j=0;j<a.length;j++)if(a[j]!==ballBefore[j]){bad++;if(!first){const px=j>>2;first=[px%balls.width,Math.floor(px/balls.width),j&3,ballBefore[j],a[j]];}if(bad>50)break;}if(bad){ballStats.mismatch++;(ballStats.samples??=[]).push({bad,first,frame:stats.frames,size:[balls.width,balls.height]});}}ballBefore=null;}catch(e){ballStats.checkError=String(e?.message??e);}}
   const legacy=hr.render,dispose=hr.dispose,readLinear=hr.readLinear;
   let enabled=true,disposed=false,probeValid=false;
   const stats={frames:0,fieldUpdates:0,fieldReuses:0,probeUpdates:0,probeReuses:0,legacyFrames:0};
@@ -414,7 +464,7 @@ vec4 prebakeC(ivec2 p){`);
   const backDirty=watch(hr.envBack.uniforms,Object.keys(hr.envBack.uniforms)),frontDirty=watch(hr.envFront.uniforms,Object.keys(hr.envFront.uniforms)),fieldDirty=fieldNames.map(names=>watch(U,names));
   const probePrevious=new Float32Array(16+hr.probes.sourceIndex.size*3);
   function probeChanged(){let i=0,dirty=!probeValid;const put=v=>{v=Math.fround(v??0);if(probePrevious[i]!==v){probePrevious[i]=v;dirty=true;}i++;};for(let n=0;n<8;n++){put(hr.frame.ea?.[n]);put(hr.frame.eb?.[n]);}for(const id of hr.probes.sourceIndex.keys()){const q=hr.frame.q?.[id],c=q?.rgb??q;put(c?.[0]);put(c?.[1]);put(c?.[2]);}probeValid=true;return dirty;}
-  function invalidate(){frameDirty?.invalidate();staticDirty?.invalidate();backDirty.invalidate();frontDirty.invalidate();for(const d of fieldDirty)d.invalidate();probeValid=false;}
+  function invalidate(){ballEmptyDrawn=false;frameDirty?.invalidate();staticDirty?.invalidate();backDirty.invalidate();frontDirty.invalidate();for(const d of fieldDirty)d.invalidate();probeValid=false;}
   function drawField(target,pass,layer=0){
     const key=pass===bakeBack?'back':pass===bakeFront?'front':layer===1?'zone':'hole';
     const validProof=key==='back'?proofCurrent(backProof,pass):key==='front'?proofCurrent(frontProof,pass):true;
@@ -436,13 +486,13 @@ vec4 prebakeC(ivec2 p){`);
     if(validProof)fieldInitialized.add(key);else fieldInitialized.delete(key);
   }
   const restored=()=>{fieldInitialized.clear();invalidate();};
-  const api={ballCrop,quality,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.probe=null;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,liteCanvas,canvasSize:[r.domElement.width,r.domElement.height],renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();display?.dispose();staticRT?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  const api={ballCrop,quality,tierPrep:prepStats,ballSkip:ballStats,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.probe=null;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,tierPrep:prepStats,ballSkip:ballStats,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,liteCanvas,canvasSize:[r.domElement.width,r.domElement.height],renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();dropSpare();display?.dispose();staticRT?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
   hr.prebakeRelight=api;
   hr.render=function(){
     const plate=getPlate();
     if(!enabled||hr.viewMode!==0||U.uM3Off.value!==0||!plate?.mat.uniforms.uPanel){stats.legacyFrames++;restoreFull();return legacy.call(hr);}
     if(dispFit)applyFit();
-    qualityTick();
+    qualityTick();prepareStep();
     hr.trayVisualHandle?.update();stats.frames++;
     hr._updateEnvUniforms();
     r.setScissorTest(false);
@@ -466,10 +516,17 @@ vec4 prebakeC(ivec2 p){`);
     extra.uPBLCDOn.value=plate?.mesh.visible?1:0;
     if(plate){extra.uPBLCD.value=plate.mat.uniforms.uT.value;extra.uPBRect.value.copy(plate.mat.uniforms.uRect.value);extra.uPBPanel.value.copy(plate.mat.uniforms.uPanel.value);extra.uPBGain.value=plate.mat.uniforms.uGain.value;}
     balls=ballCrop?.select()??balls;final.material.uniforms.uD.value=balls.texture;
-    r.setRenderTarget(balls);r.setViewport(0,0,RW,RH);r.setClearColor(0x000000,0);r.clear(true,true,false);
-    if(ballSel&&hr.balls.count)ballSelect();
-    const oldBallMaterial=hr.balls.material;hr.balls.material=ballMaterial;
-    try{if(hr.balls.count||hr.trayVisual)r.render(hr.sBalls,hr.camera);}finally{hr.balls.material=oldBallMaterial;}
+    const bSame=ballSkipMode!=='off'&&ballsUnchanged(),bSkip=bSame&&ballSkipMode==='on';
+    if(bSkip)ballStats.skipped++;
+    else{
+      if(bSame)ballCheckBefore();
+      r.setRenderTarget(balls);r.setViewport(0,0,RW,RH);r.setClearColor(0x000000,0);r.clear(true,true,false);
+      if(ballSel&&hr.balls.count)ballSelect();
+      const oldBallMaterial=hr.balls.material;hr.balls.material=ballMaterial;
+      try{if(hr.balls.count||hr.trayVisual)r.render(hr.sBalls,hr.camera);}finally{hr.balls.material=oldBallMaterial;}
+      ballStats.drawn++;ballEmptyDrawn=!hr.balls.count&&!!hr.trayVisual;ballDrawnTarget=balls;
+      if(bSame)ballCheckAfter();
+    }
     U.uUseLut.value=hr.lutEnabled?1:0;
     if(liteCanvas){setCanvas(RW,RH);r.setRenderTarget(null);}else r.setRenderTarget(display);
     r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);

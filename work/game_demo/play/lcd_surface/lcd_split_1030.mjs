@@ -57,8 +57,32 @@ export function layerTexture(T, source, { nearest = false } = {}) {
 
 // 層を小さな render target(液晶 canvas と同じ 1240x1510, 8bit, sRGB 符号のまま)へ合成して、その texture を返す。
 // 返した texture は液晶の板の uT へそのまま渡せる(他の GPU 面 compose() と同じ向き: 原点左下・上が v=1)。
+// 10/31 変化のないコマの合成を省く（?splitskip=0 で従来、?splitskip=check は省ける場面でも描いて前回の中身と読み比べ、食い違いを stats.mismatch に数える検証用）。
+// 層の見た目を決めるもの（各層の texture の id・version・source.version と、位置・拡大・回転・透明度・加算・大きさ）が前回の合成と同じなら、
+// target の中身は前回のまま（target は合成器だけが描く）。texture が render target の絵（version が絵の更新を表さない）のときは常に描く。
+// コンテキストの復帰・最初の 1 回も描く。
+const SPLIT_SKIP = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('splitskip'); } catch { return null; } })();
 export function createSplitCompositor(T, renderer) {
   const u = splitUniforms(T), chunks = splitShaderChunks();
+  const skipMode = SPLIT_SKIP === '0' ? 'off' : SPLIT_SKIP === 'check' ? 'check' : 'on';
+  const stats = { composed: 0, skipped: 0, checked: 0, mismatch: 0, mode: skipMode, diffAt: {} };   // diffAt: 変化した項目の番号（1 + 13*層 + 0:id 1:version 2:source.version 3:alpha 4:add 5:w 6:h 7:rot 8:sc 9:ax 10:ay 11:x 12:y）の回数
+  if (typeof window !== 'undefined') window.__splitSkipStats = stats;
+  const prev = new Float64Array(SPLIT_N * 13 + 2); let prevValid = false, forceDraw = true;
+  const unchanged = (layers) => {   // prev を今の値に更新しながら、前回と同じか返す
+    let i = 0, same = prevValid && !forceDraw, drawable = true;
+    const put = (v) => { if (prev[i] !== v) { prev[i] = v; same = false; stats.diffAt[i] = (stats.diffAt[i] ?? 0) + 1; } i++; };
+    put(layers.length);
+    for (let k = 0; k < SPLIT_N; k++) {
+      const L = layers[k], t = L?.tex;
+      if (!L) { for (let j = 0; j < 13; j++) put(0); continue; }
+      if (!t || t.isRenderTargetTexture || typeof t.version !== 'number') { drawable = false; stats.undrawable = (stats.undrawable ?? 0) + 1; }
+      put(t?.id ?? -1); put(t?.version ?? -1); put(t?.source?.version ?? -1);
+      put(L.alpha ?? 1); put(L.add ? 1 : 0); put(L.w ?? 0); put(L.h ?? 0); put(L.rot ?? 0); put(L.sc ?? 1); put(L.ax ?? 0); put(L.ay ?? 0); put(L.x ?? 0); put(L.y ?? 0);
+    }
+    prevValid = true;
+    return same && drawable;
+  };
+  try { renderer.domElement?.addEventListener('webglcontextrestored', () => { forceDraw = true; }); } catch {}
   const target = new T.WebGLRenderTarget(CANVAS_W, CANVAS_H, { format: T.RGBAFormat, type: T.UnsignedByteType, minFilter: T.LinearFilter, magFilter: T.LinearFilter, generateMipmaps: false, depthBuffer: false, stencilBuffer: false });
   target.texture.colorSpace = T.NoColorSpace; target.texture.name = 'lcd-split-composite';
   const mat = new T.ShaderMaterial({
@@ -68,20 +92,36 @@ export function createSplitCompositor(T, renderer) {
   });
   const scene = new T.Scene(), camera = new T.Camera();
   scene.add(new T.Mesh(new T.PlaneGeometry(2, 2), mat));
-  let disposed = false;
+  let disposed = false, before = null;
+  // 検証用：省ける場面で、描く前の target の中身(before)と描いた後を読み比べる
+  const readTarget = () => { const a = new Uint8Array(CANVAS_W * CANVAS_H * 4); renderer.readRenderTargetPixels(target, 0, 0, CANVAS_W, CANVAS_H, a); return a; };
+  const checkBefore = () => { try { before = readTarget(); } catch (e) { before = null; stats.checkError = String(e?.message ?? e); } };
+  const checkAfter = () => {
+    try {
+      const after = readTarget(); stats.checked++;
+      if (before) { let bad = 0; for (let j = 0; j < after.length; j++) if (after[j] !== before[j]) { bad++; if (bad > 50) break; } if (bad) { stats.mismatch++; (stats.samples ??= []).push(bad); } }
+      before = null;
+    } catch (e) { stats.checkError = String(e?.message ?? e); }
+  };
   return {
+    stats,
     texture: target.texture,
     compose(layers) {
       if (disposed || !layers) return null;
       if (renderer.getRenderTarget() !== null) return null;   // フレーム境界(既定の描画先)でだけ
+      const same = skipMode !== 'off' ? unchanged(layers) : false;
+      if (same && skipMode === 'on') { stats.skipped++; return target.texture; }
+      if (same) checkBefore();
       setSplitLayers(u, layers);
       const state = { target: renderer.getRenderTarget(), viewport: renderer.getViewport(new T.Vector4()), scissor: renderer.getScissor(new T.Vector4()), test: renderer.getScissorTest(), color: renderer.getClearColor(new T.Color()), alpha: renderer.getClearAlpha(), auto: renderer.autoClear };
       try {
         renderer.autoClear = false; renderer.setRenderTarget(target); renderer.setScissorTest(false); renderer.setViewport(0, 0, CANVAS_W, CANVAS_H);
         renderer.render(scene, camera);
+        stats.composed++; forceDraw = false;
       } finally {
         renderer.setRenderTarget(state.target); renderer.setViewport(state.viewport); renderer.setScissor(state.scissor); renderer.setScissorTest(state.test); renderer.setClearColor(state.color, state.alpha); renderer.autoClear = state.auto;
       }
+      if (same) checkAfter();
       return target.texture;
     },
     dispose() { disposed = true; target.dispose(); mat.dispose(); },
