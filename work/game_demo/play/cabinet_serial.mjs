@@ -1,10 +1,11 @@
 // USB serial bridge for the ESP32 cabinet controller. No serial port is trusted
 // until it replies to PING with the Pachikoma protocol signature.
 import { primaryButtonAction } from '../ui/input.mjs';
+import { fireButtonMode } from '../ui/choice_gate_1031.mjs';   // 10/31 選択画面以外は左右どちらのボタンも同じ(?firebtn=old で従来)
 
 export function cabinetButtonAction(ctrl, name) {
   if (name === 'FIRE') return primaryButtonAction(ctrl);
-  if (name === 'CHALLENGE') return ctrl.phase === 'Continue' ? 'add' : ctrl.phase === 'ChainChoice' ? 'chainStop' : 'challenge';
+  if (name === 'CHALLENGE') return ctrl.phase === 'Continue' ? 'add' : ctrl.phase === 'ChainChoice' ? 'chainStop' : fireButtonMode() === 'old' ? 'challenge' : primaryButtonAction(ctrl);
   return null;
 }
 
@@ -20,8 +21,9 @@ export function buttonLeds(ctrl, now) {
   const playable = g.canFire && !ctrl.confirmFinish && !ctrl.freezeRules;
   const chainContinue = ctrl.phase === 'ChainChoice' && g.wallet > 0 && g.secondsLeft > 0 && !g.endPending;
   const primary = playable || chainContinue || ctrl.phase === 'Attract' || (ctrl.phase === 'Result' && ctrl.resultAge >= ctrl.replayAfter);
-  const secondary = ctrl.phase === 'Continue' ? g.canAdd : ctrl.phase === 'ChainChoice' ? true : playable && g.lampCount > 0 && g.lampCount < 6;
-  return [Number(primary), Number(secondary && (ctrl.phase === 'Continue' || ctrl.phase === 'ChainChoice' || !g.armed || Math.floor(now / 250) % 2 === 0))];
+  const old = fireButtonMode() === 'old';   // 10/31 通常は左右どちらも同じ動作なので両方点灯（?firebtn=old は従来：右は勝負できるときだけ）
+  const secondary = ctrl.phase === 'Continue' ? g.canAdd : ctrl.phase === 'ChainChoice' ? true : !old ? primary : playable && g.lampCount > 0 && g.lampCount < 6;
+  return [Number(primary), Number(secondary && (ctrl.phase === 'Continue' || ctrl.phase === 'ChainChoice' || !old || !g.armed || Math.floor(now / 250) % 2 === 0))];
 }
 
 export class CabinetSerial {

@@ -1,6 +1,6 @@
 // 10/30 説明の長押しスキップの「音」と「囲いの電飾」。ゲージの絵は lcd_surface/tutorial_skip_overlay_1030.mjs。
 //  音: 押している間は上昇音(約1秒で満ちる)、離したら止め、満ちきったら確定音(短い上昇アルペジオ＋空気の抜ける音)。
-//  電飾: 押している間、左ボタンのあたり(囲いの左下区画 idx4、下 idx7 は半分、左上 idx3 はわずか)を白く光らせ、満ちるほど強く。確定で全体が一瞬白く閃く。
+//  電飾: 押している間、両ボタンのあたり(囲いの左下 idx4・右下 idx6、下 idx7 は強め、両上 idx3/5 はわずか)を白く光らせ、満ちるほど強く。確定で全体が一瞬白く閃く。
 //  cabinet_light_script の after フックを、他の使い手(staff_call_1030 の呼び出し中の点滅)と共存する形で使う。
 //  ?tutskipfx=0 で音と電飾だけ無効(ゲージと長押しは残る)。
 export function attachTutorialSkipFx({ ctrl, getEngine, query = new URLSearchParams(globalThis.location?.search ?? '') }) {
@@ -53,7 +53,7 @@ export function attachTutorialSkipFx({ ctrl, getEngine, query = new URLSearchPar
   const active = () => ctrl.tutSkipEnabled && !!ctrl.howto && (ctrl.tutSkip.level > 0.01 || ctrl.tutSkip.flash > 0);
   function mine(row, strip) {
     const u = ctrl.tutSkip, lv = Math.min(1, u.level), fl = u.flash;
-    const gains = [[4, 1], [7, .55], [3, .3]];
+    const gains = [[4, 1], [6, 1], [7, .8], [3, .3], [5, .3]];   // 10/31 左右どちらのボタンでも飛ばせる：左下(4)・右下(6)を同じ強さで、下(7)は強め、両上(3,5)はわずか
     for (const [i, w] of gains) {
       const k = Math.min(1.9, Math.max(row.K[i], (.25 + 1.35 * lv) * w + 1.2 * fl)), c = row.Kc[i];
       const tint = .12 * (1 - lv);   // 満ちるほど真っ白に(最初はわずかに青白い)

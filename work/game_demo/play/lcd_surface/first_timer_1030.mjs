@@ -1,7 +1,7 @@
 // 10/30 初めてプレイする客への「プレイ中の小さな配慮」（監督方針：説明なしで分かり、また来たくなる）。規則は変えない。演出・文・見せ方だけ。
 //   ?ft1=0 JPの失敗の「あと◯本だった！」（jp_seal_1030 の失敗の経路が lcd.firstTimer.nearMiss を呼ぶ。割れた演出のあと 1.5 秒、宝石の数字で残りの本数）
 //   ?ft2=0 初めての入賞（その回の1灯目）を大きく褒める（0.8秒・囲いと穴が虹色・専用の音・「ナイス！」）
-//   ?ft3=0 最初の10秒の迷い対策：開始直後に7つの穴のLEDを左から右へ流す／5秒押さなければうぱが「左のボタンを押してね」
+//   ?ft3=0 最初の10秒の迷い対策：開始直後に7つの穴のLEDを左から右へ流す／5秒押さなければうぱが「ボタンを押してね」
 //   ?ft4=0 5灯で「あと1つ！」：灯っていない穴のLEDを速く点滅＋上の帯に「あと1つで JACKPOT CHANCE！」
 //   ?ft5=0 初めての重複で理由を見せる：入った穴のLEDを赤く3回点滅＋「光ってる穴だった！」
 // すべて液晶の重ね描き＋穴/囲いの光＋音だけ。時計も発射も止めない（撃ちながら出る）。字は激アツ風（hint_h_20261029 の telop）。
@@ -148,7 +148,7 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
     const a = Math.min(easeOut(u / 0.3), fade), sc = 8, w = upa.width * sc, h = upa.height * sc, pop = 1 + 0.25 * (1 - easeOut(u / 0.22)) ** 2, shk = u > 0.18 ? Math.sin(u * 70) * 5 * Math.exp(-(u - 0.18) * 14) : 0;
     ctx.save(); ctx.globalAlpha = a;
     dim(ctx, 576, 480, 4.6, 2.0, 1);
-    ['左のボタンを', '押してね！'].forEach((ln, i) => { ctx.save(); ctx.translate(576 + shk, 410 + i * 150); ctx.scale(pop, pop); telop(ctx, ln, 0, 0, 140); ctx.restore(); });
+    ['ボタンを', '押してね！'].forEach((ln, i) => { ctx.save(); ctx.translate(576 + shk, 410 + i * 150); ctx.scale(pop, pop); telop(ctx, ln, 0, 0, 140); ctx.restore(); });
     const bob = u > 0.35 ? -Math.abs(Math.sin((u - 0.35) * 5.2)) * 1.5 * sc : 0;
     const X = Math.round((748 + (1 - easeOut(u / 0.3)) * (w + 60)) / sc) * sc, Y = Math.round((725 + bob) / sc) * sc;
     ctx.imageSmoothingEnabled = false; ctx.drawImage(upa, X, Y, w, h);

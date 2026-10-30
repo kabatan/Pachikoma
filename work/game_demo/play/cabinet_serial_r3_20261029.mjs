@@ -1,13 +1,16 @@
 // R3 cabinet bridge (10/29 night): the two buttons alone run the whole game, and the same USB serial line carries the RGB strip colour.
-// Left button = left side of the LCD, right button = right side (終わる|続ける, 確定|継続).
-//   Attract / Result / Fault : either button            Play : left = fire, right = challenge
+// 10/31: 選択画面（追加・継続・スタッフ・終了の確認）以外は、左右どちらのボタンでも同じ動作（開始・発射・連打・ルーレット停止・スキップ）。?firebtn=old で従来（左=発射、右=challenge）。
+// Left button = left side of the LCD, right button = right side (終わる|続ける, 確定|継続) — 選択画面だけ左右に意味がある。
+//   Attract / Result / Fault : either button            Play : either button = fire   (?firebtn=old: left = fire, right = challenge)
+//   選択画面(Continue/ChainChoice)は、出てから1.5秒かつ直前の押下から0.4秒たつまで、どちらのボタンも受け付けない(ui/choice_gate_1031.mjs。コントローラの dispatch で一括)
 //   ChainChoice (確定|継続)   : left = 確定(stop), right = 継続   Continue (終わる|続ける): left = finish, right = ask for +100 yen
 //   StaffWait                : staff holds BOTH buttons ~1.5 s (firmware sends BTN,STAFF). Left alone = cancel (on release), right alone = nothing.
 // The firmware (hardware/pachikoma_controller_r3) announces PACHIKOMA,RGB,1; only then does this class send "L,r,g,b" lines and stop sending the old "LED,x,y" lines.
 import {CabinetSerial as GSerial} from './cabinet_serial_g_20261028.mjs';
 import {parseCabinetLine} from './cabinet_serial.mjs';
+import {registerPress, r3ButtonAction, entryGuard, GUARD_SECONDS as _GUARD} from '../ui/choice_gate_1031.mjs';
 
-export const GUARD_SECONDS = 0.7;      // after a decision screen appears, ignore presses briefly so button mashing cannot choose for the customer
+export const GUARD_SECONDS = _GUARD;      // StaffWait: after the staff screen appears, ignore presses briefly. 追加・継続の選択画面は CHOICE_GUARD_SECONDS(1.5) と連打停止0.4秒（choice_gate_1031）
 export const LED_MIN_INTERVAL_MS = 20; // <= 50 lines/s (~14 bytes each): far below the 11.5 kB/s of 115200 baud
 export const LED_KEEPALIVE_MS = 500;   // firmware falls back to its own animation after ~2 s of silence
 
@@ -21,32 +24,8 @@ export function parseR3Line(line) {
   return null;
 }
 
-/** Pure mapping used by tests and the bridge. StaffWait is handled by the bridge (chord rules); here it returns null. */
-export function r3ButtonAction(ctrl, name) {
-  const left = name === 'FIRE', phase = ctrl.phase, g = ctrl.game;
-  if (phase === 'Attract') return 'start';
-  if (phase === 'Result') return 'replay';
-  if (phase === 'Fault') return 'settleFault';
-  if (phase === 'ChainChoice') return left ? 'chainStop' : 'chainContinue';
-  if (phase === 'Continue') return left ? 'finish' : (ctrl.rules?.RuleVariant === 'G_20261028' ? 'requestExtra' : 'add');
-  if (phase === 'StaffWait') return null;
-  if (ctrl.confirmFinish) return left ? 'cancelFinish' : 'confirmFinish';
-  return left ? 'fire' : 'challenge';
-}
-
-/** True while a decision screen has only just appeared. */
-export function entryGuard(ctrl) {
-  const g = ctrl.game, r = ctrl.rules ?? g?.rules;
-  if (ctrl.phase === 'Continue' && typeof g.offerLeft === 'number' && typeof r?.ContinueSeconds === 'number') return r.ContinueSeconds - g.offerLeft < GUARD_SECONDS;
-  if (ctrl.phase === 'ChainChoice' && typeof g.choiceLeft === 'number' && typeof r?.ChainChoiceSeconds === 'number') {
-    // 10/31 時計0の「100円で継続」の選択は 30 秒（ContinueSeconds）。ChainChoiceSeconds(12) との差で測ると、出てから 18.7 秒もボタンが効かなかった。実際の長さ(_chainChoiceSeconds)で測る。告知中は規則側が選べない。
-    if (g.chainAnnouncing) return true;
-    const full = typeof g._chainChoiceSeconds === 'function' ? g._chainChoiceSeconds() : r.ChainChoiceSeconds;
-    return Math.max(full, r.ChainChoiceSeconds) - g.choiceLeft < GUARD_SECONDS;
-  }
-  if (ctrl.phase === 'StaffWait' && typeof g.staffWaitSeconds === 'number') return g.staffWaitSeconds < GUARD_SECONDS;
-  return false;
-}
+// r3ButtonAction / entryGuard / GUARD_SECONDS は ui/choice_gate_1031.mjs（依存なし。input.mjs との循環 import を避けるため移した）。ここから再公開する。
+export { r3ButtonAction, entryGuard };
 
 export class CabinetSerial extends GSerial {
   constructor(options) {
@@ -91,13 +70,13 @@ export class CabinetSerial extends GSerial {
     if (this.rgb) ctrl.pressDown?.('cabinet:' + message.name);   // 離しの通知(REL)がある新ファームのときだけ長押しを数える(古い版は短押し扱い=説明は最後まで流れる)
     else if (ctrl.tutSkipActive) { ctrl.tutSkip.tap = 1; }
     if (ctrl.phase === 'StaffWait') {
-      if (entryGuard(ctrl)) return;
+      if (entryGuard(ctrl)) { registerPress(ctrl); return; }
       const other = message.name === 'FIRE' ? 'CHALLENGE' : 'FIRE';
       if (now - this.down[other] < 8000) { this.pendingCancel = false; return; }   // other button is down: staff chord in progress
       if (message.name === 'FIRE') { if (this.rgb) this.pendingCancel = true; else this.input('cancelExtra'); }
       return;
     }
-    if (entryGuard(ctrl)) return;
+    if (entryGuard(ctrl)) { registerPress(ctrl); return; }   // 捨てた押しも連打として数える(止まるまで選べない)
     const action = r3ButtonAction(ctrl, message.name);
     if (action) this.input(action);
   }

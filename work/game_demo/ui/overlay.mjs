@@ -112,8 +112,8 @@ export class MedalOverlay {
  <div class="lanes">${lanes}</div>
  <div class="wallet"><span class="n big">${v.wallet}</span><span class="l">持ち玉</span><div class="next">${need}</div></div>
  <div class="keys">
-  <div class="key ${fire ? '' : 'dim'}" data-action="fire"><small>SPACE / 左</small>発射</div>
-  <div class="key ${v.armed ? 'coral' : chal ? 'gold' : 'dim'}" data-action="challenge"><small>C / 右</small>${v.armed ? 'CHALLENGE中' : 'CHALLENGE'}</div>
+  <div class="key ${fire ? '' : 'dim'}" data-action="fire"><small>SPACE / ボタン</small>発射</div>
+  <div class="key ${v.armed ? 'coral' : chal ? 'gold' : 'dim'}" data-action="challenge"><small>C</small>${v.armed ? 'CHALLENGE中' : 'CHALLENGE'}</div>
   <div class="key ${v.canAdd ? '' : 'dim'}" data-action="add"><small>A</small>100円追加</div>
   <div class="key ${v.phase === 'Ready' || v.phase === 'Continue' ? 'coral' : 'dim'}" data-action="${bkey}"><small>B</small>計数</div></div>`;
   }
@@ -140,7 +140,7 @@ export class MedalOverlay {
     if (v.phase === 'Attract') {
       const tiers = v.prizeTable.map((t) => `<div>${esc(t.name)}<small>${t.from}玉〜</small></div>`).join('');
       return `<div class="screen" data-action="start"><h1 class="big">パチコマ</h1><div class="sub">持ち玉チャレンジ</div>
-  <div class="cta big">SPACE / 左ボタンで 100円スタート</div>${recs}<div class="tiers">${tiers}</div>
+  <div class="cta big">SPACE / ボタンで 100円スタート</div>${recs}<div class="tiers">${tiers}</div>
   <div class="rules">違う穴に入れて点灯 → 欲張ると重複で消える<br>CHALLENGE: 消えている穴に入れば賞玉 / 6灯でJP</div></div>`;
     }
     if (v.confirmFinish) return `<div class="screen"><div class="box"><h2 class="big">ここで計数しますか?</h2><p>持ち玉 ${v.wallet}玉 → ${esc(v.prize.name)}</p><div class="btns"><div class="key coral" data-action="confirmFinish"><small>B</small>計数する</div><div class="key" data-action="cancelFinish"><small>Esc</small>続ける</div></div></div></div>`;

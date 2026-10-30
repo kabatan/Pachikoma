@@ -41,9 +41,9 @@ function tut06(o, c) {
       for (let i = 0; i < 8; i++) reg(o, i, .5 + .5 * crest(i, ck * .6, 1.5) * ease(u / .5), GOLD);
       rings(o, .12); hit(o, FLASH(u, .15, .14) * .6); break;
     }
-    case 1: {   // 左のボタンで撃つ：左の柱だけが2.4Hzで金→白に脈打つ（指す）。ほかは暗い青
+    case 1: {   // ボタンで撃つ：左右の柱が2.4Hzで金→白に脈打つ（指す）。ほかは暗い青
       const p = .5 + .5 * Math.sin(TAU * 2.4 * ck - 1.57), s = p * p * (3 - 2 * p);
-      all(o, .22, BLUE); grp(o, LEFT, .8 + .85 * s, mixc(GOLD, WHITE, s * .7));
+      all(o, .22, BLUE); grp(o, LEFT, .8 + .85 * s, mixc(GOLD, WHITE, s * .7)); grp(o, RIGHT, .8 + .85 * s, mixc(GOLD, WHITE, s * .7));   // 10/31 左右どちらのボタンでも撃てる：両方の柱が脈打つ
       reg(o, 7, .3 + .5 * crest(4, ck * 2.4, 3), GOLD);           // 柱の下から足元へ流れる
       rings(o, .08 + .1 * s); hit(o, FLASH(u, 0, .1) * .5); break;
     }
@@ -225,8 +225,8 @@ function tut09(o, c) {
   switch (cut) {
     case 0: for (let i = 0; i < 8; i++) reg(o, i, .5 + .5 * crest(i, ck * .6, 1.5) * ease(u / .5), GOLD); rings(o, .12); hit(o, FLASH(u, .15, .14) * .6); break;   // 目標：金のゆっくりした波
     case 1: all(o, .25, BLUE); grp(o, HEAD, .6 + .8 * ps, mixc(GOLD, WHITE, ps * .5)); rings(o, .1); hit(o, FLASH(u, .5, .1) * .3); break;   // 残り時間（上の表示器）を指す
-    case 2: {   // ボタン：左の柱が金→白に脈打つ。押した瞬間(0.35s)に一発
-      all(o, .22, BLUE); grp(o, LEFT, .8 + .85 * ps, mixc(GOLD, WHITE, ps * .7)); reg(o, 7, .3 + .5 * crest(4, ck * 2.4, 3), GOLD); rings(o, .08 + .1 * ps); hit(o, FLASH(u, .35, .12) * .55); break;
+    case 2: {   // ボタン：左右の柱が金→白に脈打つ。押した瞬間(0.35s)に一発
+      all(o, .22, BLUE); grp(o, LEFT, .8 + .85 * ps, mixc(GOLD, WHITE, ps * .7)); grp(o, RIGHT, .8 + .85 * ps, mixc(GOLD, WHITE, ps * .7)); reg(o, 7, .3 + .5 * crest(4, ck * 2.4, 3), GOLD); rings(o, .08 + .1 * ps); hit(o, FLASH(u, .35, .12) * .55); break;
     }
     case 3: {   // 玉が穴に入ってランプが光る(1.6s)：穴が1つ白く閃いて点く
       all(o, .3, BLUE); if (u >= 1.55) { const f = FLASH(u, 1.55, .12); lamp(o, 0, 1.5 + 9 * f, f > .3 ? WHITE : LIT4); reg(o, 7, .4 + .9 * f, mixc(GOLD, WHITE, f * .5)); hit(o, f * .35); } rings(o, .1); break;

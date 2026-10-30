@@ -76,18 +76,18 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       case 'attract': case 'title':
         ctx.fillStyle = 'rgba(2,15,52,.25)'; ctx.fillRect(0, 150, W, 600);
         text('パチコマ', W/2, 360 + 8 * Math.sin(clock * 1.8), 158, '#ffb9db');
-        text('左のボタンで スタート！', W/2, 590, 60 + 3 * Math.sin(clock * 3), '#fff2a8');
+        text('ボタンで スタート！', W/2, 590, 60 + 3 * Math.sin(clock * 3), '#fff2a8');
         break;
       case 'howto': {
         const k = clamp(Math.floor((s.howtoT ?? elapsed) / (p.seconds || 8) * 3), 0, 2);
-        const steps = [['左のボタンで 玉をうつ', '穴に入ると ランプがつく'],
+        const steps = [['ボタンで 玉をうつ', '穴に入ると ランプがつく'],
                        ['ランプを６つ集めよう', '６つで JPチャンス！'],
                        ['光っていない穴へ！', '入れば 大当り！']];
         card('あそびかた', steps[k], '#b0efff', `${k+1} / 3`); break;
       }
       case 'ticket': card('スタート！', ['ランプを６つ集めよう'], '#ffdb83', `${p.balls ?? s.rules.LoanBalls}玉`); break;
       case 'challenge_wait': case 'challenge_declare': case 'lamp6':
-        card('JPチャンス！', ['光っていない穴へ！', '左のボタンで 玉をうつ'], '#ffda69'); break;
+        card('JPチャンス！', ['光っていない穴へ！', 'ボタンで 玉をうつ'], '#ffda69'); break;
       case 'challenge_flight': card(p.chain ? '連チャンの挑戦！' : '入れぇ！！', ['光っていない穴に 入れば成功！'], '#ffca78'); break;
       case 'jp':
         card('大当り！', [p.chain ? '積み増し！ 確定まで大切に' : '最初の配当は もう確定！'], '#ffe093', `${p.payout ?? p.award ?? 0}玉`); break;
@@ -97,7 +97,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
         card('連チャンチャンス！', [`左：つづける（次は${next}灯）`, '右：積み増しを確定'], '#ffb4dc', `＋${pending}玉`);
         text(`最初の ${baseAward}玉 は残る`, W/2, 802, 36, '#fff2bf'); break;
       }
-      case 'chain_continue': card('もう一度！', ['光っていない穴へ！', '左のボタンで 玉をうつ'], '#ffb4dc', `${p.lamps ?? 1}灯`); break;
+      case 'chain_continue': card('もう一度！', ['光っていない穴へ！', 'ボタンで 玉をうつ'], '#ffb4dc', `${p.lamps ?? 1}灯`); break;
       case 'chain_stop': card('確定！', ['積み増しを獲得！'], '#fff2a0', `${p.banked ?? p.total ?? 0}玉`); break;
       case 'fail': card('また挑戦しよう！', [p.chain ? `最初の ${p.base ?? 0}玉 は残ります` : 'ランプを集めて もう一度！'], '#c5d9ff', p.chainLost > 0 ? `積み増し −${p.chainLost}玉` : null); break;
       case 'timeup': card('時間です', [`追加で ＋${p.seconds ?? s.rules?.extraSeconds ?? ''}秒・${p.balls ?? s.rules?.extraLoanBalls ?? ''}玉`, '追加しないと 計数へ進みます'], '#ffccac'); break;

@@ -1,6 +1,7 @@
 // Keep the existing 3-ball / 0.6s / one-buffer firing path unchanged.
 import {MedalController as BaseController} from './controller.mjs';
 import {MedalGame,MedalPhase} from '../rules/medal_rules_g_20261028.mjs';
+import {BUTTON_ACTIONS,choiceBlocked} from './choice_gate_1031.mjs';   // 10/31 選択画面の誤選択防止（出てから1.5秒＋連打が0.4秒止まるまで）
 export class MedalController extends BaseController {
  constructor(o={}){
   super(o);this.game=new MedalGame(this.rules,this.seed);
@@ -9,9 +10,14 @@ export class MedalController extends BaseController {
   this.resultAutoSeconds=o.resultAutoSeconds??(q===null||q===''?25:(Number(q)||0));this._resultAutoAt=null;
  }
  update(dt){
-  super.update(dt);
+  super.update(dt);this.uiTime=(this.uiTime??0)+dt;
   if(this.game.phase!==MedalPhase.Result){this._resultAutoAt=null;return;}
   if(this.resultAutoSeconds>0&&(this.resultAge??0)>=this.resultAutoSeconds&&(this._resultAutoAt==null||this.resultAge-this._resultAutoAt>=1)){this._resultAutoAt=this.resultAge;this.dispatch('reset');}
+ }
+ /** 選択画面（追加・継続）では、出てから1.5秒＋ボタン連打が0.4秒止まるまで押しを受けない（押されたが無視。演出なし）。どの入口（実機・キー・タッチ）もここを通る。 */
+ dispatch(action){
+  if(BUTTON_ACTIONS.has(action)&&choiceBlocked(this)){this.droppedInputs.push({action,frame:this.frame,reason:'choice-gate'});if(this.droppedInputs.length>256)this.droppedInputs.shift();return false;}
+  return super.dispatch(action);
  }
  _dispatch(action){
   const g=this.game;

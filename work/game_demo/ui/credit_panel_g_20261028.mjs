@@ -1,5 +1,5 @@
 // Approved 30s offer -> unlimited staff wait -> staff receipt -> resume.
-import {entryGuard} from '../play/cabinet_serial_r3_20261029.mjs';
+import {entryGuard,registerPress} from './choice_gate_1031.mjs';
 export function attachCreditPanel({parent,ctrl,overlay,onInput}){
  const panel=document.createElement('section');panel.id='g-credit-panel';panel.setAttribute('aria-live','polite');
  panel.style.cssText='position:absolute;left:6%;right:6%;bottom:2%;z-index:30;padding:16px;border:2px solid #e8c672;border-radius:14px;background:#10152bf2;color:#fff;text-align:center;font:600 clamp(15px,2.5vw,28px) sans-serif;box-shadow:0 4px 24px #0008';
@@ -8,7 +8,7 @@ export function attachCreditPanel({parent,ctrl,overlay,onInput}){
  const left=document.createElement('button'),right=document.createElement('button');
  for(const b of [left,right])b.style.cssText='font:inherit;padding:10px 16px;border-radius:8px;border:1px solid #dcb766;color:#fff;background:#282f53';
  left.textContent='左：終了する';right.textContent='右：チケット一枚で続ける';buttons.append(left,right);panel.append(title,detail,buttons);parent.append(panel);
- const input=(action,source)=>{const phase=ctrl.phase,accepted=(source!=='staff-keyboard'&&entryGuard(ctrl))?false:ctrl.dispatch(action);onInput?.({source,action,accepted,phase},ctrl.game);render();};
+ const input=(action,source)=>{const phase=ctrl.phase,blocked=source!=='staff-keyboard'&&entryGuard(ctrl);if(blocked)registerPress(ctrl);const accepted=blocked?false:ctrl.dispatch(action);onInput?.({source,action,accepted,phase},ctrl.game);render();};
  const onRight=()=>input('requestExtra','pointer'),onLeft=()=>input(ctrl.phase==='StaffWait'?'cancelExtra':'finish','pointer');   // R3: 左右は液晶(終わる|続ける)と同じ向き
  left.addEventListener('click',onLeft);right.addEventListener('click',onRight);
  const key=e=>{if(e.code!=='KeyS'||e.repeat||ctrl.phase!=='StaffWait')return;e.preventDefault();input('staffActivate','staff-keyboard');};window.addEventListener('keydown',key);
