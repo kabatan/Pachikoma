@@ -87,5 +87,10 @@ export function createRuntime({ ctrl, presenter, pa, log = null, effects, onReca
   }
   const awardToTray = (count, opts = {}) => jpHold && opts.origin !== 'jp_reveal' ? 0 : presenter.awardToTray(count, opts);
   const setJpHold = on => { jpHold=!!on; if(on) presenter.setAwardHold(true,14); else shownPrize=litPrize(); };
-  return { stats, advance, setJpHold, getPrize: () => shownPrize, get jpHold() {return jpHold;}, effects: effectsBridge.bus, effectsBridge, awardToTray, releaseAwards: (o) => jpHold ? 0 : presenter.releaseAwards(o), setAwardHold: (on, maxHold) => presenter.setAwardHold(on, maxHold), trayStatus: () => presenter.trayStatus() };
+  // 10/31 軟らかいリセット: 客をまたいで持ち越す内部の状態（進めた端数の時間・計数の開始印・JP演出の保留・払い出しの保留・景品の灯）を空にする。物理側は controller の cancelFlights（pa.reset）で空になる
+  const reset = () => {
+    acc = 0; countStarted = false; jpHold = false; litGame = null; litIdx = 0; shownPrize = litPrize(); stats.countDone = null;
+    presenter.holdAwards = false; presenter.maxHold = 4; presenter.update(0); presenter.setDisplayWallet(0);   // update(0): 新しい game を見て presenter の払い出し待ち・演出・計数を空にする（次のフレームを待たない）
+  };
+  return { stats, advance, reset, setJpHold, getPrize: () => shownPrize, get jpHold() {return jpHold;}, effects: effectsBridge.bus, effectsBridge, awardToTray, releaseAwards: (o) => jpHold ? 0 : presenter.releaseAwards(o), setAwardHold: (on, maxHold) => presenter.setAwardHold(on, maxHold), trayStatus: () => presenter.trayStatus() };
 }

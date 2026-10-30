@@ -171,6 +171,21 @@ export class MedalController {
     if (ok) { this._lastActionFrame = this.frame; for (const fn of this.listeners) fn(action, this); }
     return ok;
   }
+  /** 10/31 軟らかいリセット（管理画面のリセット。タブを再読み込みしない）: どの局面からでも新しい客の待機（Attract）へ戻す。
+   *  'reset'（Result 限定・canReset あり）と同じ後始末と通知（listeners に 'reset' → 演出は 'attract'）を、局面を問わず行う。
+   *  盤上・皿の玉は hooks.cancelFlights（物理 reset）で消える。戻り値は新しい game。 */
+  softReset() {
+    this.hooks.cancelFlights?.();
+    this.howto = null; this.fireBuffer = this.preBuffer = null; this.confirmFinish = false;
+    this.game = new this.game.constructor(this.rules, this.seed == null ? undefined : this.seed + 1 + this.sessionId);
+    this.aimClock = 0; this.aim = 0; this.aimDir = 1; this.resultAge = 0; this._resultAutoAt = null; this.repeatVisit = false; this.lastGameEvent = null;
+    this.lockedAim = undefined; this.lastFireGate = null; this._lastActionFrame = -1;
+    this.tutSkip = { holding: false, holdT: 0, src: null, level: 0, tap: 0, flash: 0, completing: 0, taps: this.tutSkip?.taps ?? 0 };
+    for (const fn of this.listeners) fn('reset', this);
+    this.freezeRules = false;   // うぱ接客の冒頭などが止めていた時計を、通知のあとも必ず動く状態へ
+    this._lastActionFrame = -1; this.fireBuffer = this.preBuffer = null;
+    return this.game;
+  }
   /** ルール説明を終えて(または飛ばして)実際に開始する。 */
   _startNow() {
     this.howto = null; const g = this.game;

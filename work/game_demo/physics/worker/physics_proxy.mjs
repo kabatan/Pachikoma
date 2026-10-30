@@ -84,6 +84,7 @@ export class PhysicsWorkerProxy {
     // 主スレッドの状態
     this.tick = 0; this.acc = 0; this.aim = 0; this.dir = 1; this._replayT = null;
     this.g = 0;            // 送った step の通し番号(beginGame/reset でも戻らない)
+    this._resetG = 0;      // 最後の reset を呼んだ時点の g（これ以下の記録は古い盤のもの）
     this.cmds = []; this._posting = false;
     this.pending = [];     // まだ「見えて」いない自分の呼び出し {g, op, a, b}（予測に使う）
     this.recQ = [];        // 届いたがまだ見せていない step の記録
@@ -145,6 +146,16 @@ export class PhysicsWorkerProxy {
   reserveForLoan(n) { this._cmd(['V', n], 'V', n); const c = this.pending[this.pending.length - 1]; this._predict(); return c.k ?? 0; }   // 戻り値は予測(本物の数は Worker が決める)
   beginGame(loanBalls) { this._resetLocal(); this._cmd(['B', loanBalls], 'B', loanBalls); }
   reset() { this._resetLocal(); this._cmd(['R'], 'R'); }
+  // 10/31 軟らかいリセット: reset() の直後に呼ぶ。reset より前に送った step の結果（入賞などの出来事・接触・描画用の玉）は古い盤のもの。次の客に数えさせない／映さない。
+  //   Worker は呼び出しを届いた順に実行するので、g <= _resetG の記録はすべて reset 前の盤。まだ見せていない記録と、途中で届く記録の出来事を捨て、描画用の玉は空にする。
+  //   （通常の reset()＝結果画面から次の客へ、は従来どおり何も捨てない。直接の PhysicsAdapter には不要＝出来事は毎 step 取り出し済みで reset が残りも空にする）
+  discardInFlight() {
+    this._resetG = this.g; this.outbox = [];
+    for (const it of this.recQ) { it.events = null; it.cB = null; it.cT = null; }
+    const s = this._snap;
+    this._snap = { ...s, count: 0, positions: s.positions.slice(0, 0), kinds: s.kinds.slice(0, 0), ids: s.ids.slice(0, 0), activePayout: 0, payIds: [], payPrev: [], shuttle: { ...s.shuttle, hasBall: false } };
+    this._applySnapMirror(this._snap);
+  }
   _resetLocal() { this.tick = 0; this.acc = 0; this.aim = 0; this.dir = 1; }
   setInput(tick, input) {
     if (!Number.isInteger(tick) || tick <= this.tick) throw new Error('input tick must be in the future');
@@ -187,15 +198,15 @@ export class PhysicsWorkerProxy {
       const rec = m.rec;
       let ei = 0, bi = 0, ti = 0;
       for (let i = 0; i < m.steps; i++) {
-        const r = rec.subarray(i * F, (i + 1) * F), g = r[REC.g], item = { r, events: null, cB: null, cT: null };
-        while (ei < m.evG.length && m.evG[ei] === g) (item.events ??= []).push(m.events[ei++]);
-        while (bi < m.cBG.length && m.cBG[bi] === g) (item.cB ??= []).push(m.cB[bi++]);
-        while (ti < m.cTG.length && m.cTG[ti] === g) (item.cT ??= []).push(m.cT[ti++]);
+        const r = rec.subarray(i * F, (i + 1) * F), g = r[REC.g], item = { r, events: null, cB: null, cT: null }, stale = g <= this._resetG;   // stale: reset 前の盤の記録（出来事・接触は捨てる）
+        while (ei < m.evG.length && m.evG[ei] === g) { const e = m.events[ei++]; if (!stale) (item.events ??= []).push(e); }
+        while (bi < m.cBG.length && m.cBG[bi] === g) { const x = m.cB[bi++]; if (!stale) (item.cB ??= []).push(x); }
+        while (ti < m.cTG.length && m.cTG[ti] === g) { const x = m.cT[ti++]; if (!stale) (item.cT ??= []).push(x); }
         this.recQ.push(item);
       }
       this.latestG = rec[(m.steps - 1) * F + REC.g];
       this.lagK = m.steps;
-      this._snap = m.snap; this._applySnapMirror(m.snap);
+      if (this.latestG > this._resetG) { this._snap = m.snap; this._applySnapMirror(m.snap); }   // reset 前の盤の描画（玉の位置）は採らない
       W.steps += m.steps;
       if (W.workerMs.length < 100000) W.workerMs.push(+m.workerMs.toFixed(3));
     }

@@ -126,7 +126,7 @@ function toast(text, cls) {
   const t = $('toast'); t.textContent = text; t.className = cls || ''; t.style.display = 'block';
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = 'none'; }, cls === 'ng' ? 6000 : 3500);
 }
-const CMD_NAME = { reset: 'リセット', pause: '停止', resume: '再開', staff: 'チケット受領・再開', staffcancel: '取消（終了）' };
+const CMD_NAME = { reset: 'リセット', reload: '完全リロード', pause: '停止', resume: '再開', staff: 'チケット受領・再開', staffcancel: '取消（終了）' };
 function showResult(m) {
   if (!m.results) return toast(`${CMD_NAME[m.cmd] ?? m.cmd}: ${m.error || '失敗'}`, 'ng');
   const lines = Object.entries(m.results).map(([id, r]) => `${stationName(id)}: ${r.ok ? '✓ ' : '× '}${r.msg || ''}`);
@@ -168,7 +168,8 @@ function render() {
       <div class="row two">
         <button data-act="${paused ? 'resume' : 'pause'}" class="${paused ? 'primary' : ''}" ${can ? '' : 'disabled'}>${paused ? '再開' : '停止'}</button>
         <button data-act="reset" class="danger" ${st.online ? '' : 'disabled'}>リセット</button>
-      </div></div>`;
+      </div>
+      <button data-act="reload" class="danger" ${st.online ? '' : 'disabled'} style="margin-top:8px;min-height:40px;font-size:14px;background:#4a2a30;font-weight:600">完全リロード（再読み込み・数十秒かかります）</button></div>`;
   }).join('');
   const waits = stations.filter((st) => st.online && !st.stale && st.state?.phase === 'StaffWait');
   const key = waits.map((st) => st.id).join(',');
@@ -195,6 +196,7 @@ $('cards').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-act]'); if (!b || b.disabled) return;
   const id = b.closest('.card').dataset.id, act = b.dataset.act, name = stationName(id);
   if (act === 'reset') ask(`${name}をリセット`, `${name}のゲームを最初からやり直します。\n遊技中の人がいないか確認してください。`, () => send('reset', [id]));
+  else if (act === 'reload') ask(`${name}を完全リロード`, `${name}のページを再読み込みします（起動し直しに時間がかかります）。\n通常は「リセット」で足ります。遊技中の人がいないか確認してください。`, () => send('reload', [id]), '再読み込みする');
   else if (act === 'staff') ask(`${name}：チケット受領・再開`, `${name}のお客さまからチケットを1枚受け取りましたか？\n受け取ったら「受領して再開」を押します。押すとすぐ遊技が再開します。`, () => send('staff', [id]), '受領して再開', 'まだ（戻る）', 'staff');   // 押し間違い対策: 一段の確認
   else if (act === 'staffcancel') ask(`${name}：取消`, `${name}は追加をしないで終了にします。\nチケットを受け取っていない／お客さまがやめた場合だけ押します。`, () => send('staffcancel', [id]), '取り消して終了');
   else send(act, [id]);

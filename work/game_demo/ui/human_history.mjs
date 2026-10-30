@@ -74,6 +74,16 @@ export class HumanHistory {
     this._event('result', { prize: game.prize }, game, true);
   }
 
+  /** 10/31 管理画面の軟らかいリセットで、遊技の途中の客を打ち切って確定する（再読み込みしない）。サーバーの形は変えず status は completed、
+   *  打ち切りは aborted に理由を残す。進行中の記録が無ければ何もしない。 */
+  abort(game, reason = 'softreset') {
+    if (this.active?.status !== 'in_progress') return false;
+    this.active.status = 'completed'; this.active.aborted = String(reason);
+    this.active.endedAt = this.now().toISOString();
+    this._event('aborted', { reason: String(reason) }, game, true);
+    return true;
+  }
+
   _event(kind, detail, game, immediate = false) {
     const doc = this.active;
     if (doc.events.length < MAX_EVENTS) {

@@ -303,6 +303,17 @@ window.__play = { app, pa, hr, stats, fxApi, runtime, cabinet, awardToTray: runt
   tick: (seconds, dt = 1 / 60) => { let left = seconds; while (left > 1e-10) { frame(Math.min(left, dt), false); left -= dt; } return draw(); },
   loopDiagnostics: () => ({...loopState,paused,boundary:frameFaultBoundary.snapshot()}),
   pause: (value) => { paused = loopState.faulted || value; last = null; },
+  // 10/31 軟らかいリセット（管理画面の「リセット」）: タブを再読み込みせず、どの局面からでも待機画面（次の客）へ戻す。呼び出し側は remote/remote_client.mjs（?softreset=0 で旧動作の再読み込み）。
+  //   途中の客の記録を打ち切って確定 → controller.softReset（物理の玉を全消去・新しい game・'reset' 通知＝演出側の 'attract'）→ 物理 Worker の飛行中の結果を捨てる（盤を消した直後の入賞を次の客に数えない）→ runtime の持ち越しを空に。
+  //   例外は呼び出し側へ投げる（remote_client が再読み込みに落とす）。表示エラーで停止中(render-fault)は直せないので投げる。
+  softReset: (reason = 'staff') => {
+    if (loopState.faulted) throw new Error('render-fault のため軟らかいリセットできません');
+    const t0 = performance.now(), from = ctrl.game.phase;
+    try { app.history?.abort(ctrl.game, 'softreset:' + reason); } catch (error) { console.warn('[softreset] history', error); }
+    app.log.write('softreset', { reason, from, tick: pa.tick }, ctrl.game);
+    ctrl.softReset(); pa.discardInFlight?.(); runtime.reset(); last = null;
+    return { from, to: ctrl.game.phase, ms: performance.now() - t0 };
+  },
 };
 document.addEventListener('visibilitychange', () => { last = null; app.log.write('visibility', { tick: pa.tick, hidden: document.hidden }); });
 // 音: ブラウザは最初の操作まで鳴らせない。ボタンは見せず、最初のキー/クリックで有効にして読み込む(?oldui のときだけボタンも見せる)

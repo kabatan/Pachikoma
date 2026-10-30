@@ -3,6 +3,7 @@
 // play.mjs からは `import '../remote/remote_client.mjs';` の1行だけで使える（window.__play が出来るのを待つので、読み込み順は問わない）。
 // 使うもの: window.__play.pause(bool) / .cabinet.input('staffActivate') / .app.ctrl / window.__lcdSurface.setManual / window.__r2Audio.engine.ctx
 // 司令塔が落ちても、ゲームは今までどおり動き続け、裏で自動的につなぎ直す。
+// リセット(reset)は 10/31 から再読み込みせず待機画面へ戻す軟らかいリセット(play.mjs の __play.softReset)。?softreset=0 で従来の再読み込み。reload は常に完全な再読み込み。
 const q = new URLSearchParams(location.search);
 const remoteParam = q.get('remote');
 
@@ -89,11 +90,41 @@ export function startRemoteClient() {
     return s;
   }
 
-  function runCommand(cmd) {
-    if (cmd === 'reset') {
-      setTimeout(() => { stopped = true; try { ws?.close(); } catch { /* */ } location.reload(); }, 200);   // 返事が届いてから再読み込み
-      return { ok: true, msg: '最初からやり直します' };
+  // 完全な再読み込み（従来の reset）。管理画面の「完全リロード」、軟らかいリセットが使えない／失敗したときの保険。
+  function hardReload(msg) {
+    setTimeout(() => { stopped = true; try { ws?.close(); } catch { /* */ } location.reload(); }, 200);   // 返事が届いてから再読み込み
+    return { ok: true, msg };
+  }
+  // 10/31 軟らかいリセット: 再読み込みせず、どの局面からでも数秒以内に待機画面（次の客）へ戻す。?softreset=0 で従来（再読み込み）。
+  //   一時停止・液晶の復旧モード中も含む。例外、または 5 秒たっても待機に戻れなければ再読み込みに落とす（保険）。
+  const SOFT = q.get('softreset') !== '0', SOFT_LIMIT_MS = 5000;
+  let softWatch = null;
+  function softReset() {
+    const p = play(), ctrl = ctrlOf();
+    if (!SOFT || !p || !ctrl || typeof p.softReset !== 'function' || window.__startupError) return hardReload('最初からやり直します（再読み込み）');
+    clearTimeout(softWatch?.timer); const t0 = performance.now();
+    try {
+      if (paused) applyPause(false);   // 一時停止を解く（物理・液晶の映像・音・「一時停止中」の表示）
+      const before = p.loopDiagnostics?.().completedFrames ?? 0, info = p.softReset('remote');
+      const ok = ctrl.game.phase === 'Attract' && !window.__renderFault;
+      if (!ok) throw new Error('待機に戻れませんでした: ' + ctrl.game.phase);
+      // 5 秒の見張り: 描画が回り続けて（隠れたタブは除く）待機のままか。そうでなければ再読み込み
+      const timer = setTimeout(() => {
+        softWatch = null; const c = ctrlOf(), frames = (play()?.loopDiagnostics?.().completedFrames ?? 0) - before;
+        if (!c || window.__renderFault || (!document.hidden && !q.has('manual') && frames < 2)) { console.error('[remote] 軟らかいリセットの後、待機で動いていません。再読み込みします', { frames, phase: c?.game.phase }); hardReload(''); }
+      }, SOFT_LIMIT_MS);
+      softWatch = { timer };
+      console.log('[remote] 軟らかいリセット', info.from, '→ 待機', Math.round(performance.now() - t0) + 'ms');
+      return { ok: true, msg: '待機画面へ戻しました' };
+    } catch (e) {
+      console.error('[remote] 軟らかいリセットに失敗。再読み込みします', e);
+      return hardReload('軟らかいリセットに失敗したので再読み込みします: ' + String(e.message ?? e).slice(0, 40));
     }
+  }
+
+  function runCommand(cmd) {
+    if (cmd === 'reset') return softReset();
+    if (cmd === 'reload') return hardReload('完全に再読み込みします');   // 管理画面の「完全リロード」
     const p = play(), ctrl = ctrlOf();
     if (!p || !ctrl) return { ok: false, msg: '起動中です' };
     if (cmd === 'pause') { if (paused) return { ok: true, msg: 'すでに停止中' }; applyPause(true); return { ok: true, msg: '停止しました' }; }
