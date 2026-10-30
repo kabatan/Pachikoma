@@ -89,13 +89,28 @@ void main(){
   // 10/30 表示実寸描画（?dispfit=0 で従来）：球と最終合成を「画面に実際に映る画素数」（上限1440×2560）で描く。
   // 素材と座標は元の1440×2560のまま、表示の画素の中心（=ブラウザが縮小で読む位置）で読むので、映る画は同じ。
   const dispFit=!renderLite&&new URLSearchParams(globalThis.location?.search??'').get('dispfit')!=='0';
+  // 10/30 照明の基底を焼く（?framebake=0 で従来）：筐体の 8 区画の重み（uMF の2枚と uK/uKc/uRecolor）を、
+  // 区画の値が変わったときだけ 1/4 解像度で「重みの和」の形に焼く。最後の合成は和を補間して元の解像度で割るので、
+  // 筐体の輪郭で照明が暗く縁取られない。筐体の絵・輪郭・ロゴは元の解像度のまま。
+  const frameBake=pq.get('framebake')!=='0';
+  const frameF=frameBake?rt(W/S,H/S,2):null;
+  const sumK=(v,w)=>`ra.x*${v}[0]${w(0)}+ra.y*${v}[1]${w(1)}+ra.z*${v}[2]${w(2)}+ra.w*${v}[3]${w(3)}+rb.x*${v}[4]${w(4)}+rb.y*${v}[5]${w(5)}+rb.z*${v}[6]${w(6)}+rb.w*${v}[7]${w(7)}`;
+  const bakeFrame=frameBake?make(declarations+`
+uniform int uPBLayer;
+void main(){
+ vec2 uvA=vec2(gl_FragCoord.x*4.,2560.-gl_FragCoord.y*4.)/vec2(1440.,2560.);
+ vec4 ra=texture(uMF,vec3(uvA,0.)),rb=texture(uMF,vec3(uvA,1.));ra*=ra;rb*=rb;
+ if(uPBLayer==0)gl_FragColor=vec4(ra.x+ra.y+ra.z+ra.w+rb.x+rb.y+rb.z+rb.w,${sumK('uK',()=>'')},${sumK('uRecolor',()=>'')},ra.x+ra.y);
+ else gl_FragColor=vec4(${sumK('uK',i=>`*uKc[${i}]`)},0.);
+}`,{...U,uPBLayer:{value:0}}):null;
+  const frameDirty=frameBake?watch(U,['uMF','uK','uKc','uRecolor']):null;
   // Eight-bit sRGB storage, hardware-decoded to linear light once per sample.
   // These fixed F0/F4/B4/W4 bases replace repeated pow conversions over the frame.
   const input=U.uMA.value.image,n=W*H*4,linearBytes=new Uint8Array(n*4);
   [0,1,6,7].forEach((layer,i)=>linearBytes.set(input.data.subarray(layer*n,(layer+1)*n),i*n));
   const linear=new THREE.DataArrayTexture(linearBytes,W,H,4);
   linear.type=THREE.UnsignedByteType;linear.format=THREE.RGBAFormat;linear.colorSpace=THREE.SRGBColorSpace;
-  linear.minFilter=linear.magFilter=dispFit?THREE.LinearFilter:THREE.NearestFilter;linear.generateMipmaps=false;linear.needsUpdate=true;owned.push(linear);
+  linear.minFilter=linear.magFilter=dispFit||renderLite?THREE.LinearFilter:THREE.NearestFilter;linear.generateMipmaps=false;linear.needsUpdate=true;owned.push(linear);
   // Render the expensive sphere/composite passes at 720x1280, then present to
   // the native canvas. Keep all artwork, layout and occlusion in native coords.
   const renderScale=renderScaleQ;let RW=Math.round(W/renderScale),RH=Math.round(H/renderScale);
@@ -117,11 +132,11 @@ void main(){
   ballMaterial.fragmentShader=replace(ballMaterial.fragmentShader,'const float PS = 64.0, PT = 66.0;',`const float PS = ${compact.faceSize}.0, PT = ${compact.tileSize}.0;`);materials.push(ballMaterial);
   if(renderLite)ballMaterial.fragmentShader=ballMaterial.fragmentShader.replaceAll('gl_FragCoord',KFC);
   if(dispFit){ballMaterial.fragmentShader='uniform vec2 uPBK;\n'+ballMaterial.fragmentShader.replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*uPBK,gl_FragCoord.zw)');ballMaterial.uniforms.uPBK=uPBK;}
-  const extra={uPBBack:{value:back.texture},uPBFront:{value:front.texture},uPBFields:{value:fields.texture},uPBFrame:{value:linear},uPBTau:hr.composeMat.uniforms.uTau,
+  const extra={uPBBack:{value:back.texture},uPBFront:{value:front.texture},uPBFields:{value:fields.texture},uPBFrame:{value:linear},uPBFrameL:{value:frameF?.texture??null},uPBTau:hr.composeMat.uniforms.uTau,
     uPBLCD:{value:null},uPBRect:{value:new THREE.Vector4()},uPBPanel:{value:new THREE.Vector4()},uPBGain:{value:1},uPBLCDOn:{value:0}};
   const load=`
 uniform sampler2D uPBBack,uPBFront,uPBTau,uPBLCD;
-uniform highp sampler2DArray uPBFields,uPBFrame;
+uniform highp sampler2DArray uPBFields,uPBFrame,uPBFrameL;
 uniform vec4 uPBRect,uPBPanel;uniform float uPBGain;uniform int uPBLCDOn;
 vec4 prebakeC(ivec2 p){
  vec2 uv=(vec2(p)+.5)/vec2(1440.,2560.),px=vec2(gl_FragCoord.x,2560.-gl_FragCoord.y);
@@ -142,6 +157,19 @@ vec4 prebakeC(ivec2 p){
   shader=replace(shader,'vec3 l0 = s2l(s0), b4 = s2l(texture(uMA, vec3(uv, 6.0)).rgb), w4 = s2l(texture(uMA, vec3(uv, 7.0)).rgb);','vec3 l0 = texture(uPBFrame,vec3(uv,0.)).rgb, b4 = texture(uPBFrame,vec3(uv,2.)).rgb, w4 = texture(uPBFrame,vec3(uv,3.)).rgb;');
   shader=replace(shader,'vec3 l4 = s2l(f4);','vec3 l4 = texture(uPBFrame,vec3(uvA,1.)).rgb;');
   shader=replace(shader,'vec3 dyed = l2s(mix(s2l(f0.rgb), pattern * hue * kk, 1.0));','vec3 dyed = l2s(pattern * hue * kk);');
+  if(frameBake){
+    shader=region(shader,'    vec4 ra = texture(uMF, vec3(uvA, 0.0)), rb = texture(uMF, vec3(uvA, 1.0));','    if (f0.a > 0.001) {',
+      '    vec4 pf0 = texture(uPBFrameL, vec3(gl_FragCoord.xy / vec2(1440.,2560.), 0.)); vec3 pf1 = texture(uPBFrameL, vec3(gl_FragCoord.xy / vec2(1440.,2560.), 1.)).rgb;\n'+
+      '    float wsum = pf0.x + 1e-4; float kk = pf0.y / wsum; vec3 col = pf1 / max(pf0.y, 1e-4); float rc = pf0.z / wsum;\n');
+    shader=replace(shader,'lit = mix(lit, dyed, (ra.x + ra.y) / wsum);','lit = mix(lit, dyed, pf0.w / wsum);');
+    shader=replace(shader,'frameLit(f0.rgb, f4, kk, col, rc)','frameLitL(texture(uPBFrame,vec3(uvA,0.)).rgb, texture(uPBFrame,vec3(uvA,1.)).rgb, kk, col, rc)');
+    shader=replace(shader,'float logoBox(vec2 uv)',`vec3 frameLitL(vec3 l0, vec3 l4, float kk, vec3 col, float rc) {
+  vec3 d = l4 - l0, pos = max(d, 0.0), neg = min(d, 0.0);
+  float m = max(pos.r, max(pos.g, pos.b));
+  return l2s(l0 + min(kk, 1.0) * neg + kk * mix(pos, m * col, rc));
+}
+float logoBox(vec2 uv)`);
+  }
   if(renderLite){
     if(liteCrop)shader=replace(shader,'vec4 d=texelFetch(uD,p,0);','ivec2 pd=ivec2(__RAWFC__.xy);vec4 d=pd.y<textureSize(uD,0).y?texelFetch(uD,pd,0):vec4(0.);').replaceAll('gl_FragCoord',KFC).replaceAll('__RAWFC__','gl_FragCoord');
     else shader=shader.replace('vec4 d=texelFetch(uD,p,0);','vec4 d=texture(uD,uv);').replaceAll('gl_FragCoord',KFC);
@@ -192,7 +220,7 @@ vec4 prebakeC(ivec2 p){`);
   const backDirty=watch(hr.envBack.uniforms,Object.keys(hr.envBack.uniforms)),frontDirty=watch(hr.envFront.uniforms,Object.keys(hr.envFront.uniforms)),fieldDirty=fieldNames.map(names=>watch(U,names));
   const probePrevious=new Float32Array(16+hr.probes.sourceIndex.size*3);
   function probeChanged(){let i=0,dirty=!probeValid;const put=v=>{v=Math.fround(v??0);if(probePrevious[i]!==v){probePrevious[i]=v;dirty=true;}i++;};for(let n=0;n<8;n++){put(hr.frame.ea?.[n]);put(hr.frame.eb?.[n]);}for(const id of hr.probes.sourceIndex.keys()){const q=hr.frame.q?.[id],c=q?.rgb??q;put(c?.[0]);put(c?.[1]);put(c?.[2]);}probeValid=true;return dirty;}
-  function invalidate(){backDirty.invalidate();frontDirty.invalidate();for(const d of fieldDirty)d.invalidate();probeValid=false;}
+  function invalidate(){frameDirty?.invalidate();backDirty.invalidate();frontDirty.invalidate();for(const d of fieldDirty)d.invalidate();probeValid=false;}
   function drawField(target,pass,layer=0){
     const key=pass===bakeBack?'back':pass===bakeFront?'front':layer===1?'zone':'hole';
     const validProof=key==='back'?proofCurrent(backProof,pass):key==='front'?proofCurrent(frontProof,pass):true;
@@ -224,6 +252,7 @@ vec4 prebakeC(ivec2 p){`);
     r.setScissorTest(false);
     if(backDirty.changed())drawField(back,bakeBack);else stats.fieldReuses++;
     if(frontDirty.changed())drawField(front,bakeFront);else stats.fieldReuses++;
+    if(frameBake){if(frameDirty.changed()){for(let i=0;i<2;i++){bakeFrame.material.uniforms.uPBLayer.value=i;r.setRenderTarget(frameF,i);r.setViewport(0,0,frameF.width,frameF.height);r.render(bakeFrame.scene,hr.fsCam);}stats.frameBakes=(stats.frameBakes??0)+1;}else stats.frameReuses=(stats.frameReuses??0)+1;}
     for(let i=1;i<3;i++){if(fieldDirty[i].changed()){bakeFields.material.uniforms.uPBLayer.value=i;drawField(fields,bakeFields,i);}else stats.fieldReuses++;}
     if(hr.balls.count){if(probeChanged()){compact.compose(hr.frame);stats.probeUpdates++;}else stats.probeReuses++;}
     extra.uPBLCDOn.value=plate?.mesh.visible?1:0;
