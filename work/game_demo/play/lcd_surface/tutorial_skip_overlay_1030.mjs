@@ -30,12 +30,12 @@ export function createSkipOverlay({ x, y }) {
     c.beginPath(); c.arc(0, 0, R - 5, 0, Math.PI * 2); c.fillStyle = g; c.fill();
     c.beginPath(); c.arc(0, 2, R - 9, 0, Math.PI * 2); c.fillStyle = '#05060a'; c.fill();   // 溝
     const s = 1 - 0.09 * press, dy = 5 * press;   // 押し込み：小さくなって沈む
-    c.shadowColor = `rgba(255,${70 + 90 * glow | 0},40,${.35 + .65 * glow})`; c.shadowBlur = 10 + 34 * glow;
+    c.shadowColor = `rgba(${200 + 40 * glow | 0},${225 + 20 * glow | 0},255,${.3 + .7 * glow})`; c.shadowBlur = 10 + 36 * glow;
     const rr = (R - 12) * s;
     g = c.createRadialGradient(-rr * .3, -rr * .4 + dy, rr * .05, 0, dy, rr);
-    const l = 1 + .35 * glow;   // 光が強まる
-    const col = (r, gg, b) => `rgb(${Math.min(255, r * l) | 0},${Math.min(255, gg * l) | 0},${Math.min(255, b * l) | 0})`;
-    g.addColorStop(0, col(255, 150, 120)); g.addColorStop(.35, col(236, 44, 44)); g.addColorStop(.8, col(170, 14, 24)); g.addColorStop(1, col(100, 6, 14));
+    const lit = 0.78 + 0.22 * glow;   // 筐体の左ボタンは白。押すほど明るく(白は上限があるのでわずかに青白く光らせる)
+    const col = (r, gg, b) => `rgb(${Math.min(255, r * lit) | 0},${Math.min(255, gg * lit + 10 * glow) | 0},${Math.min(255, b * lit + 14 * glow) | 0})`;
+    g.addColorStop(0, col(255, 255, 255)); g.addColorStop(.4, col(238, 241, 248)); g.addColorStop(.8, col(190, 198, 214)); g.addColorStop(1, col(128, 136, 154));
     c.beginPath(); c.arc(0, dy, rr, 0, Math.PI * 2); c.fillStyle = g; c.fill(); c.shadowBlur = 0;
     const hi = c.createRadialGradient(-rr * .35, -rr * .5 + dy, 1, -rr * .35, -rr * .5 + dy, rr * .7);   // 艶
     hi.addColorStop(0, `rgba(255,255,255,${.75 - .35 * press})`); hi.addColorStop(1, 'rgba(255,255,255,0)');
