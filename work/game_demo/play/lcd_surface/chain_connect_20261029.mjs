@@ -3,7 +3,8 @@
 export function attachChainConnect(lcd,{controller}) {
   if(!lcd?.jp||lcd.chainConnect)return lcd;
   const dispatch=controller.dispatch;let game,advance;
-  const ready=()=>!lcd.jp.claimed&&!!lcd.choiceV20?.active;
+  let forceReady=false;   // 10/31 保険：選択画面が長く出られないときは、入力と数えを通す（固まらない）
+  const ready=()=>forceReady||(!lcd.jp.claimed&&!!lcd.choiceV20?.active);
   const bind=()=>{
     if(game===controller.game)return;
     if(game)game._advanceChainChoice=advance;
@@ -20,11 +21,24 @@ export function attachChainConnect(lcd,{controller}) {
     if(action==='fire'&&this.game.chainStatus?.inChallenge&&lcd.choiceV20?.holding)return false;
     return dispatch.call(this,action);
   };
-  lcd.chainConnect={get ready(){return ready();},offerSeconds:1.6,watchdogReleases:0};
+  lcd.chainConnect={get ready(){return ready();},offerSeconds:1.6,watchdogReleases:0,annForces:0,notReadyReleases:0,forceReadies:0};
   // 保険: 選択に入っているのに、払い出し・案内でも確定でもない JP の場面(導入・狙い等)が残っていると
   // ready() が false のままになり、入力が全部拒否される(ソフトロック)。2秒続いたらその場面を終わらせる。
-  const frame=lcd.frame.bind(lcd);let stale=0;
+  const frame=lcd.frame.bind(lcd);let stale=0,annWait=0,notReady=0,relOnce=false;
   lcd.frame=(dt,F)=>{
+    // 10/31 固まり対策：(1)告知の数えは映像が出ている間だけ。映像が出ないまま続くなら強制で出す（映像の終わり方を問わず、2秒で出せなければ数えだけ進める。配当・成功の映像が流れている間は最長8秒待つ）
+    //   (2)選択画面が出られないまま続くなら、3秒でJPの場面を終わらせ、さらに2秒で入力と制限時間を通す。
+    const g0=controller.game,d0=Math.min(dt,.1);
+    if(g0?.phase==='ChainChoice'&&g0.chainAnnouncing&&!lcd.rulesH?.state?.announceOn){
+      annWait+=d0;const mm=lcd.jp?.model,film=!!mm?.active&&/^(reward_|chain_success|chain_jp_land_|roulette_)/.test(mm.name??'');
+      if(annWait>(film?8:2)){annWait=0;lcd.chainAnnounceV09?.force?.('wait');lcd.chainConnect.annForces++;}
+    }else annWait=0;
+    if(g0?.phase==='ChainChoice'&&!g0.chainAnnouncing&&!ready()){
+      notReady+=d0;
+      if(notReady>3&&!relOnce){relOnce=true;if(lcd.jp?.model?.active){try{lcd.jp.model.stop('choice-notready');}catch{}lcd.chainConnect.notReadyReleases++;}}
+      if(notReady>5&&!forceReady){forceReady=true;lcd.chainConnect.forceReadies++;}
+    }else if(g0?.phase!=='ChainChoice'){notReady=0;forceReady=false;relOnce=false;}
+    else if(ready()&&!forceReady)notReady=0;
     const m=lcd.jp?.model,legit=!m||m.payout>0||['chain_offer','chain_confirm'].includes(m.name)||/^chain_announce_/.test(m.name??'');   // 継続告知 v09 の映像も正当
     if(game?.phase==='ChainChoice'&&lcd.jp?.claimed&&!lcd.choiceV20?.active&&!legit){
       stale+=dt;if(stale>2){stale=0;lcd.chainConnect.watchdogReleases++;m.stop('choice-watchdog');}

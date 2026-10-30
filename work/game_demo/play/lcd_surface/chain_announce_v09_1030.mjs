@@ -131,7 +131,7 @@ export async function attachChainAnnounceV09(lcd, { controller, log = () => {} }
   model.stop = (reason) => {
     const was = model.name, r = stop0(reason);
     if (/^(reward_|chain_success|chain_jp_land_)/.test(was ?? '')) note('stop', { was, reason: reason ?? 'end', pending: !!S.pending, phase: controller.game?.phase });
-    if ((reason === undefined || reason === 'end') && /^(reward_|chain_success|chain_jp_land_)/.test(was ?? '') && S.pending) start('after:' + was);
+    if (/^(reward_|chain_success|chain_jp_land_)/.test(was ?? '') && S.pending) start('after:' + was + ':' + (reason ?? 'end'));   // 10/31 終わり方を問わない（watchdog・video_error で切れても告知へ。以前は 'end' だけで、切れると告知が出ず規則の告知の数えも止まったまま固まった）
     return r;
   };
   // 旧の「継続できるよ」案内（chain_offer、rules_h が紫の暗幕＋2/3 を重ねる）は v09 では出さない：告知があれば告知へ、無ければ止める
@@ -182,6 +182,16 @@ export async function attachChainAnnounceV09(lcd, { controller, log = () => {} }
   const pv0 = jp.plainVideoSnapshot?.bind(jp);
   const overlayNow = () => { const w = jp.where(); if (!w || w.name !== ANNOUNCE_SCENES.repeat || !S.shown || S.shown.first) return false; const m = metaOf.repeat; return !!m && w.f >= m.choice_from - 1 && w.f < m.fade.start + m.fade.frames; };
   if (pv0) jp.plainVideoSnapshot = (v) => overlayNow() ? null : pv0(v);
-  lcd.chainAnnounceV09 = { state: S, number, metaOf, dispose() { off?.(); model.start = start0; model.stop = stop0; model.onEvent = on0; jp.drawDigits = dd0; if (pv0) jp.plainVideoSnapshot = pv0; } };
+  // 10/31 保険：告知の待ちが続いたとき（映像の読み込み遅れ・途中で切れた等）に、いま告知を出す。出せなければ規則の数えだけ進める（固まらない）
+  const force = (why) => {
+    if (!controller.game?.chainAnnouncing) return false;
+    if (isAnnounce() && model.active) return true;
+    if (!S.pending && !S.key) return false;
+    if (model.active && !isAnnounce()) stop0('announce-force');
+    if (S.pending && start('force:' + why)) return true;
+    const st = rulesH(); if (st) st.announceOn = true; note('force-count', { why });
+    return false;
+  };
+  lcd.chainAnnounceV09 = { state: S, number, metaOf, force, dispose() { off?.(); model.start = start0; model.stop = stop0; model.onEvent = on0; jp.drawDigits = dd0; if (pv0) jp.plainVideoSnapshot = pv0; } };
   return lcd;
 }
