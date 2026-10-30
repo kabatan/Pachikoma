@@ -5,7 +5,7 @@
 //   tex: THREE.Texture (premultiplyAlpha=true, flipY=true の canvas/動画)。w,h: テクスチャの画素寸法。
 //   (ax,ay): テクスチャ内の基準点(画素, 左上原点)。(x,y): 液晶 canvas 座標(画素, 左上原点)での配置先。
 //   rot: 時計回り(ラジアン、canvas の rotate と同じ向き)。sc: 拡大。alpha: 不透明度。add: true なら加算('lighter')。
-export const SPLIT_N = 10;
+export const SPLIT_N = 12;
 export const CANVAS_W = 1240, CANVAS_H = 1510;
 
 function splitUniforms(T) {

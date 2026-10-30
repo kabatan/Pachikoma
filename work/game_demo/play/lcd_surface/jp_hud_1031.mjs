@@ -23,11 +23,12 @@ const easeOut = (x) => 1 - (1 - clamp(x)) ** 3;
 const img = (u) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(Error('asset ' + u)); i.src = u; });
 const PLATE_OFS = { x: 240, y: 0 };          // 札の画像の左上（液晶 1152x1268 の座標）
 const PIVOT = { x: 580, y: 0 };
-const BASE = { sc: 0.78, dx: -209 };         // 札の置き場所：左寄せ・0.78倍（右上の全体の時計 x656〜1152・y102〜512 を避ける）               // 吊りの支点（札の揺れ・弾みの中心）
-const GR = { x: 250, y: 130, w: 650, h: 230 };   // 数字の canvas の置き場所（液晶座標）
-const FX = { x: 200, y: 20, w: 760, h: 500, k: 0.5 };   // 火花の canvas（半分の解像度で作り、2倍に伸ばす）
+const BASE = { sc: 0.95, dx: -247 };         // 札の置き場所：左寄せ・0.78倍（右上の全体の時計 x656〜1152・y102〜512 を避ける）               // 吊りの支点（札の揺れ・弾みの中心）
+const TX = { x: 0, y: 650, w: 1152, h: 270 }, MT = { x: 0, y: 905, w: 1152, h: 360 };   // 時間・個数の字の canvas／矢印メーターの canvas（液晶座標）   // 数字の canvas の置き場所（液晶座標）
+const FX = { x: 0, y: 0, w: 1152, h: 1268, k: 0.4 };   // 炎・火花の canvas（0.4倍の解像度で作り、伸ばす。入賞・カウントの間だけ更新）
+const CK = { x: 196, y: 880, w: 760, h: 300 };    // 巨大な残り時間の canvas（4A の手本のように画面の1割超の高さ。札とも右上の全体の時計とも重ならない画面下）
 // 札の中の数字の置き方（札 1x 座標。jp3/card/src/v05/compose.py と同じ。液晶座標は 2 倍）
-const LAY = { a: [152, 104, .68], to: [184, 104, .68], count: [226, 132, .84], ko: [262, 150, .74], clock: { c: [371, 130], s: .88, adv: 29, dadv: 15 } };
+const LAY = { a: [150, 106, .86], to: [190, 106, .86], count: [236, 134, 1.02], ko: [282, 152, .86], clock: { c: [371, 130], s: .88, adv: 29, dadv: 15 } };
 // 焦りの段（残り秒）。心拍の周期（秒）と強さ
 export const PANIC = { l1: 10, l2: 5, l3: 3, l4: 1.5, period: [0, 1.2, 0.9, 0.62, 0.5], power: [0, 0.22, 0.6, 0.9, 1.0] };
 export function panicLevel(st) {
@@ -50,7 +51,7 @@ function panicLamp(o, c) {
   const h = heart(frac((x.beat ?? c.clock) / P) * P, P);
   const col = lv === 1 ? AMB : RED;
   // 頭と足は心拍に合わせて強く、左右の柱は回転灯のように上下へ流れる
-  for (let i = 0; i < 8; i++) { const sweep = .5 + .5 * Math.cos(TAU * (c.clock * (.9 + .3 * lv) - [0, .04, .08, .8, .65, .2, .35, .5][i])); reg(o, i, (.08 + 1.0 * pw * h + .3 * pw * sweep), col); }
+  for (let i = 0; i < 8; i++) { const sweep = .5 + .5 * Math.cos(TAU * (c.clock * (.9 + .3 * lv) - [0, .04, .08, .8, .65, .2, .35, .5][i])); reg(o, i, (.08 + 1.0 * pw * h + .3 * pw * sweep) * (globalThis.__jpLedGain ?? 1), col); }
   // 液晶の見える範囲へ回り込む光(rings・white)は出さない：背景（竜宮）を染めない
   for (let j = 0; j < 4; j++) o.aR[j] = 0;
   o.white = 0;
@@ -80,18 +81,15 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
   const qs = new URLSearchParams(globalThis.location?.search ?? '');
   if (qs.get('jphud') === '0' || qs.get('jphud') === 'off') return lcd;
   if (!lcd?.production || lcd.jpHud || !lcd.jp) return lcd;
+  globalThis.__jpLedGain = qs.get('jphud_ledg') ? +qs.get('jphud_ledg') : 0.35;   // 囲いの赤が液晶の扉を桃色にくすませないよう弱める（0.35。測定 10/31）
   const SND = qs.get('jphud_snd') !== '0', LED = qs.get('jphud_led') !== '0';
   const A = new URL('./jp_hud_assets_1031/', import.meta.url);
-  const sets = {};
-  const loadSet = async (style, size) => {
-    const d = new URL(`glyphs/${style}/${size}/`, A), meta = await (await fetch(new URL('glyphs.json', d))).json();
-    const imgs = {}; await Promise.all(Object.entries(meta.glyphs).map(async ([ch, g]) => { imgs[ch] = await img(new URL(g.file, d).href); }));
-    return { meta, imgs };
-  };
-  let plateI, warnI, emitI;
+  const FIRE = await img(new URL('fx/fire_9049.jpg', A).href).catch(() => null);   // 実写の炎（Pixabay 9049, chris2far・黒地・加算で使う）。6x3 の 384x335 のコマ
+  const A2 = new URL('./jp_hud2_assets_1031/', import.meta.url), H2 = {};
   try {
-    [plateI, warnI, emitI] = await Promise.all(['plate', 'plate_warn', 'plate_emit'].map((n) => img(new URL(n + '.png', A).href)));
-    for (const st of ['gold', 'ember']) for (const sz of ['big', 'clk']) (sets[st] ??= {})[sz] = await loadSet(st, sz);
+    const names = ['chev_off', 'chev_on', 'chev_glow', 'tube', 'lab_a', 'lab_to', 'lab_ko', 'lab_colon', 'lab_dot']; for (const v of 'nw') for (let d = 0; d < 10; d++) names.push(`d${d}_${v}`);
+    await Promise.all(names.map(async (n) => { H2[n] = await img(new URL(n + '.png', A2).href); }));
+    H2.meta = await (await fetch(new URL('meta.json', A2))).json();
   } catch (e) { console.warn('[jp-hud] assets', e); return lcd; }
   const model = lcd.jp.model;
   let CD = null;   // 残り3・2・1秒の巨大な数字（ember 面の立体数字・Blender SCALE=8）
@@ -100,80 +98,120 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
   const note = (k, d = {}) => { S.events.push({ k, at: +S.clock.toFixed(2), ...d }); if (S.events.length > 60) S.events.shift(); log('jphud:' + k, d); };
 
   // ---- 動かない絵の texture ----
-  const T = { plate: layerTexture(THREE, plateI), warn: layerTexture(THREE, warnI), emit: layerTexture(THREE, emitI) };
+  const T = {};
   const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
   // 縁の赤（中は透明・縁へ向かって濃く）
-  const vigC = mk(288, 317); { const x = vigC.getContext('2d'), g = x.createRadialGradient(144, 158, 40, 144, 158, 215);
-    g.addColorStop(0, 'rgba(160,0,8,0)'); g.addColorStop(0.6, 'rgba(170,0,10,0.0)'); g.addColorStop(0.82, 'rgba(210,6,14,0.62)'); g.addColorStop(1, 'rgba(130,0,6,0.97)'); x.fillStyle = g; x.fillRect(0, 0, 288, 317); }
+  const vigC = mk(288, 317); { const x = vigC.getContext('2d'); x.save(); x.translate(144, 158.5); x.scale(1, 317 / 288); const g = x.createRadialGradient(0, 0, 20, 0, 0, 150);
+    g.addColorStop(0, 'rgba(160,0,8,0)'); g.addColorStop(0.76, 'rgba(170,0,10,0.0)'); g.addColorStop(0.9, 'rgba(225,8,16,0.38)'); g.addColorStop(0.97, 'rgba(235,10,16,0.85)'); g.addColorStop(1, 'rgba(170,0,8,1.0)'); x.fillStyle = g; x.fillRect(-150, -170, 300, 340); x.restore(); }   // 縁へ向かって赤くなる（四辺とも。中央は透明）
   T.vig = layerTexture(THREE, vigC);
   // 警告灯の光束（回転灯。光源のにじみ＋にじんだ扇形の光）
   const beamC = mk(900, 900); { const x = beamC.getContext('2d'), tmp = mk(900, 900), t = tmp.getContext('2d');
     const g = t.createRadialGradient(450, 450, 10, 450, 450, 430); g.addColorStop(0, 'rgba(255,90,60,0.95)'); g.addColorStop(0.35, 'rgba(255,40,30,0.55)'); g.addColorStop(1, 'rgba(255,20,10,0)');
-    t.fillStyle = g; t.beginPath(); t.moveTo(450, 450); t.arc(450, 450, 430, -0.36, 0.36); t.closePath(); t.fill();
+    t.fillStyle = g; t.beginPath(); t.moveTo(450, 450); t.arc(450, 450, 430, -0.36, 0.36); t.closePath(); t.fill(); t.beginPath(); t.moveTo(450, 450); t.arc(450, 450, 430, Math.PI - 0.36, Math.PI + 0.36); t.closePath(); t.fill();   // 二灯の回転灯（180°反対に光束が出る）
     x.filter = 'blur(26px)'; x.drawImage(tmp, 0, 0); x.filter = 'none';
     const lg = x.createRadialGradient(450, 450, 0, 450, 450, 120); lg.addColorStop(0, 'rgba(255,230,210,0.95)'); lg.addColorStop(0.3, 'rgba(255,70,50,0.7)'); lg.addColorStop(1, 'rgba(255,20,10,0)'); x.fillStyle = lg; x.fillRect(330, 330, 240, 240); }
   T.beam = layerTexture(THREE, beamC);
   // 数字・火花の動く canvas
-  const gC = mk(GR.w, GR.h), gx = gC.getContext('2d'); T.glyph = layerTexture(THREE, gC);
+  const tC = mk(TX.w, TX.h), tx = tC.getContext('2d'); T.txt = layerTexture(THREE, tC);
+  const mC = mk(MT.w, MT.h), mt = mC.getContext('2d'); T.met = layerTexture(THREE, mC);
   const fC = mk(FX.w * FX.k, FX.h * FX.k), fx = fC.getContext('2d'); T.fx = layerTexture(THREE, fC);
   if (CD) for (const k of ['1', '2', '3']) T['cd' + k] = layerTexture(THREE, CD.imgs[k]);
   // 火花のにじみ素材（輪郭を持たない柔らかい点）
   const spr = {}; for (const [k, c] of Object.entries({ w: '255,250,230', y: '255,210,90', o: '255,130,30', r: '255,50,20' })) {
     const s = mk(64, 64), x = s.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, `rgba(${c},1)`); g.addColorStop(0.35, `rgba(${c},0.55)`); g.addColorStop(1, `rgba(${c},0)`); x.fillStyle = g; x.fillRect(0, 0, 64, 64); spr[k] = s; }
 
-  // ---- 数字を描く ----
-  const putGlyph = (set, size, ch, cx, cy, s, k = 1, al = 1, dy = 0) => {
-    const m = sets[set][size], g = m.meta.glyphs[ch], im = m.imgs[ch]; if (!g || !im) return;
-    const sc = m.meta.scale || 1, w = g.w * s * 2 / sc, h = g.h * s * 2 / sc;
-    const ccx = cx * 2 - GR.x, ccy = cy * 2 - GR.y + dy;                          // 文字の中心(原点)の液晶座標
-    const x = (g.ox * s) * 2, y = (g.oy * s) * 2;
-    gx.save(); gx.globalAlpha = al; gx.translate(ccx, ccy); gx.scale(k, k);
-    gx.shadowColor = 'rgba(0,0,0,.55)'; gx.shadowBlur = 8 * k; gx.shadowOffsetY = 3;
-    gx.drawImage(im, x, y, w, h); gx.restore();
-  };
-  const drawGlyphs = (st, lvl, heartV, pw) => {
-    gx.clearRect(0, 0, GR.w, GR.h);
-    const set = lvl >= 2 ? 'ember' : 'gold', need = Math.max(0, st.threshold - st.count);
-    putGlyph(set, 'big', 'あ', LAY.a[0], LAY.a[1], LAY.a[2]); putGlyph(set, 'big', 'と', LAY.to[0], LAY.to[1], LAY.to[2]);
-    // 個数：替わった直後 0.35 秒は、古い数字が下へ落ち、新しい数字が大きく叩きつけられる
-    const cc = S.countChange, a = cc ? S.clock - cc.at : 9;
-    if (cc && a < 0.35) {
-      const u = clamp(a / 0.35);
-      putGlyph(set, 'big', String(cc.from), LAY.count[0], LAY.count[1], LAY.count[2], 1, 1 - clamp(a / 0.12), clamp(a / 0.12) * 40);
-      const pop = a < 0.1 ? 2.2 - 1.2 * (a / 0.1) ** 2 : 1 + 0.18 * Math.exp(-(a - 0.1) * 12) * Math.cos((a - 0.1) * 34);
-      putGlyph(set, 'big', String(need), LAY.count[0], LAY.count[1], LAY.count[2], pop, clamp(a / 0.05));
-    } else putGlyph(set, 'big', String(need), LAY.count[0], LAY.count[1], LAY.count[2], 1 + (lvl >= 2 ? 0.07 * pw * heartV : 0));
-    putGlyph(set, 'big', '個', LAY.ko[0], LAY.ko[1], LAY.ko[2]);
-    // 時計 SS.cc
-    const tl = Math.max(0, st.timeLeft), ss = Math.min(99, Math.floor(tl)), cc2 = Math.floor((tl - Math.floor(tl)) * 100) % 100;
-    const txt = String(ss).padStart(2, '0') + '.' + String(cc2).padStart(2, '0'), C = LAY.clock, adv = C.adv * C.s, dadv = C.dadv * C.s, tot = 4 * adv + dadv;
-    const ks = 1 + (lvl >= 2 ? (0.1 + 0.08 * (lvl - 2)) * heartV * pw : 0);
-    let x = C.c[0] - tot / 2;
-    for (const ch of txt) {
-      if (ch === '.') { putGlyph(set, 'clk', '.', x + dadv / 2, C.c[1], C.s, ks); x += dadv; }
-      else { putGlyph(set, 'clk', ch, x + adv / 2, C.c[1], C.s, ks); x += adv; }
+  // ---- 数字・メーターを描く（北斗無双「無双チャージ」の並び：上段=あと◯個＋SS:cc、下段=矢印メーター）----
+  const timeText = (st) => { const tl = Math.max(0, st.timeLeft), ss = Math.min(99, Math.floor(tl)), cc = Math.floor((tl - Math.floor(tl)) * 100) % 100; return String(ss).padStart(2, '0') + ':' + String(cc).padStart(2, '0'); };
+  const dg = (c, im, x, y, sc, al = 1, shadow = 10) => { const w = im.width * sc, h = im.height * sc; c.save(); c.globalAlpha = al; c.shadowColor = 'rgba(0,0,0,.55)'; c.shadowBlur = shadow; c.shadowOffsetY = 4; c.drawImage(im, x - w / 2, y - h / 2, w, h); c.restore(); };
+  const DS = 0.80, ADV = 0.80;
+  const drawText = (st, lvl, heartV, pw) => {
+    tx.clearRect(0, 0, TX.w, TX.h);
+    const v = lvl >= 2 ? 'w' : 'n', cy = TX.h * 0.52, k = 1 + (lvl >= 2 ? (0.06 + 0.06 * (lvl - 2)) * heartV * pw : lvl === 1 ? 0.012 * Math.sin(S.clock * TAU * 0.9) : 0);
+    // 右：SS:cc（右端で揃える）
+    const dw = H2.d0_n.width * DS * ADV, cw = H2.lab_colon.width * DS * 0.62, tot = 4 * dw + cw; let x = TX.w - 46 - tot * k;
+    for (const ch of timeText(st)) {
+      if (ch === ':') { dg(tx, H2.lab_colon, x + cw * k / 2, cy + 6, DS * 0.95 * k); x += cw * k; }
+      else { dg(tx, H2['d' + ch + '_' + v], x + dw * k / 2, cy, DS * k); x += dw * k; }
     }
-    T.glyph.needsUpdate = true;
+    // 左：あと ◯ 個
+    const need = Math.max(0, st.threshold - st.count), cc = S.countChange, a = cc ? S.clock - cc.at : 9, LS = 0.66;
+    let lx = 40;
+    dg(tx, H2.lab_a, lx + H2.lab_a.width * LS / 2, cy + 34, LS); lx += H2.lab_a.width * LS * 0.92;
+    dg(tx, H2.lab_to, lx + H2.lab_to.width * LS / 2, cy + 34, LS); lx += H2.lab_to.width * LS + 16;
+    const nw = H2.d0_n.width * DS * 1.08;
+    if (cc && a < 0.35) {
+      const old = H2['d' + cc.from + '_' + v]; const f = clamp(a / 0.12); if (old && f < 1) dg(tx, old, lx + nw / 2, cy + f * 50, DS * 1.08, 1 - f);
+      const pop = a < 0.1 ? 2.1 - 1.1 * (a / 0.1) ** 2 : 1 + 0.16 * Math.exp(-(a - 0.1) * 12) * Math.cos((a - 0.1) * 34);
+      dg(tx, H2['d' + need + '_' + v], lx + nw / 2, cy, DS * 1.08 * pop, clamp(a / 0.05));
+    } else dg(tx, H2['d' + need + '_' + v], lx + nw / 2, cy, DS * 1.08 * (1 + (lvl >= 2 ? 0.07 * pw * heartV : 0)));
+    lx += nw + 12;
+    dg(tx, H2.lab_ko, lx + H2.lab_ko.width * LS / 2, cy + 34, LS);
+    T.txt.needsUpdate = true;
+  };
+  const meterLayout = (N) => { const s = clamp(1040 / ((N - 1) * 184 + 260), 0.7, 1.3), adv = 184 * s, w = (N - 1) * adv + 260 * s, x0 = (MT.w - w) / 2; return { s, adv, w, x0, cy: MT.h / 2 + 4 }; };
+  const chevC = (i, N) => { const L = meterLayout(N); return { x: MT.x + L.x0 + i * L.adv + 130 * L.s, y: MT.y + L.cy }; };
+  const drawMeter = (st, lvl, heartV, pw) => {
+    mt.clearRect(0, 0, MT.w, MT.h);
+    const N = clamp(st.threshold | 0, 1, 6), fill = clamp(st.count | 0, 0, N), L = meterLayout(N), h2 = 0.5 * H2.chev_on.width / H2.meta.chev[0];   // 画像は 2x
+    const cvw = H2.chev_on.width * 0.5 * L.s, cvh = H2.chev_on.height * 0.5 * L.s, ck = S.clock;
+    // 上の鋼管
+    { const tw = L.w + 70 * L.s, th = 30 * L.s; mt.save(); mt.shadowColor = 'rgba(0,0,0,.6)'; mt.shadowBlur = 12; mt.shadowOffsetY = 5; mt.drawImage(H2.tube, L.x0 - 35 * L.s, L.cy - cvh / 2 + 26 * L.s - th * 0.5, tw, th); mt.restore(); }
+    const cc = S.countChange, a = cc ? ck - cc.at : 9;
+    for (let i = 0; i < N; i++) {
+      const lit = i < fill, cx = L.x0 + i * L.adv + 130 * L.s, cyy = L.cy;
+      const pop = lit && i === fill - 1 && a < 0.5 ? 1 + 0.16 * Math.exp(-a * 9) * Math.cos(a * 30) : 1;
+      mt.save(); mt.translate(cx, cyy); mt.scale(pop, pop); mt.shadowColor = 'rgba(0,0,0,.6)'; mt.shadowBlur = 14; mt.shadowOffsetY = 6;
+      mt.drawImage(lit ? H2.chev_on : H2.chev_off, -cvw / 2, -cvh / 2, cvw, cvh); mt.restore();
+      if (lit) {
+        const fl = 0.8 + 0.2 * Math.sin(ck * 23 + i * 1.7) + 0.1 * Math.sin(ck * 41 + i);
+        mt.save(); mt.globalCompositeOperation = 'lighter'; mt.translate(cx, cyy); mt.scale(pop, pop);
+        mt.globalAlpha = 0.45 * fl; mt.drawImage(H2.chev_glow, -cvw / 2, -cvh / 2, cvw, cvh);
+        if (i === fill - 1 && a < 0.35) { mt.globalAlpha = 0.9 * (1 - a / 0.35); mt.drawImage(H2.chev_on, -cvw / 2, -cvh / 2, cvw, cvh); }
+        mt.restore();
+      } else if (lvl >= 2) {   // まだ灯っていない矢印が、心拍に合わせて赤く脈打つ（早く灯せ）
+        mt.save(); mt.globalCompositeOperation = 'lighter'; mt.translate(cx, cyy); mt.globalAlpha = clamp(0.5 * pw * (0.3 + 0.7 * heartV)); mt.drawImage(H2.chev_glow, -cvw / 2, -cvh / 2, cvw, cvh); mt.restore();
+      }
+    }
+    T.met.needsUpdate = true;
   };
 
-  // ---- 火花（入賞） ----
+  // ---- 火花・炎（入賞・カウント） ----
   let seed = 7; const R = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const plateXY = (lx, ly) => ({ x: PIVOT.x + (lx - PIVOT.x) * BASE.sc + BASE.dx, y: PIVOT.y + (ly - PIVOT.y) * BASE.sc });
   const burst = () => {
-    const ox = LAY.count[0] * 2, oy = LAY.count[1] * 2;
-    for (let i = 0; i < 46; i++) { const a = R() * TAU, v = 240 + R() * 620; S.fx.push({ k: 's', at: S.clock, x: ox, y: oy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, life: .45 + R() * .5, r: 7 + R() * 12 }); }
-    for (let i = 0; i < 16; i++) S.fx.push({ k: 'f', at: S.clock, x: 330 + R() * 360, y: 400 + R() * 12, vx: (R() - .5) * 90, vy: -(140 + R() * 220), life: .7 + R() * .5, r: 36 + R() * 40 });
-    S.fx.push({ k: 'b', at: S.clock, x: ox, y: oy, life: .5, r: 190 });
+    const N = clamp((S.st?.threshold | 0) || 4, 1, 6), o = chevC(clamp((S.st?.count | 0) - 1, 0, N - 1), N), top = { x: o.x, y: o.y - 20 };
+    S.fx.push({ k: 'F', at: S.clock, x: top.x, y: top.y + 30, size: 760, life: 0.8, al: 0.9 });   // 実写の炎が札の上へ噴く
+    for (let i = 0; i < 46; i++) { const a = R() * TAU, v = 240 + R() * 620; S.fx.push({ k: 's', at: S.clock, x: o.x, y: o.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, life: .45 + R() * .5, r: 7 + R() * 12 }); }
+    S.fx.push({ k: 'b', at: S.clock, x: o.x, y: o.y, life: .5, r: 190 });
+  };
+  const tickFx = (n) => {   // 3→2→1：叩きつけの光と炎
+    S.tickAt = S.clock;
+    S.fx.push({ k: 'F', at: S.clock, x: W / 2, y: 760, size: 1250, life: 0.6, al: 0.7 });
+    S.fx.push({ k: 'b', at: S.clock, x: W / 2, y: 700, life: .45, r: 460 });
+    for (let i = 0; i < 40; i++) { const a = R() * TAU, v = 400 + R() * 800; S.fx.push({ k: 's', at: S.clock, x: W / 2, y: 700, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .4 + R() * .5, r: 8 + R() * 14 }); }
+  };
+  const fm = mk(384, 335), fmx = fm.getContext('2d');
+  const fireFrame = (u, size, al) => {   // 実写の炎のコマを、縁をなじませて fx へ
+    if (!FIRE) return;
+    const idx = 1 + Math.min(14, Math.floor(u * 15)), cx0 = (idx % 6) * 384, cy0 = Math.floor(idx / 6) * 335;
+    fmx.globalCompositeOperation = 'source-over'; fmx.clearRect(0, 0, 384, 335); fmx.drawImage(FIRE, cx0, cy0, 384, 335, 0, 0, 384, 335);
+    fmx.globalCompositeOperation = 'destination-in'; const g = fmx.createRadialGradient(192, 167, 40, 192, 167, 190); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.65, 'rgba(0,0,0,0.9)'); g.addColorStop(1, 'rgba(0,0,0,0)'); fmx.fillStyle = g; fmx.fillRect(0, 0, 384, 335);
+    return { al, size };
   };
   const drawFx = () => {
     fx.setTransform(1, 0, 0, 1, 0, 0); fx.clearRect(0, 0, fC.width, fC.height); fx.globalCompositeOperation = 'lighter'; fx.setTransform(FX.k, 0, 0, FX.k, 0, 0);
     S.fx = S.fx.filter((p) => S.clock - p.at < p.life);
     for (const p of S.fx) {
       const a = S.clock - p.at, u = a / p.life, x = p.x - FX.x, y = p.y - FX.y;
-      if (p.k === 'b') { const r = p.r * (0.6 + .9 * easeOut(u)); fx.globalAlpha = (1 - u) ** 2 * .95; fx.drawImage(spr.w, x - r, y - r, r * 2, r * 2); fx.globalAlpha = (1 - u) * .6; fx.drawImage(spr.o, x - r * 1.4, y - r * 1.4, r * 2.8, r * 2.8); }
+      if (p.k === 'F') { const r = fireFrame(u, p.size, p.al); if (r) { const w = p.size, h = p.size * 335 / 384; fx.globalAlpha = p.al * Math.min(1, u * 10) * (1 - u) ** 0.8; fx.drawImage(fm, x - w / 2, y - h * 0.62, w, h); } }
+      else if (p.k === 'b') { const r = p.r * (0.6 + .9 * easeOut(u)); fx.globalAlpha = (1 - u) ** 2 * .95; fx.drawImage(spr.w, x - r, y - r, r * 2, r * 2); fx.globalAlpha = (1 - u) * .6; fx.drawImage(spr.o, x - r * 1.4, y - r * 1.4, r * 2.8, r * 2.8); }
       else if (p.k === 's') { const px = x + p.vx * a * (1 - .35 * u), py = y + p.vy * a * (1 - .35 * u) + 500 * a * a, r = p.r * (1 - .7 * u); const c = u < .3 ? spr.w : u < .65 ? spr.y : spr.o;
         fx.globalAlpha = (1 - u) * .95; fx.drawImage(c, px - r, py - r, r * 2, r * 2); fx.globalAlpha = (1 - u) * .4; fx.drawImage(c, px - p.vx * .02 - r, py - p.vy * .02 - r, r * 2, r * 2); }
-      else { const px = x + p.vx * a + Math.sin(a * 9 + p.x) * 14, py = y + p.vy * a, r = p.r * (1 - .5 * u) * (0.8 + .2 * Math.sin(a * 30 + p.x)); fx.globalAlpha = Math.min(1, u * 8) * (1 - u) * .7; fx.drawImage(u < .35 ? spr.y : u < .7 ? spr.o : spr.r, px - r, py - r * 1.3, r * 2, r * 2.6); }
     }
+    { const st = S.st; if (st && S.on) {   // 灯った矢印から実写の炎がゆらめく
+      const N = clamp(st.threshold | 0, 1, 6), fill = clamp(st.count | 0, 0, N), L = meterLayout(N);
+      for (let i = 0; i < fill; i++) { const c = chevC(i, N), u = frac(S.clock * 1.25 + i * 0.37), r = fireFrame(u, 1, 1); if (!r) continue; const w = 330 * L.s, h = w * 335 / 384;
+        fx.globalAlpha = 0.5 + 0.12 * Math.sin(S.clock * 19 + i * 2); fx.drawImage(fm, c.x - FX.x - w / 2, c.y - FX.y - h * 0.78, w, h); } } }
     fx.globalAlpha = 1; fx.globalCompositeOperation = 'source-over'; T.fx.needsUpdate = true;
   };
 
@@ -208,6 +246,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
       S.lastCount = c;
       const lvl = panicLevel(st); if (lvl !== S.lvl) { note('level', { lvl, t: +st.timeLeft.toFixed(2) }); }
       S.lvl = lvl;
+      { const n = lvl >= 3 ? Math.ceil(st.timeLeft - 1e-6) : 0; if (n >= 1 && n <= 3 && n !== S.lastCd) { S.lastCd = n; tickFx(n); note('tick', { n }); } else if (!n) S.lastCd = 0; }
       // 心拍
       if (lvl >= 1) {
         const P = PANIC.period[lvl]; S.beatT += dt; if (S.beatT >= P) { S.beatT -= P; S.dubDone = false; if (lvl >= 2 && SND) { sfx(eng(), 'lub'); if (lvl >= 3) sfx(eng(), 'buon', -13); } }
@@ -216,8 +255,8 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
       if (LED && lvl >= 2) setCue(true, { lvl, beat: S.beatT + 0 }); else setCue(false);
     }
     // 数字・火花の canvas
-    const st2 = S.st; if (st2) { const lvl = S.lvl, P = PANIC.period[lvl] || 1, h = lvl >= 1 ? heart(S.beatT, P) : 0; drawGlyphs(st2, lvl, h, PANIC.power[lvl]); }
-    if (S.fx.length || S.fxDirty) { drawFx(); S.fxDirty = S.fx.length > 0; }
+    const st2 = S.st; if (st2) { const lvl = S.lvl, P = PANIC.period[lvl] || 1, h = lvl >= 1 ? heart(S.beatT, P) : 0; drawText(st2, lvl, h, PANIC.power[lvl]); drawMeter(st2, lvl, h, PANIC.power[lvl]); }
+    if (S.fx.length || S.fxDirty || (S.on && (S.st?.count | 0) > 0)) { drawFx(); S.fxDirty = S.fx.length > 0; }
   };
 
   // ---- 層（下から）：縁の赤・左右の警告灯・札（札・赤い札・発光・数字）・火花 ----
@@ -230,7 +269,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     const ck = S.clock, lvl = S.lvl, P = PANIC.period[lvl] || 1, pw = PANIC.power[lvl], h = lvl >= 1 ? heart(S.beatT, P) : 0;
     const out = [];
     // 札の動き：降りてきて弾む／上へ引き上がる
-    const grp = { dx: BASE.dx, dy: 0, rot: 0.006 * Math.sin(ck * 1.3), sc: BASE.sc };   // 右上の「残り◯秒」（ゲーム全体の時計）に重ならない位置へ寄せる
+    const grp = { dx: 0, dy: 0, rot: 0.006 * Math.sin(ck * 1.3), sc: BASE.sc };   // 右上の「残り◯秒」（ゲーム全体の時計）に重ならない位置へ寄せる
     let vis = 1;
     if (S.on) {
       const u = ck - S.enterAt, T1 = 0.32;
@@ -240,33 +279,31 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     const ha = ck - S.hitAt; if (ha < 0.4) grp.dy += 12 * Math.exp(-ha * 14) * Math.cos(ha * 40);   // 入賞：札が弾む
     const ma = ck - S.missAt; if (ma < 0.45) { grp.dx += Math.sin(ma * 85) * 12 * Math.exp(-ma * 9); grp.rot += Math.sin(ma * 60) * 0.02 * Math.exp(-ma * 9); }   // 外れ：小さく揺れる
     grp.sc *= 1 + (lvl >= 1 ? 0.05 * pw * h + (lvl === 1 ? 0.012 * (.5 + .5 * Math.sin(ck * TAU * 0.9)) : 0) : 0);
+    { const ta = ck - (S.tickAt ?? -9); if (ta < 0.45) { const e = Math.exp(-ta * 10); grp.dx += Math.sin(ta * 95) * 16 * e; grp.dy += Math.cos(ta * 80) * 12 * e; } }
     if (lvl >= 3) { grp.dx += Math.sin(ck * 53) * 3 * pw; grp.dy += Math.cos(ck * 47) * 2 * pw; }
     // 縁の赤・警告灯（前面のみ。背景は染めない）
     if (lvl >= 1 && S.on) {
-      const va = lvl === 1 ? 0.2 + 0.2 * Math.sin(ck * TAU * 0.9) ** 2 : clamp(0.12 + 0.85 * pw * h + 0.2 * pw);
+      const va = lvl === 1 ? 0.28 + 0.25 * Math.sin(ck * TAU * 0.9) ** 2 : clamp(0.3 + 0.8 * pw * h + 0.25 * pw);
       out.push({ tex: T.vig, w: 288, h: 317, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 4, alpha: clamp(va), add: false });
       if (lvl >= 2) {
-        const al = clamp(0.55 + 0.6 * pw * (0.4 + 0.6 * h)), rot = ck * TAU * (0.8 + 0.25 * lvl);
-        out.push({ tex: T.beam, w: 900, h: 900, ax: 450, ay: 450, x: PX + 20, y: PY + 1010, rot, sc: 1.5, alpha: al, add: true });
-        out.push({ tex: T.beam, w: 900, h: 900, ax: 450, ay: 450, x: PX + W - 20, y: PY + 1010, rot: rot + Math.PI * 0.9, sc: 1.5, alpha: al, add: true });
+        const al = clamp(0.8 + 0.5 * pw * (0.4 + 0.6 * h)), rot = ck * TAU * (0.8 + 0.25 * lvl);
+        out.push({ tex: T.beam, w: 900, h: 900, ax: 450, ay: 450, x: PX + 20, y: PY + 1010, rot, sc: 1.9, alpha: al, add: true });
+        out.push({ tex: T.beam, w: 900, h: 900, ax: 450, ay: 450, x: PX + W - 20, y: PY + 1010, rot: rot + Math.PI * 0.9, sc: 1.9, alpha: al, add: true });
       }
     }
-    // 札
-    out.push(place(T.plate, 684, 416, PLATE_OFS.x, PLATE_OFS.y, grp, { alpha: vis }));
-    const wa = lvl >= 2 ? clamp(0.25 + 0.75 * pw * (0.4 + 0.6 * h)) : lvl === 1 ? 0.12 * (.5 + .5 * Math.sin(ck * TAU * 0.9)) : 0;
-    if (wa > 0.01) out.push(place(T.warn, 684, 416, PLATE_OFS.x, PLATE_OFS.y, grp, { alpha: wa * vis }));
-    const ea = clamp(0.12 + 0.9 * Math.exp(-(ck - S.hitAt) * 6) + (lvl >= 2 ? 0.5 * pw * h : 0));
-    out.push(place(T.emit, 684, 416, PLATE_OFS.x, PLATE_OFS.y, grp, { alpha: ea * vis, add: true }));
-    out.push(place(T.glyph, GR.w, GR.h, GR.x, GR.y, grp, { alpha: vis }));
+    // 札はやめた：上段（あと◯個・SS:cc）と下段（矢印メーター）。下から競り上がり、入賞で弾み、外れで揺れる
+    { const ty = -grp.dy, ta = ck - (S.tickAt ?? -9), sh = ta < 0.5 ? Math.exp(-ta * 9) : 0;
+      out.push({ tex: T.txt, w: TX.w, h: TX.h, ax: 0, ay: 0, x: PX + TX.x + grp.dx + Math.sin(ck * 61) * 7 * sh, y: PY + TX.y + ty * 0.8 + Math.cos(ck * 53) * 6 * sh, rot: 0, sc: 1, alpha: vis });
+      out.push({ tex: T.met, w: MT.w, h: MT.h, ax: 0, ay: 0, x: PX + MT.x + grp.dx + Math.sin(ck * 59) * 6 * sh, y: PY + MT.y + ty + Math.cos(ck * 47) * 6 * sh, rot: 0, sc: 1, alpha: vis }); }
     // 残り3秒から：巨大な数字が毎秒叩きつけられる（心拍と同じ拍で脈打つ）
     if (CD && S.on && S.st && lvl >= 3) {
       const n = Math.ceil(S.st.timeLeft - 1e-6), tx = T['cd' + n];
       if (tx && n >= 1 && n <= 3) {
         const u = n - S.st.timeLeft, g = CD.meta.glyphs[String(n)], hh = 640 / g.h, slam = u < 0.12 ? 1.8 - 0.8 * (u / 0.12) ** 2 : 1 + 0.06 * h * pw - 0.05 * clamp((u - .12) / .8);
-        out.push({ tex: tx, w: g.w, h: g.h, ax: g.w / 2, ay: g.h / 2, x: PX + W / 2 + Math.sin(u * 90) * 10 * Math.exp(-u * 12), y: PY + 700, rot: 0, sc: hh * slam, alpha: 0.9 * Math.min(1, u / 0.03) * (0.85 + 0.15 * h), add: false });
+        out.push({ tex: tx, w: g.w, h: g.h, ax: g.w / 2, ay: g.h / 2, x: PX + W / 2 + Math.sin(u * 90) * 10 * Math.exp(-u * 12), y: PY + 700, rot: 0, sc: hh * slam, alpha: Math.min(1, u / 0.02), add: false });
       }
     }
-    if (S.fx.length) out.push({ tex: T.fx, w: fC.width, h: fC.height, ax: 0, ay: 0, x: PX + FX.x, y: PY + FX.y, rot: 0, sc: 1 / FX.k, alpha: 1, add: true });
+    if (S.fx.length || (S.on && (S.st?.count | 0) > 0)) out.push({ tex: T.fx, w: fC.width, h: fC.height, ax: 0, ay: 0, x: PX + FX.x, y: PY + FX.y, rot: 0, sc: 1 / FX.k, alpha: 1, add: true });
     return out;
   };
   (lcd.splitWarmers ??= []).push({ name: 'jphud', done: false, step(r) { for (const t of Object.values(T)) { try { r.initTexture(t); } catch { } } return (this.done = true); } });
