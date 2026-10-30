@@ -29,7 +29,7 @@ export const FX_TRIM_FAIL_SECONDS = 114 / FPS;   // FailFilmSeconds（もとは 
 export const PAY_TRIM = {
   reward: { scenes: [30, 40, 100, 200, 500].map((a) => `reward_${a}`), skip: [[8, 26], [48, 70], [80, 104]], frames: 176 },   // 203/239 → 112 コマ（3.7秒）。もとの 10/30 版は 181/217
   success: { scene: 'chain_success', skip: [[24, 40], [54, 84], [96, 118]], frames: 176 },                               // 186 → 108 コマ（3.6秒）。6.2 → 3.6
-  announce: { first: { scene: 'chain_announce_first', skip: [[8, 26], [40, 50], [212, 266]] }, repeat: { scene: 'chain_announce_repeat', skip: [[8, 26], [40, 50], [212, 252]] } },   // 303/288 → 221/238（7.4/7.9秒）
+  announce: { first: { scene: 'chain_announce_first', skip: [[8, 26], [40, 50], [212, 266]] }, repeat: { scene: 'chain_announce_repeat', skip: [[6, 48], [124, 174], [196, 252]], short: true } },   // 最初の告知 303 → 221（7.4秒）。2回目以降 288 → 142（4.7秒。2/3 の説明は客が一度見た：タイトルの溜めと 67% の組み上がりを省き、没収の玉数は残す）
   announceMargin: 0.3,                                                                                                       // 規則の告知の秒数は映像より 0.3 秒短く（映像の最後の白で終わる）
 };
 export function payShortEnabled(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('payshort') !== '0'; }
