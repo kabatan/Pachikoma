@@ -9,6 +9,7 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
     const original=world.step, pre=new Map(), balls=new Map(), movingLabels=new Map();
     const nativeTraversalAllowed=bindOwnedNativeQueryTraversal(pa,world,nativeQueryProof);
     let nativeTraversal=false;
+    const restCache=new URLSearchParams(globalThis.location?.search??'').get('observerrest')!=='0'&&typeof WeakMap==='function', bodyInfo=new WeakMap();
     const statePool=[], ballPool=[], sourcePool=[], pairRecords=new Map(), quietFrames=new Map();
     let previousPairs=[], nextPairs=[], stateCount=0, ballCount=0, sourceCount=0;
     let lastTime=-1, exited=owner.payoutExited??0, pairFrame=0;
@@ -196,7 +197,18 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
           let q=statePool[stateCount];
           if(!q) q=statePool[stateCount]={v:{x:0,y:0,z:0},w:{x:0,y:0,z:0},p:{x:0,y:0,z:0}};
           stateCount++;
-          body.linvel(q.v); body.angvel(q.w); body.translation(q.p); q.sleeping=region==='tray'&&body.isSleeping();
+          if(restCache) {
+            // 眠っている玉の速度・位置は眠っている間変わらない。最初に眠っているのを見たとき1回だけ読み、以後は写すだけ(wasm getter 3回を省く)。?observerrest=0 で従来。
+            let info=bodyInfo.get(body);
+            if(!info) bodyInfo.set(body,info={rest:null,handles:null});
+            const asleep=region==='tray'&&body.isSleeping();
+            if(asleep&&info.rest) { const r=info.rest; q.v.x=r.vx; q.v.y=r.vy; q.v.z=r.vz; q.w.x=r.wx; q.w.y=r.wy; q.w.z=r.wz; q.p.x=r.px; q.p.y=r.py; q.p.z=r.pz; }
+            else {
+              body.linvel(q.v); body.angvel(q.w); body.translation(q.p);
+              if(asleep) info.rest={vx:q.v.x,vy:q.v.y,vz:q.v.z,wx:q.w.x,wy:q.w.y,wz:q.w.z,px:q.p.x,py:q.p.y,pz:q.p.z}; else info.rest=null;
+            }
+            q.sleeping=asleep;
+          } else { body.linvel(q.v); body.angvel(q.w); body.translation(q.p); q.sleeping=region==='tray'&&body.isSleeping(); }
           q.postQuiet=undefined; q.postFixed=undefined; q.postPositionValid=false;
           // Magnitudes are used only by the tray quiet gate. Evaluate the
           // identical expressions in order, stopping when the result is known.
@@ -211,9 +223,14 @@ export function observeContacts(pa, receive, { onError=console.error, onPayout=n
           if(!entry) entry=ballPool[ballCount]={id:null,label:'',body:null,rank:0};
           if(entry.id!==id) { entry.id=id; entry.label=String(id); }
           entry.body=body; entry.rank=rank++;
-          const colliderCount=body.numColliders();
-          for(let j=0;j<colliderCount;j++) {
-            const handle=body.collider(j).handle;
+          let handles=restCache?bodyInfo.get(body).handles:null;
+          if(!handles) {
+            const colliderCount=body.numColliders(); handles=[];
+            for(let j=0;j<colliderCount;j++) handles.push(body.collider(j).handle);
+            if(restCache) bodyInfo.get(body).handles=handles;   // 玉の碰撞体は作られた後に増減しない
+          }
+          for(let j=0;j<handles.length;j++) {
+            const handle=handles[j];
             balls.set(handle,entry);
             let source=sourcePool[sourceCount];
             if(!source) source=sourcePool[sourceCount]={handle:0,ball:null};

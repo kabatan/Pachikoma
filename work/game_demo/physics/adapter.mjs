@@ -35,12 +35,12 @@ function at(poly, s, out = null) {
 
 export class PhysicsAdapter {
   static async create(RAPIER, opts) { const pa = new PhysicsAdapter(RAPIER, opts); await pa.init(); return pa; }
-  constructor(RAPIER, { readText, importModule, seed = 1, overflow = 'reach', maxBalls = 700, loadTransforms = loadStageTransforms, stageDir = 'stage3', jitter = {}, boardTimeScale = 1, reloadSeconds = 1.0, feedGap = 0.9, liftSpeed = 0.09, stockMax = STOCK_MAX, stock0 = STOCK0, continuousSupply = false } = {}) {
+  constructor(RAPIER, { readText, importModule, seed = 1, overflow = 'reach', maxBalls = 700, loadTransforms = loadStageTransforms, stageDir = 'stage3', jitter = {}, boardTimeScale = 1, reloadSeconds = 1.0, feedGap = 0.9, liftSpeed = 0.09, stockMax = STOCK_MAX, stock0 = STOCK0, continuousSupply = false, traySleepSeconds = 0, trayIdleMechFixed = true } = {}) {
     this.stageDir = (stageDir.startsWith('work/') ? new URL('../../' + stageDir.slice(5), import.meta.url).href : stageDir).replace(/\/$/, ''); this.jitter = normalizeJitter(jitter);
     this.loadTransforms = loadTransforms;
     this.R = RAPIER; this.readText = readText; this.importModule = importModule; this.maxBalls = maxBalls; this.overflowPolicy = overflow;
     this.seed = seed >>> 0; this.s = this.seed; this.rng = () => { this.s = (this.s + 0x6D2B79F5) >>> 0; let t = this.s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-    this.continuousSupply = continuousSupply;
+    this.continuousSupply = continuousSupply; this.traySleepSeconds = Number(traySleepSeconds) || 0; this.trayIdleMechFixed = !!trayIdleMechFixed;
     this.reloadSeconds = reloadSeconds; this.feedGap = feedGap; this.liftSpeed = liftSpeed; this.stockMax = stockMax; this.stock0 = stock0;   // stock0: 開始時に昇降管側へ用意する予備球(シャトル含む)   // 連射用: 射出器の装填間隔 / 皿から昇降管への取込間隔 / 昇降管の速さ(m/s)
     this.events = []; this.acc = 0; this.tick = 0; this.boardAcc = 0; this.boardTimeScale = Math.min(1, Math.max(0.05, Number(boardTimeScale) || 1));
   }
@@ -56,7 +56,7 @@ export class PhysicsAdapter {
     this.returns = new Map(); for (const t of model.phys.tubes) this.returns.set(t.n, polyline(t.pts.map((p) => [p[0], p[1], -p[2]])));
     const { RollingResistance } = await this.importModule('stage1/export/rolling_resistance.mjs');
     this.tw = new R.World({ x: 0, y: -9.81 * SB, z: 0 }); this.tw.timestep = 1 / TRAY_HZ; this.tw.lengthUnit = 0.01 * SB;
-    this.tray = new Stage1Tray(R, this.tw, { readText: (p) => this.readText('stage1/export/' + p), overflow: { type: this.overflowPolicy }, rng: this.rng, scale: SB, RollingResistance, translation_m: transforms.get('stage1').translation });
+    this.tray = new Stage1Tray(R, this.tw, { readText: (p) => this.readText('stage1/export/' + p), overflow: { type: this.overflowPolicy }, rng: this.rng, scale: SB, RollingResistance, translation_m: transforms.get('stage1').translation, sleepSeconds: this.traySleepSeconds, idleMechFixed: this.trayIdleMechFixed });
     await this.tray.load();
     const path = (id) => s2.paths.find((p) => p.id === id), drop = path('PATH_DROP');
     const dropPoints = drop.centerline_m.map((p) => [p[0] + (drop.parent ? drop.refill_shuttle_x_m ?? 0 : 0), p[1], p[2]]);

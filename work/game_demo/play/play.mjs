@@ -33,6 +33,8 @@ const paOptions = {
   readText: (p) => readText(new URL(p, CAB)), importModule: (p) => import(new URL(p, CAB).href), seed, stageDir: config.stageDir, jitter: config.jitter,
   ...(playRules.MaxInFlight > 1 ? RAPID_SUPPLY : {}),   // 同時発射なら玉の補給も連射に合わせる
   continuousSupply: playRules.ContinuousFire,
+  traySleepSeconds: q.get('traysleep') === '0' ? 0 : Number(q.get('traysleep') ?? 0),   // 実験用: 皿でほぼ動かない球をこの秒数で強制的に眠らせる。既定は無効(0)。有効にすると前面の縁で球が床を抜ける現象が出たため不採用(10/30)
+  trayIdleMechFixed: q.get('trayidlefix') !== '0',   // 止まっている蓋を固定体にして皿の山を眠らせる。?trayidlefix=0 で従来
   boardTimeScale: Number(q.get('pscale') ?? 0.35),   // 盤上の玉の進み(1=実時間)。落下を目で追える速さ(平均0.72秒→約2秒)。?pscale=1 で実時間
 };
 // 物理は既定で専用 Worker(physics/worker/README.md)。?physworker=0 で従来の主スレッド PhysicsAdapter。Worker/モジュールWorker非対応や起動失敗は自動で従来へ戻る

@@ -40,7 +40,9 @@ export const OVERFLOW_POLICIES = ['count', 'reach', 'open', 'closed', 'mouth'];
 export const TRAY_MOTION = Object.freeze({ tilt: 0, rollingResistance: 0.006, variability: 0.15 });
 
 export class Stage1Tray {
-  constructor(RAPIER, world, { readText, base = '', overflow = { type: 'open' }, rng = Math.random, scale = 10, RollingResistance = null, translation_m = null, debugHistory = false } = {}) {
+  constructor(RAPIER, world, { readText, base = '', overflow = { type: 'open' }, rng = Math.random, scale = 10, RollingResistance = null, translation_m = null, debugHistory = false, sleepSeconds = 0, idleMechFixed = false } = {}) {
+    this.idleMechFixed = idleMechFixed;   // 動いていない可動部(蓋・針)を固定体にして、触れている玉の山が眠れるようにする(動くときだけ運動学体に戻す)
+    this.sleepSeconds = sleepSeconds;   // 皿の中でほぼ動かない球を、Rapier の自然な眠り(2秒)を待たずにこの秒数で眠らせる(0で無効)。動けば隣の球の接触で自動的に起きる
     this.RollingResistanceClass = RollingResistance; this.rr = null; this.payoutActive = false; this.countOpen = false; this.countEmptySince = null; this.blockSince = null; this.idleSince = null; this.ovfWant = false;
     this.translationOverride = translation_m; this.debugHistory = debugHistory; this.activeBalls = new Map(); this.activePayout = 0;
     this.tilt = TRAY_MOTION.tilt;
@@ -170,6 +172,7 @@ export class Stage1Tray {
   /** ヒンジ: value=角度(rad) / スライダ: value=変位(m)。 */
   setMech(id, value) {
     const m = this.mechBodies.get(id); if (!m) return; m.value = value; const d = m.def;
+    if (this.idleMechFixed) { if (m.fixed) { m.body.setBodyType(this.R.RigidBodyType.KinematicPositionBased, true); m.fixed = false; } m.lastSet = this.tick; }
     const o = d.origin_m.map((v, i) => v + this.T[i]);
     if (d.axis) { m.body.setNextKinematicRotation(axisQuat(d.axis, value)); m.body.setNextKinematicTranslation({ x: o[0] * this.S, y: o[1] * this.S, z: o[2] * this.S }); }
     else if (d.slide_axis) m.body.setNextKinematicTranslation({ x: (o[0] + d.slide_axis[0] * value) * this.S, y: (o[1] + d.slide_axis[1] * value) * this.S, z: (o[2] + d.slide_axis[2] * value) * this.S });
@@ -269,12 +272,25 @@ export class Stage1Tray {
         }
       }
       if (this.debugHistory && this.tick % 24 === 0) b.last = [t.x - this.T[0], t.y - this.T[1], t.z - this.T[2]].map((v) => +(v * 1000).toFixed(0));
+      if (this.sleepSeconds > 0 && b.state === 'dish' && !this._nearHole(t)) {   // 皿に着いた球が、1歩あたり約0.017mm未満(約4mm/s未満)しか動かない状態を続けたら眠らせる
+        const dx = t.x - b.prev.x, dy = t.y - b.prev.y, dz = t.z - b.prev.z;
+        if (dx * dx + dy * dy + dz * dz < 2.8e-10 * (240 / this.hz) ** 2) {
+          if (((b.calm = (b.calm | 0) + 1)) >= Math.round(this.sleepSeconds * this.hz)) { b.calm = -Math.round(this.sleepSeconds * this.hz); b.body.sleep(); if (this._sleepLog) this._sleepLog.push({ id, tick: this.tick, p: [t.x - this.T[0], t.y - this.T[1], t.z - this.T[2]].map((v) => +(v * 1000).toFixed(1)) }); }
+        } else b.calm = 0;
+      }
       b.prev.x = t.x; b.prev.y = t.y; b.prev.z = t.z;
       if (!b.fell && t.y < this.T[1] - 0.34) { b.fell = true; this.events.push({ tick: this.tick, ball: id, sensor: 'FELL', at: [t.x - this.T[0], t.y - this.T[1], t.z - this.T[2]].map((v) => +(v * 1000).toFixed(0)), prev: b.prevLog }); }
       if (this.debugHistory && this.tick % 12 === 0) { const p = b.hist ??= []; p.push([t.x - this.T[0], t.y - this.T[1], t.z - this.T[2]].map((v) => +(v * 1000).toFixed(0))); if (p.length > 12) p.shift(); }
       if (t.y < -0.6) { this.events.push({ tick: this.tick, ball: id, sensor: 'LOST', last: b.last }); this.retire(b, 'lost'); }
     }
+    // 動かなくなって3歩たった可動部は固定体へ(運動学体が触れていると、静止した玉の山がいつまでも眠らない)
+    if (this.idleMechFixed) for (const m of this.mechBodies.values()) if (!m.fixed && this.tick - (m.lastSet ?? 0) >= 3) { m.body.setBodyType(this.R.RigidBodyType.Fixed, false); m.fixed = true; }
     if (this.rr && this.tick % Math.max(1, Math.round(this.hz / 60)) === 0) this.rr.update(this.activeBalls, 1 / 60, this.S);
+  }
+  /** 計数口・溢れ口の上(余白22mm)にいる球は眠らせない(可動の蓋の上で眠った球が、起きたときに口へ落ちる挙動を試験で確認したため、口の周りは従来どおり) */
+  _nearHole(t) {
+    for (const h of [this.cntHole, this.ovfHole]) if (h && t.x > h.x[0] - .022 && t.x < h.x[1] + .022 && t.z > h.z[0] - .022 && t.z < h.z[1] + .022) return true;
+    return false;
   }
   _ballOnHole(which = 'ovf') { const h = which === 'ovf' ? this.ovfHole : this.cntHole, floor = trayFloor((h.x[0]+h.x[1])/2-this.T[0], (h.z[0]+h.z[1])/2-this.T[2])+this.T[1]; for (const x of this.activeBalls.values()) { if (x.stored) continue; const t = x.prev; if (t.x > h.x[0]-.0065 && t.x < h.x[1]+.0065 && t.z > h.z[0]-.0065 && t.z < h.z[1]+.0065 && t.y < floor+.020 && t.y > floor-.020) return true; } return false; }
   /** 取込口(皿の左)に最も近い、皿の中の球を取り除いて返す(取込ゲート〜昇降の物理は未移植、台帳＋時間差で代用)。 */
