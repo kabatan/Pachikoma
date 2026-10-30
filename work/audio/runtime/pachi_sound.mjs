@@ -109,11 +109,24 @@ export async function installPachiSound(engine, { bgmUrl = new URL('../bgm/user/
   // 同じ長さの無音にするので、JP中の沈み(SE/玉/通常BGMのduck)の計算は変わらない。
   for (const n of ['win_jp_head', 'win_jp_loop', 'win_jp_tail', 'win_number']) { const b = engine.buffers.get(n); if (b) engine.buffers.set(n, ctx.createBuffer(b.numberOfChannels, b.length, b.sampleRate)); }
   for (const [k, b] of [...engine.winCache]) if (k.startsWith('jp:')) engine.winCache.set(k, ctx.createBuffer(b.numberOfChannels, b.length, b.sampleRate));
-  let src = null, on = false, headNext = true, hot = false, focused = false;
+  let src = null, on = false, headNext = true, hot = false, focused = false, curLevel = 1;
   // 通常・4灯以降に加えて、勝負中(focus)と成功の間も録音曲を続ける。JP(大当たり)の間だけ旧のJPの曲に任せる
   // 待機(タイトル・attract)も同じ曲(10/29 監督指示)。r2のBGMには待機の曲が無く、起動直後は最初のattractイベントを取りこぼすため、モードが silent でも局面が Attract なら待機として扱う
   const attractNow = () => { if (bgm.mode === 'attract') return true; if (bgm.mode !== 'silent') return false; let p = null; try { p = engine.getPhase(); } catch {} return p == null || p === 'Attract'; };
   const wanted = () => bgm.enabled && (['normal', 'pink', 'focus', 'success'].includes(bgm.mode) || bgm.mode === 'tutorial' && !bgm.manifest?.files.tutorial || attractNow()) && !bgm.jpPlan && ctx.state === 'running';
+  // 追加待ち(Continue)と最終結果(Result)の無音を埋める(10/31 音響検証)。r2のBGMはこの局面で 'silent'/'result'(素材なし)になり、追加待ち26〜30秒・最終結果12〜22秒が刻みの音だけだった。
+  // 録音曲(待機・通常と同じ)をそのまま続ける:追加待ちは明るめ(高域+3dB、追加したくなる)で控えめ(×.5)、最終結果は集計の演出(約3秒)が終わってから ゆっくり(×.38)。次の局面(追加→通常、結果→待機)へは音を切らず続く。?quietfill=0 で従来。
+  const quietFill = new URLSearchParams(globalThis.location?.search ?? '').get('quietfill') !== '0';
+  let fillPhase = null, fillSince = 0;
+  const fillState = () => {   // {level, bright} か null
+    if (!quietFill || !bgm.enabled || bgm.jpPlan) return null;
+    let p = null; try { p = engine.getPhase(); } catch {}
+    const t = ctx.currentTime;
+    if (p !== fillPhase) { fillPhase = p; fillSince = t; }
+    if (p === 'Continue') return { level: .5, bright: true };
+    if (p === 'Result') return { level: t - fillSince >= 3.0 ? .38 : 0, bright: false };
+    return null;
+  };
   const play = () => {
     src = ctx.createBufferSource(); src.buffer = buffer; src.loop = true; src.loopStart = loopStart; src.loopEnd = loopEnd; src.connect(out);
     src.start(ctx.currentTime + .01, headNext ? 0 : loopStart); headNext = false;   // 通常に戻ったときは導入を飛ばして本編から
@@ -130,16 +143,18 @@ export async function installPachiSound(engine, { bgmUrl = new URL('../bgm/user/
   engine.handleEvent = handleHook;
   const timer = setInterval(() => {
     silence();   // BGM再読込で差し戻された場合
-    const want = wanted(), now = ctx.currentTime;
+    const fill = fillState(), want = wanted() || (!!fill && ctx.state === 'running'), now = ctx.currentTime;
+    const level = wanted() ? 1 : fill ? fill.level : 1;   // 追加待ち・最終結果の間だけ小さめ
     if (want && !src) play();
-    if (want !== on) {
-      on = want; out.gain.cancelScheduledValues(now); out.gain.setValueAtTime(out.gain.value, now);
-      out.gain.linearRampToValueAtTime(want ? 1 : 0, now + (want ? .4 : .25));
+    if (want !== on || (want && level !== curLevel)) {
+      const slow = !wanted() && fill && fill.level > 0 && curLevel === 0;   // 最終結果で曲が入るときはゆっくり
+      on = want; curLevel = want ? level : curLevel; out.gain.cancelScheduledValues(now); out.gain.setValueAtTime(out.gain.value, now);
+      out.gain.linearRampToValueAtTime(want ? level : 0, now + (want ? (slow ? 1.8 : .4) : .25));
       if (!want && src) { src.stop(now + .26); src = null; }
     }
     const focus = want && bgm.mode === 'focus';
     if (focus !== focused) { focused = focus; focusLP.frequency.cancelScheduledValues(now); focusLP.frequency.setTargetAtTime(focus ? 1700 : 22000, now, focus ? .3 : .15); focusGain.gain.cancelScheduledValues(now); focusGain.gain.setTargetAtTime(focus ? .75 : 1, now, .3); }
-    const pink = want && bgm.baseTarget === 'pink';
+    const pink = want && (bgm.baseTarget === 'pink' || (!wanted() && !!fill?.bright));
     if (pink !== hot) { hot = pink; tilt.gain.cancelScheduledValues(now); tilt.gain.setTargetAtTime(pink ? 3 : 0, now, .25); }
   }, 50);
   let disposed = false;

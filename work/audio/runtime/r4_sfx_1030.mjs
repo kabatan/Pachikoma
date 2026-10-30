@@ -70,6 +70,19 @@ export async function installR4Sfx(engine, { lcd, controller, cuesUrl = new URL(
     state.last = Math.max(state.last, t + AHEAD);
   }
   const tState = { attract: { last: -1 }, seal: { last: -1, key: null }, tutorial: { last: -1, on: false }, jp: { last: -1, key: null }, chain: { last: -1, key: null }, jpSerial: -1 };
+  // 告知待ち(chainAnnouncing)のあいだ、告知の直前の映像(配当 reward_N。次の場面が無いもの)の残りが 0.5 秒以内になったら「光が集まる」(ca_gather、0.5秒)を 1 回だけ。
+  //   映像が飛ばし(skip)で短縮されていても、これから再生される残りのコマ数で数える。chain_success は次に reward が続くので鳴らさない。
+  const gather = { key: null };
+  function gatherTick(w) {
+    if (!cues.chain_gather || !/^reward_\d+$/.test(w.name)) return;
+    const g = controller.game; if (!g || g.phase !== 'ChainChoice' || !g.chainAnnouncing) return;
+    const man = lcd.jp?.man, s = man?.scenes?.[w.name]; if (!s || s.next) return;
+    const key = w.name + '#' + w.serial; if (gather.key === key) return;
+    const f = w.f ?? 0; let ahead = Math.max(0, s.frames - 1 - f);
+    for (const [a, b] of s.skip ?? []) if (b > f + 1) ahead -= Math.min(b, s.frames - 1) - Math.max(a, f + 1) > 0 ? Math.min(b, s.frames - 1) - Math.max(a, f + 1) : 0;
+    const left = (Math.max(0, ahead) + 1) / (man.fps || 30);
+    if (left <= .5) { gather.key = key; play(...cues.chain_gather); api.gathers = (api.gathers ?? 0) + 1; }
+  }
   function tick() {
     // 冒頭のチュートリアル(attract の howto)
     const as = lcd.attractSurface, ts = tState.tutorial;
@@ -88,6 +101,7 @@ export async function installR4Sfx(engine, { lcd, controller, cuesUrl = new URL(
       const js = tState.jp; if (js.key !== w.name + '#' + w.serial) { js.key = w.name + '#' + w.serial; if (w.name !== 'tutorial_jp_fin' && js.last > 0 && !w.name.startsWith('tutorial_jp_n')) js.last = -1; if (w.name.startsWith('tutorial_jp_n')) js.last = -1; }
       runTrack(cues.tutorial_jp, off + (w.f ?? 0) / 30, js, w.d);
     }
+    gatherTick(w);
     const ck = cues[w.name];
     if (w.name === 'chain_announce_first' || w.name === 'chain_announce_repeat') {
       const cs = tState.chain; if (cs.key !== w.name + '#' + w.serial) { cs.key = w.name + '#' + w.serial; cs.last = -1; }
