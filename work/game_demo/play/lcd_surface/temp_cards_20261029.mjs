@@ -150,9 +150,9 @@ export async function createTempCards({warmContext = null} = {}) {
     draw(ctx, id, p, t, s) { const f = scenes[id]; if (!f) return false; f(ctx, p, t, s); return true; },
     guard(ctx, t) {
       const dur = CARD_DURATIONS.guard, e = env(t, dur, .3); if (e <= 0) return true;
-      glow(ctx, CX, 1000, 260, 'gold', .28 * e);
-      telop(ctx, P.guard_main, CX, 975, 400, { t, alpha: e, dy: -20 * ease(t / dur), sheen: (t - .2) / .5 });
-      telop(ctx, P.guard_sub, CX, 1085, 760, { t: t - .15, pop: false, alpha: e, dy: -20 * ease(t / dur) });   // 10/30 A1: 「耐えた！」だけでは意味が伝わらないので「セーフ！／同じ穴でも消えない」
+      glow(ctx, CX, 1030, 420, 'gold', .34 * e);
+      telop(ctx, P.guard_main, CX, 990, 620, { t, alpha: e, dy: -20 * ease(t / dur), sheen: (t - .2) / .5 });   // 10/30 C8：字が小さくゲージ・泡と重なる→大きく
+      telop(ctx, P.guard_sub, CX, 1130, 1040, { t: t - .15, pop: false, alpha: e, dy: -20 * ease(t / dur) });   // 10/30 A1: 「耐えた！」だけでは意味が伝わらないので「セーフ！／同じ穴でも消えない」
       return true;
     },
     assets: { plates: P, atlas }, scenes,

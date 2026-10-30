@@ -30,6 +30,7 @@ export async function attachCabinetLightScript(lcd,{getLamps=()=>[],getState=()=
  if(table.length!==index.rowCount*index.stride)throw Error('Cabinet light table length');
  const row={K:new Array(8).fill(0),Kc:triples(8),wash:triples(8),zone:triples(8),ring:triples(4),recolor:new Array(8).fill(1),jp1029:true,script1029:true,displayGain:1,meterGain:1};
  const hole={mode:'target_pulse',rgb:[1,.58,0],level:.6};
+ const holeOv=new Float32Array(21);
  row.reflections=SPOTS.map(([x,y])=>({x,y,rgb:[0,0,0],radius:640,gain:1}));
  const current={source:null,name:null,time:0,frame:0,grammar:null,flash:0,tableBytes:data.byteLength};
  let clock=0,modeKey=null,modeAt=0,lastOffset=-1,lastSource='normal',lastName='idle0',lastTime=0;
@@ -160,6 +161,10 @@ export async function attachCabinetLightScript(lcd,{getLamps=()=>[],getState=()=
    const n=Math.min(6,lamps.length),pc=POCKET_COLORS[n];
    row.hole=lamps.length===6?hole:null;
    if(fx.holeOn){hole7.v=fx.hv;row.hole=hole7;}   // newlight: scripted hole LEDs (m3_cabinet 'script' mode)
+   if(api.holeOverlay){   // 10/30 first-timer: hole-LED-only cues (sweep / 5-lamp blink / duplicate red) laid over the base light; returns true when it wrote something
+     holeOv.fill(0);
+     if(api.holeOverlay(holeOv,clock)){if(fx.holeOn)for(let i=0;i<21;i++)if(fx.hv[i]>holeOv[i])holeOv[i]=fx.hv[i];hole7.v=holeOv;row.hole=hole7;}
+   }
    // Reflections follow the factual mouth LEDs; C-pack LEDs remain receipt-driven.
    if(F.pocket)for(let i=0;i<7;i++){
      const lit=lamps.includes(i+1),age=clock-hitAt[i],hit=age>=0&&age<.6,white=hit?Math.exp(-age/.06):0,after=hit?1+1.6*Math.exp(-age/.22):1;

@@ -320,9 +320,10 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       // 液晶のcueが無いchain_*もonEventで確実に届く。cueはここでは映像を二重起動しない。
       if (s.phase === 'ChainChoice' && mode?.id !== 'chain_choice') temporary('chain_choice', { ...s.chain }, Infinity);
       clips.setIdle(`idle${normalN}`);
-      if(resultHistory?.active&&(mode||guard&&clock<guard.until||choiceWrites(this))){resultHistory.fallback('normal-overlay-or-choice',{includeBridge:false});gpuFrame=null;}
+      const extOv=!!this.overlayHold?.();   // 10/30 first_timer：液晶の重ね描き(ナイス！等)が出ている間は、GPUの映像でなく2Dの面で描く(重ね描きを見せるため)
+      if(resultHistory?.active&&(mode||extOv||guard&&clock<guard.until||choiceWrites(this))){resultHistory.fallback('normal-overlay-or-choice',{includeBridge:false});gpuFrame=null;}
       const historyEligible=!!resultHistory?.active;
-      const videoEligible=historyEligible||!!videoBackend&&!videoFailed&&(fadeLeft<=0||choiceBridge)&&!mode&&!(guard&&clock<guard.until)&&!choiceWrites(this);
+      const videoEligible=historyEligible||!!videoBackend&&!videoFailed&&(fadeLeft<=0||choiceBridge)&&!mode&&!extOv&&!(guard&&clock<guard.until)&&!choiceWrites(this);
       if(!videoEligible)materializeGpu('normal-overlay-owner');
       // The attract wrapper owns every visible pixel here. Keep the player's
       // timeline and lighting updates, but omit its covered video-to-Canvas copy.

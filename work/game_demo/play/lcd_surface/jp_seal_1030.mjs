@@ -64,7 +64,14 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
   const off = controller.onAction((action) => {
     const e = controller.lastGameEvent ?? {};
     if (action === 'meterReady') { S.final = false; S.lastCount = 0; S.reserved = null; S.chainInit = false; }
-    else if (action === 'meterEnd') { if (e.success) S.final = true; else S.final = false; }
+    else if (action === 'meterEnd') {
+      if (e.success) S.final = true;
+      else {
+        S.final = false;
+        // 10/30 初見向け(?ft1=0で無し)：失敗のガラス割れのあと「あと◯本だった！」（残りの本数＝映像の鎖の数−切れた本数）
+        try { const T = e.threshold > 0 ? e.threshold : S.curT, n = S.curN || T, c = stageOf(e.count | 0, T, n); lcd.firstTimer?.nearMiss?.({ rem: n - c, kind: e.kind }); } catch {}
+      }
+    }
     else if (action === 'reset') { S.final = false; S.lastCount = 0; setDelay(); }
   });
 
@@ -125,6 +132,7 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
     const d = m[1], kind = m[2][0] === 'i' ? 'in' : m[2][0] === 'o' ? 'open' : m[2][0], n = N(d);
     if (kind === 'open') return;
     const T = st?.kind === 'chain' && st.threshold > 0 ? st.threshold : n;
+    S.curN = n; S.curT = T;   // ft1：失敗のときの残りの本数の計算用
     const count = S.final ? n : stageOf(S.lastCount, T, n);
     const sc = man.scenes[name], f = (model.time ?? 0) * (man.fps ?? 30);
     const k = kind === 'in' ? -1 : +(m[3] ?? m[4]);
