@@ -105,6 +105,7 @@ export async function attachChainAnnounceV09(lcd, { controller, log = () => {} }
   const metaOf = {};
   for (const k of ['first', 'repeat']) metaOf[k] = await (await fetch(new URL(`announce_${k}_1152.json`, base))).json();
   const number = await createAnnounceNumber(base);
+  if (new URLSearchParams(globalThis.location?.search ?? '').get('announcepre') !== '0') (lcd.splitWarmers ??= []).push({ name: 'announce', done: false, step() { try { number.build(8888); } catch (e) { console.warn('[announce] 暖機', e); } return (this.done = true); } });   // 告知の数字の初回作成(約40ms、2回目以降0.4ms)を待機中の空き時間に済ませる。?announcepre=0 で従来
   const S = { pending: null, shown: null, key: null, starts: 0, overlays: 0, events: [] };
   const note = (k, d = {}) => { S.events.push({ k, at: +(performance.now() / 1000).toFixed(3), ...d }); if (S.events.length > 100) S.events.shift(); log(k, d); };
   const rulesH = () => lcd.rulesH?.state;
