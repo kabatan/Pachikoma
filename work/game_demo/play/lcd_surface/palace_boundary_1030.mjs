@@ -1,3 +1,4 @@
+import {readBytes,flippedCanvas} from './readback_scratch_1030.mjs';
 // Palace -> plain/result seam. Images only: the JP owner retains every clock,
 // decoder, event, source choice and both original 0.12-second fade envelopes.
 import {withRendererState,PANEL} from './palace_gpu_producer_1029.mjs';
@@ -56,7 +57,7 @@ export function createPalaceBoundaryImage({THREE:T,renderer:r,palaceSurface}){
   U.dim.value=stage.dim?1:0;U.flashA.value=Math.max(0,Math.min(1,stage.flash||0));U.flashRGB.value.set(...(stage.flashColor==='hit'?[1,1,1]:[115/255,96/255,153/255]));U.rawOnly.value=0;
   return true;
  }
- function read(t,kind){const bytes=new Uint8Array(PANEL.width*PANEL.height*4);withRendererState(T,r,()=>r.readRenderTargetPixels(t,0,0,PANEL.width,PANEL.height,bytes));stats[kind]++;const top=new Uint8ClampedArray(bytes.length),row=PANEL.width*4;for(let y=0;y<PANEL.height;y++)top.set(bytes.subarray((PANEL.height-1-y)*row,(PANEL.height-y)*row),y*row);const c=document.createElement('canvas');c.width=PANEL.width;c.height=PANEL.height;c.getContext('2d',{alpha:false}).putImageData(new ImageData(top,PANEL.width,PANEL.height),0,0);return c;}
+ function read(t,kind){const bytes=readBytes(PANEL.width*PANEL.height*4);withRendererState(T,r,()=>r.readRenderTargetPixels(t,0,0,PANEL.width,PANEL.height,bytes));stats[kind]++;return flippedCanvas(bytes,PANEL.width,PANEL.height);}
  const copyCtx=(ctx,c,raw=false)=>{if(!ctx)return;ctx.save();try{ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='copy';ctx.filter='none';if(raw)ctx.drawImage(c,PANEL.x,PANEL.y,PANEL.w,PANEL.h,0,0,PANEL.w,PANEL.h);else ctx.drawImage(c,0,0);}finally{ctx.restore();}};
  const api={
   get active(){return bridge;},get ownsFrame(){return !!stage;},get published(){return published;},set published(v){published=!!v;},

@@ -1,3 +1,4 @@
+import {readBytes,flippedCanvas} from './readback_scratch_1030.mjs';
 // PERF ONLY. Independent completed fullpanel leases; never a raw-held/video seed.
 const W=1240,H=1510;
 export const PREVIOUS_VERTEX='varying vec2 q;void main(){q=position.xy*.5+.5;gl_Position=vec4(position.xy,0.,1.);}';
@@ -25,7 +26,7 @@ export function createFullPanelPreviousBridge({THREE:T,renderer:r,maxLeases=2}){
   const slot=slots.find(x=>!x.busy);if(!slot){stats.capacityMisses++;return null;}slot.busy=true;
   try{restored(T,r,()=>{if(!verify(stamp))throw Error('Capture source changed before copy');if(drawClean){const v=drawClean(slot.target);if(v?.then){Promise.resolve(v).catch(()=>{});throw Error('Clean copy must complete synchronously');}if(v===false)throw Error('Clean copy declined');}else draw(slot.target,{current:texture});if(!verify(stamp))throw Error('Capture source changed during copy');});const e={id:++sequence,slot,token,stamp:Object.freeze({...stamp}),refs:1,dead:false};entries.add(e);stats.captures++;stats.liveMax=Math.max(stats.liveMax,entries.size);return handle(e);}catch(e){slot.busy=false;stats.captureFailures++;fail('capture',e);return null;}
  }
- function read(target){const bytes=new Uint8Array(W*H*4);restored(T,r,()=>r.readRenderTargetPixels(target,0,0,W,H,bytes));stats.reads++;const top=new Uint8ClampedArray(bytes.length),row=W*4;for(let y=0;y<H;y++)top.set(bytes.subarray((H-1-y)*row,(H-y)*row),y*row);const c=document.createElement('canvas');c.width=W;c.height=H;c.getContext('2d',{alpha:false}).putImageData(new ImageData(top,W,H),0,0);return c;}
+ function read(target){const bytes=readBytes(W*H*4);restored(T,r,()=>r.readRenderTargetPixels(target,0,0,W,H,bytes));stats.reads++;return flippedCanvas(bytes,W,H);}
  function copyTo(ctx,c){if(!ctx)return;ctx.save();try{ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='copy';ctx.filter='none';ctx.drawImage(c,0,0);}finally{ctx.restore();}}
  const api={context,
   warmup({sourceCanvas=null}={}){check();if(warmed)return {warmed:true,already:true};if(entries.size||revision)throw Error('Fullpanel warm is boot-only');const saved=Object.fromEntries(Object.entries(uniforms).map(([k,u])=>[k,u.value]));if(sourceCanvas){cpuCanvas=sourceCanvas;cpuTexture=configure(own(new T.CanvasTexture(sourceCanvas)),true);cpuTexture.needsUpdate=true;}try{restored(T,r,()=>{r.initTexture(dummy);if(cpuTexture)r.initTexture(cpuTexture);r.compile(scene,camera);for(const t of [...slots.map(x=>x.target),output]){r.initRenderTarget(t);draw(t,{current:cpuTexture??dummy});r.setClearColor(0,1);r.clear(true,false,false);}});warmed=true;stats.warmCalls++;return {warmed:true,targetBytes:3*W*H*4};}finally{for(const[k,v]of Object.entries(saved))uniforms[k].value=v;}},

@@ -1,3 +1,4 @@
+import {readBytes,flippedCanvas} from './readback_scratch_1030.mjs';
 // Bounded result GPU snapshots for explicit image boundaries. No model/video/clock/audio control.
 const W=1240,H=1510;
 export const BRIDGE_VERTEX='varying vec2 q;void main(){q=position.xy*.5+.5;gl_Position=vec4(position.xy,0.,1.);}';
@@ -28,7 +29,7 @@ export function createResultSnapshotPool({THREE:T,renderer:r,maxLeases=2}){
    try{boundary();restored(T,r,()=>{const value=drawClean(slot.target);if(value===false)throw Error('Clean capture declined target');if(value?.then){Promise.resolve(value).catch(()=>{});throw Error('Capture callback returned Promise');}});const frozen=Object.freeze({...stamp}),entry={id:++sequence,producerToken,key,stamp:frozen,rawVisible:Object.freeze({x:34,y:28,w:1152,h:1268}),refs:1,slot,dead:false};entries.add(entry);stats.captures++;stats.lastUnsupported=null;stats.liveMax=Math.max(stats.liveMax,entries.size);return handle(entry);}catch(error){slot.busy=false;stats.captureFailures++;stats.failures.push({phase:'capture',message:String(error?.message??error)});return null;}
   },
   materializeLease(lease,{panelCtx=null,heldCtx=null,reason='named-cpu-fallback'}={}){check();const entry=handles.get(lease);if(!entry||!lease.live)return null;
-   try{if(!entry.cpu){boundary();const bytes=new Uint8Array(W*H*4);stats.readbackCalls++;restored(T,r,()=>r.readRenderTargetPixels(entry.slot.target,0,0,W,H,bytes));const top=new Uint8ClampedArray(bytes.length),row=W*4;for(let y=0;y<H;y++)top.set(bytes.subarray((H-1-y)*row,(H-y)*row),y*row);const c=document.createElement('canvas');c.width=W;c.height=H;c.readyState=4;c.getContext('2d',{alpha:false}).putImageData(new ImageData(top,W,H),0,0);entry.cpu=c;}else stats.readbackHits++;
+   try{if(!entry.cpu){boundary();const bytes=readBytes(W*H*4);stats.readbackCalls++;restored(T,r,()=>r.readRenderTargetPixels(entry.slot.target,0,0,W,H,bytes));entry.cpu=flippedCanvas(bytes,W,H,true);}else stats.readbackHits++;
     const draw=(ctx,raw)=>{if(!ctx)return;ctx.save();try{ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.filter='none';ctx.globalCompositeOperation='copy';if(raw)ctx.drawImage(entry.cpu,34,28,1152,1268,0,0,1152,1268);else ctx.drawImage(entry.cpu,0,0);}finally{ctx.restore();}};draw(panelCtx,false);draw(heldCtx,true);return entry.cpu;
    }catch(error){stats.readbackFailures++;stats.failures.push({phase:'named-readback',reason,message:String(error?.message??error)});return null;}
   },

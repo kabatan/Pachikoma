@@ -1,6 +1,7 @@
 // 10/30 Blender-glyph HUD (replaces timer_display_20261029). Shared production HUD. Values are read directly from the rule state, never counted here.
 const PX=34,PY=28,SPRITE_LIMIT=104;
 // 10/30 pair style: the seconds HUD mirrors the lit-count badge (top-left "N灯") — same baked glyph family, same scale (0.38 px per glyph unit), same height, mirrored margins. ?timerhud=0 restores the previous HUD.
+const TIMEUP_SKIP=!(typeof location!=='undefined'&&(new URLSearchParams(location.search).get('timeupskip')==='0'||new URLSearchParams(location.search).get('hudhandoff')==='0'));
 const PAIR=!(typeof location!=='undefined'&&new URLSearchParams(location.search).get('timerhud')==='0');
 // HUD region in panel-canvas px (1240x1510). The GPU compositors hard-code the same rectangle (vec2(690.,130.)/vec2(496.,410.)); change both together.
 const HUD={x:690,y:130,w:496,h:410};
@@ -113,7 +114,7 @@ export function attachTimerDisplay(lcd,{getState,hudCache=new URLSearchParams(gl
         hudKey=nextKey;hudRevision++;hudStats.paints++;
       }else hudStats.reuses++;
       lcd.gpuPanelSource.backend.setHudCanvas(shown?gpuHud:null,hudCache?hudRevision:undefined);
-    }else if(shown){
+    }else if(shown&&!(TIMEUP_SKIP&&lcd.timeupSurface?.active)){   // 時間切れ画面は全面を上書きするので、その下に時計を描いて保存・復元するのは無駄(?timeupskip=0 で従来)
       paint(0,'残り時間',shown.seconds,shown.warning,shown.pulse);
       if(shown.offer!==null)paint(1,'追加受付',shown.offer,shown.offer<=10,shown.offerPulse);
     }
