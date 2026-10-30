@@ -92,6 +92,10 @@ void main(){
   const scaleArg=pq.has('renderscale')?Number(pq.get('renderscale')):tierQ>=0?TIERS[tierQ].scale:pq.get('renderlite')==='1'?2:pq.get('renderlite')==='0'?1:TIERS[1].scale;
   const renderScaleQ=Number.isFinite(scaleArg)&&scaleArg>1.001?Math.min(4,scaleArg):1;
   const renderLite=renderScaleQ>1;
+  // 10/30 縮小描画の拡大をブラウザの合成に任せる（?litecanvas=0 で従来）：canvas の画素数を描画解像度にし、
+  // 最終合成を canvas へ直接描く。CSS の箱は 1440×2560 のままなので、拡大はブラウザの合成（双線形）が行う。
+  // 1440×2560 への拡大コピー（全画面 1 pass と RGBA8 の中間 1 枚）が無くなる。
+  const liteCanvas=renderLite&&pq.get('litecanvas')!=='0';
   const autoQuality=renderLite&&qName==='auto'&&!pq.has('renderscale')&&!pq.has('renderlite')&&!['0','2','4'].includes(msaaQ);
   // 10/30 表示実寸描画（?dispfit=0 で従来）：球と最終合成を「画面に実際に映る画素数」（上限1440×2560）で描く。
   // 素材と座標は元の1440×2560のまま、表示の画素の中心（=ブラウザが縮小で読む位置）で読むので、映る画は同じ。
@@ -133,7 +137,7 @@ void main(){
   let ballCrop=createBallTargetCrop(hr,balls);
   let fitBalls=null;   // dispFit のときだけ：映る大きさの MSAA の球バッファ（大きさが変わるたびに作り直し、古いのは捨てる）
   const displayRT=(w,h)=>{const t=new THREE.WebGLRenderTarget(w,h,{type:THREE.UnsignedByteType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:false});return t;};
-  let display=renderLite?displayRT(RW,RH):null;
+  let display=renderLite&&!liteCanvas?displayRT(RW,RH):null;
   const present=display?make('uniform sampler2D uImage;void main(){gl_FragColor=texture2D(uImage,gl_FragCoord.xy/vec2(1440.,2560.));}',{uImage:{value:display.texture}}):null;
   const ballMaterial=new hr.ballMat.constructor().copy(Object.create(hr.ballMat,{uniforms:{value:{}}}));ballMaterial.uniforms={...hr.ballMat.uniforms,uAtlas:{value:compact.atlas.texture}};
   ballMaterial.fragmentShader=replace(ballMaterial.fragmentShader,'const float PS = 64.0, PT = 66.0;',`const float PS = ${compact.faceSize}.0, PT = ${compact.tileSize}.0;`);materials.push(ballMaterial);
@@ -201,11 +205,11 @@ vec4 prebakeC(ivec2 p){`);
     if(!renderLite)return;
     const w=Math.round(W/scale),h=Math.round(H/scale);
     if(w===RW&&h===RH&&samples===liteBalls.samples)return;
-    ballCrop?.dispose();liteBalls.dispose();display.dispose();
+    ballCrop?.dispose();liteBalls.dispose();display?.dispose();
     RW=w;RH=h;ballSamples=samples;uPBK.value.set(W/RW,H/RH);
     liteBalls=balls=new THREE.WebGLRenderTarget(RW,RH,{type:THREE.HalfFloatType,format:THREE.RGBAFormat,minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,samples});
     ballCrop=createBallTargetCrop(hr,balls);api.ballCrop=ballCrop;
-    display=displayRT(RW,RH);present.material.uniforms.uImage.value=display.texture;
+    if(present){display=displayRT(RW,RH);present.material.uniforms.uImage.value=display.texture;}
   }
   // 自動の段：起動直後（1.5 秒待って 2.5 秒）と、その後のプレイ中（3 秒ごと）の平均のフレーム間隔を見る。
   // 1 回の大きな引っかかりで段が落ちないよう、1 フレームは 50ms で頭打ち、250ms 超（非表示・読み込み）は数えない。
@@ -251,7 +255,7 @@ vec4 prebakeC(ivec2 p){`);
     }
     setCanvas(RW,RH);
   }
-  function restoreFull(){if(dispFit&&!fit.canvasFull){setCanvas(W,H);fit.legacyRestores++;}}
+  function restoreFull(){if((dispFit||liteCanvas)&&!fit.canvasFull){setCanvas(W,H);fit.legacyRestores++;}}
   const legacy=hr.render,dispose=hr.dispose,readLinear=hr.readLinear;
   let enabled=true,disposed=false,probeValid=false;
   const stats={frames:0,fieldUpdates:0,fieldReuses:0,probeUpdates:0,probeReuses:0,legacyFrames:0};
@@ -280,7 +284,7 @@ vec4 prebakeC(ivec2 p){`);
     if(validProof)fieldInitialized.add(key);else fieldInitialized.delete(key);
   }
   const restored=()=>{fieldInitialized.clear();invalidate();};
-  const api={ballCrop,quality,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();display?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  const api={ballCrop,quality,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,liteCanvas,canvasSize:[r.domElement.width,r.domElement.height],renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();display?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
   hr.prebakeRelight=api;
   hr.render=function(){
     const plate=getPlate();
@@ -302,7 +306,8 @@ vec4 prebakeC(ivec2 p){`);
     const oldBallMaterial=hr.balls.material;hr.balls.material=ballMaterial;
     try{if(hr.balls.count||hr.trayVisual)r.render(hr.sBalls,hr.camera);}finally{hr.balls.material=oldBallMaterial;}
     U.uUseLut.value=hr.lutEnabled?1:0;
-    r.setRenderTarget(display);r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);
+    if(liteCanvas){setCanvas(RW,RH);r.setRenderTarget(null);}else r.setRenderTarget(display);
+    r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);
     if(present){r.setRenderTarget(null);r.setViewport(0,0,W,H);r.render(present.scene,hr.fsCam);}
   };
   hr.dispose=function(){api.dispose();return dispose.call(hr);};
