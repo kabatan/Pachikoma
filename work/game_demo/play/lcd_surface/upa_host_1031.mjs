@@ -195,11 +195,12 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   GD.setFrozen(() => !!controller.freezeRules);
   const Lv = { vis: false, art: null, tone: 'normal', small: false, t0: 0, last: null, outAt: null, presence: 0, dup: false, t: 0 };
 
+  let begunFor = null;   // 2回目の客は札の段で冒頭が終わることがある。続く 'start' でもう一度始めない
   let preHide = false;   // START の札（スタート！60玉）の間も残り時間を隠す。冒頭に切れ目なくつなぐ
   const unHide = () => { if (preHide) { preHide = false; controller.howto = null; controller.howtoSeconds = 0; } };
   const begin = (atTicket = false) => {   // 10/31 開始の操作（ticket）で始める。払い出しの段は規則を止めず、'start'（Ready）で止める
     if (!R.ready || U.active) return false;
-    const g = game(); reset(); U.active = true; U.t = T.FALL - 0.25; U.lateFreeze = atTicket; U.short = !!controller.repeatVisit;
+    const g = game(); begunFor = g; reset(); U.active = true; U.t = T.FALL - 0.25; U.lateFreeze = atTicket; U.short = !!controller.repeatVisit;
     preHide = false; U.saved = { howtoSeconds: 0, secs: g.secondsLeft, freeze: controller.freezeRules, game: g }; prebuild();
     controller.howtoSeconds = Infinity; controller.howto = { t: 0 };   // 時計の表示を隠す（timer_display は howto 中は出さない）。howtoSeconds=∞ で規則の開始処理は走らない
     controller.freezeRules = !atTicket; log('upa:begin', { repeat: U.short, atTicket });
@@ -468,7 +469,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   };
   // 開始後のうぱ：左下の席にせり上がって吹き出しを出し、言い終わったら沈む。出ている間だけ液晶を2Dの面にする（それ以外は通常の経路のまま）
   const SEATX = 235, liveSeat = { x: SEATX, y: GROUND };
-  FL = createUpaFlow(lcd, { controller, base: A, labels: (side) => R.txt['laba' + side], liveVisible: () => Lv.vis, sfx, log });
+  FL = createUpaFlow(lcd, { controller, base: A, labels: (side) => R.txt['laba' + side], liveVisible: () => Lv.vis || !!(U.active && U.hold), sfx, log });
   // 10/31 「7このうち6こ」の間だけ、筐体の穴のランプを実演（順に流れる→6つ点灯・1つ消灯）。窓の外は元の処理のまま
   let holesHooked = false;
   const hookHoles = () => {
@@ -522,7 +523,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
       GD.event(id, p); FL?.event(id);
       if (id === 'ticket' && R.ready && begin(true)) { const r = onEvent0(id, p); onEvent0('challenge_cancel', {}); return r; }   // 旧スタート札は出さない（challenge_cancel は札の場面を閉じる既存の口）
       if (id === 'start' && U.active && U.lateFreeze && !U.released) { U.lateFreeze = false; controller.freezeRules = true; if (U.saved) U.saved.secs = game().secondsLeft; }
-      if (id === 'start' && !U.active) { if (!begin()) unHide(); /* 素材が間に合わなかったら冒頭なしで続行 */ }
+      if (id === 'start' && !U.active) { if (begunFor === game() || !begin()) unHide(); /* 素材が間に合わなかったら冒頭なしで続行 */ }
     } catch (e) { console.warn('[upa-host] event', e); finish('error'); }
     return onEvent0(id, p);
   };

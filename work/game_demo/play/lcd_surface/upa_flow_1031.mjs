@@ -163,6 +163,8 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
     if (F.cur) { F.cur.t += dt; }
     if (F.cur && !F.cur.edge) { const k = 1 - Math.exp(-dt * 5); if (F.ux === null) { const p0 = F.cur.holes ? null : 1; F.ux = p0 ? F.cur.upaX : 124; F.uy = p0 ? F.cur.upaY : GROUND; } F.ux += (F.cur.upaX - F.ux) * k; F.uy += (F.cur.upaY - F.uy) * k; } else F.ux = F.uy = null;
     if (F.pendTime && (g.meterStatus || g.rouletteStatus || lcd.jp?.model?.active)) F.pendTime = false;   // 開始の案内はJPに入ったら出さない（JP明けに「あと◯個」の行へ被る）
+    if (F.cur?.id === 'time_start' && lcd.jp?.model?.active) F.cur = null;   // JPの見せ場に残さない
+    if (F.cur?.id === 'time_start' && liveVisible()) { F.cur = null; if (!F.timeAgain) { F.timeAgain = true; F.pendTime = true; } }   // 案内の吹き出し（おかえり等）と重ねない。1回だけ後回し
     if (F.pendTime && !F.cur && !g.meterStatus && !liveVisible()) { F.pendTime = false; show('time_start', true); }
     // ---- 新しいメーター ----
     if (m && mid !== F.mid) {
@@ -280,7 +282,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
   return {
     state: F, ready, tick: (dt) => { hook(); tick(dt); },
     get busy() { return !!F.cur || !!F.pendTime; },
-    timeStart() { F.pendTime = true; },
+    timeStart() { F.pendTime = true; F.timeAgain = false; },
     get asking() { return !!F.ask; },
     get holding() { return false; },
     begin({ repeat = false } = {}) { Object.assign(F, { on: true, repeat, heard: { jp: false, chain: false, choice: false }, asked: { jp: 0, chain: 0, choice: 0 }, ch: null, chKey: null, cutNext: null, cutKey: null, ux: null, uy: null, ask: null, react: [], annFirst: !repeat, rlFirst: !repeat, mid: null, seq: null, cur: null, pendFail: false, rl: null, annKey: null, seqDone: false }); },
