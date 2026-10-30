@@ -34,6 +34,20 @@ export async function attachChainSeal(lcd, { controller, log = () => {} } = {}) 
   const Ns = Object.keys(mc.byN ?? {}).map(Number).sort((a, b) => a - b);
   if (!Ns.length) return lcd;
   const fps = man.fps ?? 30;
+  // 10/31 カットイン第3版（?jpcut=0 で旧）：b{k}・open の映像を seal_jp_cut/ の新しい版へ（jp_seal_1030.mjs と同じ。file / frames / skipF だけ差し替え）
+  const cutQ = new URLSearchParams(globalThis.location?.search ?? '').get('jpcut');
+  if (!(cutQ === '0' || cutQ === 'off')) {
+    try {
+      const r = await fetch(new URL('./jp1029/seal_jp_cut/manifest_cut.json', import.meta.url));
+      if (r.ok) {
+        const mcut = await r.json();
+        for (const N of Object.keys(mc.byN)) for (const [p, f] of Object.entries(mc.byN[N])) {
+          const e = mcut[`n${N}_${p}`]; if (!e || !/^(b\d+|open)$/.test(p)) continue;
+          f.file = e.file; f.frames = e.frames; if (e.skipF != null) f.skipF = e.skipF; else delete f.skipF;
+        }
+      }
+    } catch (e) { console.warn('[chain-seal] cut manifest', e); }
+  }
   const S = { final: false, lastCount: 0, started: 0, swaps: 0, reserved: null, T: 0, N: 0, d: 0, introAt: -9, events: [] };
   const note = (k, d = {}) => { S.events.push({ k, at: +(rh.state?.clock ?? 0).toFixed(2), ...d }); if (S.events.length > 100) S.events.shift(); log('chainseal:' + k, d); };
   const nm = (d, N, p) => `chain_jp_aim_seal_d${d}_n${N}_${p}`;

@@ -13,6 +13,8 @@
 // 失敗（時間切れ）は規則・本体の既存の失敗（ガラスが割れる）。ここでは何もしない。
 // 継続チャレンジ（chainMode, 10/30）も同じ流れ・字・映像（in → s{k} → b{k} → open）。違いは設定だけ：
 //   鎖の本数＝継続の規定数（meterStatus.threshold）。素材が無い本数はいちばん近い本数の素材（同じ穴 d にあればそれ）を使い、段は入賞数に比例して進める。
+// 10/31 カットイン第3版（効果の作り直し）：鎖が切れる b{k}・扉が開く open の映像を jp1029/seal_jp_cut/ の新しい版（切断の火花・破片・屈折する衝撃波＋帯と字のカットイン、1152 のまま描いたもの）へ差し替える。
+//   ?jpcut=0 で旧（seal_jp/ の b・open）のまま。差し替えるのは file / frames / skipF だけ（場面の名前・流れは不変）。作り方は work/effects/r4_h_fx/seal_door/jp_through/seal_make_cut.py と cutin2.py。
 //   ?chainseal=v02 で旧の独自実装（chain_seal_1030.mjs）、?chainseal=0 でさらに旧（chain_jp_aim）。
 const RE = /^jp_aim_seal_d(\d)_(in|s(\d+)|b(\d+)|open)$/;
 const FINISH_SECONDS = 1.2;   // rules_h の「満タンの叩きつけ」。封印では open の長さに置き換わる
@@ -35,6 +37,22 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
   const ds = Object.keys(ms.byD ?? {}).filter((d) => ms.byD[d]?.N && man.scenes[`jp_aim_seal_d${d}_s0`] === undefined);
   if (!ds.length) return lcd;
   for (const [k, v] of Object.entries(ms.scenes)) man.scenes[k] = v;
+  // 10/31 カットイン第3版（?jpcut=0 で旧）
+  const cutQ = qs.get('jpcut');
+  if (!(cutQ === '0' || cutQ === 'off')) {
+    try {
+      const r = await fetch(new URL('./jp1029/seal_jp_cut/manifest_cut.json', import.meta.url));
+      if (r.ok) {
+        const mcut = await r.json(); let n = 0;
+        for (const [k, v] of Object.entries(man.scenes)) {
+          const m = /^jp_aim_seal_d\d_(b\d+|open)$/.exec(k); const e = m && mcut[`n${v.seal?.N}_${m[1]}`];
+          if (!e) continue;
+          v.file = e.file; v.frames = e.frames; if (e.skipF != null) v.seal = { ...v.seal, skipF: e.skipF }; n++;
+        }
+        globalThis.__jpCut = { n, mcut };
+      }
+    } catch (e) { console.warn('[jp-seal] cut manifest', e); }
+  }
   const S = { T: 0, final: false, lastCount: 0, started: 0, swaps: 0, reserved: null, events: [] };
   const note = (k, d = {}) => { S.events.push({ k, at: +(rh.state?.clock ?? 0).toFixed(2), ...d }); if (S.events.length > 100) S.events.shift(); log('jpseal:' + k, d); };
   const N = (d) => ms.byD[d]?.N ?? 0;
