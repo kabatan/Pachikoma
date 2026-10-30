@@ -9,8 +9,8 @@ import { StageTransforms } from '../stage_transforms.mjs';
 
 const HZ = 480, DT = 1 / HZ;
 // physics_worker.mjs の REC と同じ並び
-const REC = { g: 0, tick: 1, t: 2, skip: 3, queue: 4, tunnel: 5, dish: 6, overflow: 7, stock: 8, travel: 9, shuttle: 10, counted: 11, pl: 12, s: 13, nudges: 14, shots: 15, bStep: 16, tStep: 17, peAt: 18 };
-const F = 19;
+const REC = { g: 0, tick: 1, t: 2, skip: 3, queue: 4, tunnel: 5, dish: 6, overflow: 7, stock: 8, travel: 9, shuttle: 10, counted: 11, pl: 12, s: 13, nudges: 14, shots: 15, bStep: 16, tStep: 17, peAt: 18, refillAt: 19 };
+const F = 20;
 
 // 接触監視(audio/runtime/contact_observer.mjs)を主スレッドで「再生」するための偽の Rapier 物体。
 // Worker 内の本物の監視が出した接触 1 件ごとに、同じ値が再計算されるだけの最小の物体・接触多様体を作る。
@@ -46,11 +46,14 @@ export class PhysicsWorkerProxy {
   async _init(options) {
     const plain = {}; for (const [k, v] of Object.entries(options)) if (typeof v !== 'function') plain[k] = v;   // readText/importModule/loadTransforms は Worker 側の既定を使う
     this.worker = new Worker(new URL('./physics_worker.mjs', import.meta.url), { type: 'module' });
-    const ready = await new Promise((resolve, reject) => {
-      this.worker.onmessage = (ev) => { if (ev.data.type === 'ready') resolve(ev.data); else if (ev.data.type === 'error') reject(new Error('physworker: ' + ev.data.message)); };
-      this.worker.onerror = (ev) => reject(new Error('physworker: ' + (ev.message ?? 'worker error')));
-      this.worker.postMessage({ type: 'init', options: plain });
-    });
+    let ready;
+    try {
+      ready = await new Promise((resolve, reject) => {
+        this.worker.onmessage = (ev) => { if (ev.data.type === 'ready') resolve(ev.data); else if (ev.data.type === 'error') reject(new Error('physworker: ' + ev.data.message)); };
+        this.worker.onerror = (ev) => reject(new Error('physworker: ' + (ev.message ?? 'worker error')));
+        this.worker.postMessage({ type: 'init', options: plain });
+      });
+    } catch (error) { this.worker.terminate(); throw error; }   // play.mjs が従来の主スレッド物理へ戻す
     this.worker.onmessage = (ev) => this._receive(ev.data);
     this.worker.onerror = (ev) => { this.workerStats.errors++; console.error('[physworker]', ev.message ?? ev); };
     this.isWorkerProxy = true;
@@ -71,7 +74,13 @@ export class PhysicsWorkerProxy {
       m.body = { handle: -(h++), translation: (o) => (o ? Object.assign(o, m._t) : { ...m._t }), rotation: () => ({ ...m._r }), linvel: (o) => { o.x = 0; o.y = 0; o.z = 0; return o; }, angvel: (o) => { o.x = 0; o.y = 0; o.z = 0; return o; }, isSleeping: () => true, isFixed: () => false, numColliders: () => 0 };
       this.tray.mechBodies.set(id, m);
     }
-    this.board = { model: ready.board.model, layout: ready.board.layout, launcher: ready.board.launcher, balls: new Map(), pegOf: new Map(), nudges: 0, isWorkerMirror: true };
+    this.board = { model: ready.board.model, layout: ready.board.layout, launcher: ready.board.launcher, balls: new Map(), pegOf: new Map(), nudges: 0, isWorkerMirror: true, _kick: true, _nudge: true };
+    const self = this, sendFlags = () => self._cmd(['F', self.board._kick, self.board._nudge]);
+    Object.defineProperties(this.board, {   // play.mjs の `pa.board.allowJamKick = false` を Worker の盤へ転送
+      allowJamKick: { get() { return this._kick; }, set(v) { this._kick = !!v; sendFlags(); }, enumerable: true },
+      allowStuckNudge: { get() { return this._nudge; }, set(v) { this._nudge = !!v; sendFlags(); }, enumerable: true },
+    });
+    this.warmInfo = ready.warmInfo ?? null;
     // 主スレッドの状態
     this.tick = 0; this.acc = 0; this.aim = 0; this.dir = 1; this._replayT = null;
     this.g = 0;            // 送った step の通し番号(beginGame/reset でも戻らない)
@@ -88,9 +97,14 @@ export class PhysicsWorkerProxy {
   get t() { return this._replayT ?? this.tick * DT; }
   get s() { return this.shownRec[REC.s]; }
   get shots() { return this.shownRec[REC.shots]; }
+  get snapShots() { return this._snap.shots; }   // snapshot() と同じ時点の発射数(射出器の動きが玉の位置と合わせる)
   get skipPayout() { return this._predict().skip; }
   get payQueue() { return this._predict().queue; }
   get stock() { return this._predict().stock; }
+  adjustStock(d) { if (d) this._cmd(['K', d], 'K', d); }   // Worker 側で stock = max(0, stock + d) を実 stock に対して行う(予測値が古くても外れない)
+  set stock(v) { this.adjustStock(v - this._predict().stock); }   // play.mjs の H 無料球: pa.stock++ / pa.stock = max(0, stock-1)。差分だけ Worker へ(Worker 側で max(0, stock+d))
+  get stored() { const p = this._predict(); return { overflow: p.overflow, count: p.counted, returned: 0 }; }   // runtime.mjs の連続射出の補給判定が読む
+  get refillAt() { const v = this.shownRec[REC.refillAt]; return v < 0 ? null : v; }
   get shuttleHas() { return !!this._predict().shuttle; }
   get pendingLaunch() { const n = this._predict().pl; return (this._plArr && this._plArr.length === n) ? this._plArr : (this._plArr = Object.freeze(new Array(n).fill(null))); }
   ledger() { const p = this._predict(); return { dish: p.dish, tunnel: p.tunnel, queue: p.queue, overflow: p.overflow, stock: p.stock, travel: p.travel, shuttle: p.shuttle, counted: p.counted }; }
@@ -109,6 +123,7 @@ export class PhysicsWorkerProxy {
       case 'L': if (p.shuttle) p.shuttle = 0; else p.pl++; break;
       case 'P': { const n = Math.max(0, c.a | 0), k = Math.min(n, p.skip); p.skip -= k; p.queue += n - k; break; }
       case 'V': { const have = p.shuttle + p.stock + p.travel, k = Math.max(0, Math.min(c.a | 0, this.stock0 - have)); c.k = k; if (!k) break; let r = k; if (!p.shuttle) { p.shuttle = 1; r--; } p.stock += r; p.skip += k; break; }
+      case 'K': p.stock = Math.max(0, p.stock + c.a); break;
       case 'R': case 'B':
         p.skip = 0; p.queue = 0; p.tunnel = 0; p.dish = 0; p.overflow = 0; p.stock = 0; p.travel = 0; p.shuttle = 0; p.counted = 0; p.pl = 0;
         if (c.op === 'B') { p.stock = this.stock0 - 1; p.shuttle = 1; p.skip = Math.min(this.stock0, c.a); }
@@ -149,7 +164,8 @@ export class PhysicsWorkerProxy {
 
   snapshot() {
     const s = this._snap;
-    return { coordinate_frame: this.transforms.frame, stage_transforms_revision: this.transforms.revision, tick: s.tick, time: s.time, count: s.count, positions: s.positions, kinds: s.kinds, ids: s.ids,
+    return { coordinate_frame: this.transforms.frame, stage_transforms_revision: this.transforms.revision, tick: s.tick, time: s.time, count: s.count, positions: s.positions.slice(), kinds: s.kinds, ids: s.ids,   // positions は呼ぶたび複製(射出器の動きなど受け取り側が書き換えても、次の呼びに残らない)
+      shots: s.shots,
       shuttle: s.shuttle, mech: s.mech, connections: this.connections, ledger: this.ledger(), lagSteps: this.g - this.latestG };
   }
   dispose() { this.worker.terminate(); }

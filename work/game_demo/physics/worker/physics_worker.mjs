@@ -4,15 +4,20 @@
 import RAPIER from '../node_modules/@dimforge/rapier3d-compat/dist/rapier.mjs';
 import { PhysicsAdapter } from '../adapter.mjs';
 import { observeContacts } from '../../../audio/runtime/contact_observer.mjs';
+import { installRigidSyncGuard, SOURCE_PIN } from '../rigid_sync_guard.mjs';
+import { createOwnedNativeQueryProof } from '../../../audio/runtime/native_contact_query.mjs';
+import { warmPhysicsRuntime } from '../startup_warm_1030.mjs';
+import { warmDensePhysics } from '../dense_startup_warm_1030.mjs';
 
 const CAB = new URL('../../../cabinet/', import.meta.url);
 async function readText(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.text(); }
 
 // 1 step ごとの記録（Float64Array の 1 行）。physics_proxy.mjs の REC と同じ並び。
-const REC = { g: 0, tick: 1, t: 2, skip: 3, queue: 4, tunnel: 5, dish: 6, overflow: 7, stock: 8, travel: 9, shuttle: 10, counted: 11, pl: 12, s: 13, nudges: 14, shots: 15, bStep: 16, tStep: 17, peAt: 18 };
-const F = 19;
+const REC = { g: 0, tick: 1, t: 2, skip: 3, queue: 4, tunnel: 5, dish: 6, overflow: 7, stock: 8, travel: 9, shuttle: 10, counted: 11, pl: 12, s: 13, nudges: 14, shots: 15, bStep: 16, tStep: 17, peAt: 18, refillAt: 19 };
+const F = 20;
 
-let pa = null, observer = null, g = 0;
+let pa = null, observer = null, g = 0, nativeQuery = false;
+const guards = [], warmInfo = {};
 let bStep = 0, tStep = 0, peAt = 0;   // この step で盤/皿の world.step が走ったか、皿の step を呼んだ時点の payoutExited
 let contactsB = [], contactsT = [];
 
@@ -21,9 +26,22 @@ function wrapStep(world, mark) {   // world.step の前に印を付けるだけ�
   world.step = function (...args) { mark(); return original.apply(this, args); };
 }
 
-async function init(options) {
+async function init(rawOptions) {
+  // 主スレッドの play.mjs が従来の経路で行う起動時の処理を、Worker の中の Rapier にも同じ順で掛ける(いずれも物理の結果は変えない)
+  const { warm = {}, ...options } = rawOptions;
   await RAPIER.init();
-  pa = await PhysicsAdapter.create(RAPIER, { ...options, readText: (p) => readText(new URL(p, CAB)), importModule: (p) => import(new URL(p, CAB).href) });
+  const adapterOptions = { ...options, readText: (p) => readText(new URL(p, CAB)), importModule: (p) => import(new URL(p, CAB).href) };
+  pa = await PhysicsAdapter.create(RAPIER, adapterOptions);
+  nativeQuery = !!warm.nativeQuery;
+  if (warm.naturalBoardMotion) { pa.board.allowJamKick = false; pa.board.allowStuckNudge = false; }
+  if (warm.startup) warmInfo.startup = warmPhysicsRuntime(RAPIER, [['tray', pa.tw], ['board', pa.bw]]);
+  if (warm.dense) { try { warmInfo.dense = await warmDensePhysics(RAPIER, adapterOptions, { naturalBoardMotion: !!warm.naturalBoardMotion }); } catch (e) { warmInfo.denseError = String(e?.message ?? e); } }
+  if (warm.rigidsync) {
+    try {
+      for (const world of [pa.bw, pa.tw]) { const guard = installRigidSyncGuard(world, RAPIER, { ownedNormalApi: true, sourceFingerprint: SOURCE_PIN, mode: 'skip' }); if (!guard.installed) { while (guards.length) guards.pop().dispose(); warmInfo.rigidsync = 'rejected:' + guard.reason; break; } guards.push(guard); }
+      if (guards.length) warmInfo.rigidsync = 'on';
+    } catch (e) { while (guards.length) { try { guards.pop().dispose(); } catch {} } warmInfo.rigidsync = 'error:' + String(e?.message ?? e); }
+  }
   wrapStep(pa.bw, () => { bStep = 1; });
   wrapStep(pa.tw, () => { tStep = 1; peAt = pa.tray.payoutExited; });
   const T = pa.tray, B = pa.board;
@@ -33,7 +51,7 @@ async function init(options) {
     transformsDocument: pa.transforms.document, stock0: pa.stock0, boardTimeScale: pa.boardTimeScale,
     tray: { S: T.S, T: T.T, hash: T.hash, floorMesh: T.floorMesh, visualStatics: T.visualStatics, visualMechs: T.visualMechs, payoutStart: T.payoutStart, mechIds: [...T.mechBodies.keys()] },
     board: { model: B.model, layout: B.layout, launcher: { ...B.launcher } },
-    snap: snap(), rec: record(new Float64Array(F), 0, 0),
+    snap: snap(), rec: record(new Float64Array(F), 0, 0), warmInfo,
   };
 }
 
@@ -41,7 +59,7 @@ function record(rec, i, gi) {
   const L = pa.ledger(), o = i * F;
   rec[o + REC.g] = gi; rec[o + REC.tick] = pa.tick; rec[o + REC.t] = pa.t; rec[o + REC.skip] = pa.skipPayout; rec[o + REC.queue] = L.queue; rec[o + REC.tunnel] = L.tunnel; rec[o + REC.dish] = L.dish;
   rec[o + REC.overflow] = L.overflow; rec[o + REC.stock] = L.stock; rec[o + REC.travel] = L.travel; rec[o + REC.shuttle] = L.shuttle; rec[o + REC.counted] = L.counted; rec[o + REC.pl] = pa.pendingLaunch.length;
-  rec[o + REC.s] = pa.s; rec[o + REC.nudges] = pa.board.nudges; rec[o + REC.shots] = pa.shots; rec[o + REC.bStep] = bStep; rec[o + REC.tStep] = tStep; rec[o + REC.peAt] = peAt;
+  rec[o + REC.s] = pa.s; rec[o + REC.nudges] = pa.board.nudges; rec[o + REC.shots] = pa.shots; rec[o + REC.bStep] = bStep; rec[o + REC.tStep] = tStep; rec[o + REC.peAt] = peAt; rec[o + REC.refillAt] = pa.refillAt === null ? -1 : pa.refillAt;
   return rec;
 }
 
@@ -53,7 +71,7 @@ function snap() {
   if (T.activePayout) for (const [id, b] of T.activeBalls) if (!b.stored && b.state === 'payout') { payIds.push(id); payPrev.push(b.prev.x, b.prev.y, b.prev.z); }
   const mechs = [];
   for (const [id, m] of T.mechBodies) { const t = m.body.translation(), r = m.body.rotation(); mechs.push([id, m.value ?? 0, t.x, t.y, t.z, r.x, r.y, r.z, r.w]); }
-  return { tick: s.tick, time: s.time, count: n, positions, kinds, ids: s.ids.slice(), shuttle: { x: s.shuttle.x, position_m: s.shuttle.position_m.slice(), hasBall: s.shuttle.hasBall },
+  return { tick: s.tick, time: s.time, shots: pa.shots, count: n, positions, kinds, ids: s.ids.slice(), shuttle: { x: s.shuttle.x, position_m: s.shuttle.position_m.slice(), hasBall: s.shuttle.hasBall },
     mech: { ...s.mech }, activePayout: T.activePayout, payIds, payPrev, mechs, payoutExited: T.payoutExited };
 }
 
@@ -83,7 +101,9 @@ function runBatch(cmds) {
       case 'B': pa.beginGame(c[1]); break;
       case 'R': pa.reset(); break;
       case 'I': pa.setInput(c[1], c[2]); break;
-      case 'O': if (!observer) observer = observeContacts(pa, (x) => (x.region === 'board' ? contactsB : contactsT).push(x), { onError: (e) => self.postMessage({ type: 'warn', message: 'contact observer: ' + (e?.message ?? e) }) }); break;
+      case 'K': pa.stock = Math.max(0, pa.stock + c[1]); break;   // 規則側が予備球を直接足し引きする(H の無料球: 撃つ前に +1、外れて返らなければ -1)
+      case 'F': pa.board.allowJamKick = !!c[1]; pa.board.allowStuckNudge = !!c[2]; break;   // naturalBoardMotion(穴の詰まりの突き・止まった玉の押しを切る)
+      case 'O': if (!observer) observer = observeContacts(pa, (x) => (x.region === 'board' ? contactsB : contactsT).push(x), { nativeQueryProof: nativeQuery ? createOwnedNativeQueryProof(RAPIER, { ownedNativeReadOnly: true, sourcePin: SOURCE_PIN }) : null, onError: (e) => self.postMessage({ type: 'warn', message: 'contact observer: ' + (e?.message ?? e) }) }); break;
       default: throw new Error('physworker: unknown command ' + c[0]);
     }
   }

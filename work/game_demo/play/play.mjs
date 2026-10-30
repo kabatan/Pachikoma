@@ -35,8 +35,16 @@ const paOptions = {
   continuousSupply: playRules.ContinuousFire,
   boardTimeScale: Number(q.get('pscale') ?? 0.35),   // 盤上の玉の進み(1=実時間)。落下を目で追える速さ(平均0.72秒→約2秒)。?pscale=1 で実時間
 };
-// ?physworker=1: 物理を専用 Worker で回す試験モード(同じ API の代理。physics/worker/README.md)。指定なしは従来どおり主スレッドの PhysicsAdapter
-const pa = q.get('physworker') === '1' ? await (await import('../physics/worker/physics_proxy.mjs')).PhysicsWorkerProxy.create(paOptions) : await PhysicsAdapter.create(RAPIER, paOptions);
+// 物理は既定で専用 Worker(physics/worker/README.md)。?physworker=0 で従来の主スレッド PhysicsAdapter。Worker/モジュールWorker非対応や起動失敗は自動で従来へ戻る
+const pa = await (async () => {
+  if (q.get('physworker') !== '0' && typeof Worker !== 'undefined') {
+    try {
+      return await (await import('../physics/worker/physics_proxy.mjs')).PhysicsWorkerProxy.create({ ...paOptions,
+        warm: { startup: q.get('physicswarm') !== '0', dense: q.get('densewarm') !== '0', rigidsync: q.get('rigidsync') !== '0', naturalBoardMotion: !!config.naturalBoardMotion, nativeQuery: q.get('cabinet') !== 'r2' && !!playRules.R3Enabled && q.get('audioquery') !== '0' } });
+    } catch (error) { console.warn('[physworker] 起動できないので主スレッド物理で続行', error); }
+  }
+  return PhysicsAdapter.create(RAPIER, paOptions);
+})();
 if (config.naturalBoardMotion) { pa.board.allowJamKick = false; pa.board.allowStuckNudge = false; }
 // Boot-only dense-world rehearsal; ?densewarm=0 keeps the previous warmup.
 if(!pa.isWorkerProxy&&q.get('densewarm')!=='0'){
@@ -81,14 +89,14 @@ if (initialEnvironment) {
 // H(?rules=h): 連打中の無料の球(shot.free)。持ち玉は減らさないので、物理側の玉の台帳を合わせるため、撃つ前に予備球を1つ補給し、盤から消えた(外れて返らない)ときは取り消す。既定(G)では shot.free が無く何も起きない
 const freeShotIds = new Set();
 const app = await createMedalApp(document.getElementById('stage'), {
-  hooks: { launchBall(shot, aim, dir) { if (shot.free && !pa.isWorkerProxy) { pa.stock++; freeShotIds.add(shot.id); } pa.setAim(aim, dir); pa.launch(shot.id); }, cancelFlights() { freeShotIds.clear(); pa.reset(); }, canReset() { return app.presenter.count.done; } },
+  hooks: { launchBall(shot, aim, dir) { if (shot.free) { pa.stock++; freeShotIds.add(shot.id); } pa.setAim(aim, dir); pa.launch(shot.id); }, cancelFlights() { freeShotIds.clear(); pa.reset(); }, canReset() { return app.presenter.count.done; } },
   rulesUrl: config.rules, seed, quiet: q.has('quiet'), music: false, log: !q.has('nolog'), human: !q.has('nolog') && !q.has('qa') && !q.has('manual'), manual: true,
 });
 const { ctrl, presenter } = app, effects = new EffectsBus();
 if (q.get('firegate') === '0') ctrl.fireGateEnabled = false;   // 射出の入口の一括判定(ui/controller.mjs fireBlockedReason)。?firegate=0 で従来(場面を問わず規則の canFire だけ)
 if (playRules.RuleVariant === 'H_20261029') {   // 無料の球が盤の外へ落ちた(lost)ときは、物理側が予備球に戻すので、その1球を取り消す(規則側は無料なので返金しない)
   const landing0 = ctrl.landing.bind(ctrl);
-  ctrl.landing = (shotId, lane, reached = true) => { if (freeShotIds.delete(shotId) && !reached && !pa.isWorkerProxy) pa.stock = Math.max(0, pa.stock - 1); return landing0(shotId, lane, reached); };
+  ctrl.landing = (shotId, lane, reached = true) => { if (freeShotIds.delete(shotId) && !reached) { if (pa.isWorkerProxy) pa.adjustStock(-1); else pa.stock = Math.max(0, pa.stock - 1); } return landing0(shotId, lane, reached); };
 }
 app.history?.setContext({ configName: config.name, stageDir: config.stageDir, rulesUrl: config.rules, seed });
 const cabinet = new CabinetSerial({ serial: navigator.serial, ctrl, button: document.getElementById('serial-connect'), status: document.getElementById('serial-status'), onInput: app.onInput, wake: () => { try { app.audio.unlock?.()?.catch?.(() => {}); } catch {} } });   // R3: 左右ボタンだけで進行(+ブラウザ音声の起こし)・LED帯の色もこの経路で送る
@@ -223,7 +231,7 @@ if (M3 && fxApi && !q.has('pack') && !q.has('fxjs') && q.get('prebake') !== '0')
 if (q.get('prewarm') !== '0') window.__prewarm = await prewarm({ hr, pack, fxApi, rules: app.rules });
 window.__r2Audio = r2Audio;
 const stats = runtime.stats;
-const launchMotion = M3 && q.get('launchanim') !== '0' && !q.has('nolauncher') && !pa.isWorkerProxy ? (await import('./launcher_motion_1030.mjs')).createLauncherMotion({ getShots: () => pa.shots }) : null;   // 射出の見え方（球を落とす・爪が開閉・待ち球）。見た目だけ。?launchanim=0 で従来
+const launchMotion = M3 && q.get('launchanim') !== '0' && !q.has('nolauncher') ? (await import('./launcher_motion_1030.mjs')).createLauncherMotion({ getShots: () => pa.snapShots ?? pa.shots }) : null;   // 射出の見え方（球を落とす・爪が開閉・待ち球）。見た目だけ。?launchanim=0 で従来
 const launcherArgs = M3 ? [(await import('./m3/launcher_body_m3.mjs')).createLauncherBody, { now: () => m3Clock, getLight: () => m3.state.k4, getLamp: () => launchLamp?.view, ...(launchMotion ? { getPose: () => launchMotion.pose } : {}) }] : [createLauncherBody, {}];
 const launcherBody = q.has('nolauncher') ? null : launcherArgs[0]({ stage: document.getElementById('stage'), canvas: document.getElementById('c'), camera: hr.camera, xRange: pa.board.launcher.xRange.map(x => pa.transforms.point('stage2', [x, pa.muzzle[1], pa.muzzle[2]])[0]) }, launcherArgs[1]);   // 射出器の本体(レール・筒)。見た目だけ
 function draw() {
