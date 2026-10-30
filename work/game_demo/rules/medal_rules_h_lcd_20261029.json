@@ -2,7 +2,7 @@
   "R2Enabled": true,
   "R3Enabled": true,
   "ContinuousFire": true,
-  "MaxExtraCredits": null,
+  "MaxExtraCredits": 10,
   "JackpotChainLamps": [
     6
   ],
@@ -39,9 +39,9 @@
     8.7,
     11
   ],
-  "LoanBalls": 80,
+  "LoanBalls": 60,
   "ExtraLoanBalls": 10,
-  "InitialSeconds": 70,
+  "InitialSeconds": 50,
   "ExtraSeconds": 20,
   "ContinueSeconds": 30,
   "Awards": [
@@ -88,19 +88,19 @@
   ],
   "JackpotWeights": [
     750000,
-    241000,
+    244199.97,
     5500,
-    3498.8,
-    1.2
+    300,
+    0.03
   ],
   "PrizeThresholds": [
     0,
-    90,
-    135,
-    165,
-    400
+    80,
+    120,
+    155,
+    500
   ],
-  "ExtraLoanWalletCap": 80,
+  "ExtraLoanWalletCap": 60,
   "PrizeNames": [
     "参加賞",
     "C賞",
@@ -155,34 +155,34 @@
   "DuplicateExtension": "natural",
   "DuplicateSegments": [
     {
-      "Until": 0.35,
+      "Until": 0.25,
       "ResetWeights": [
-        100,
-        0,
-        0,
+        50,
+        35,
+        15,
         0
       ],
       "HighLampDuplicateProtectionCount": 0
     },
     {
-      "Until": 0.55,
+      "Until": 0.45,
       "ResetWeights": [
-        100,
-        0,
+        65,
+        30,
+        5,
+        0
+      ],
+      "HighLampDuplicateProtectionCount": 0
+    },
+    {
+      "Until": 0.65,
+      "ResetWeights": [
+        85,
+        15,
         0,
         0
       ],
       "HighLampDuplicateProtectionCount": 1
-    },
-    {
-      "Until": 0.75,
-      "ResetWeights": [
-        100,
-        0,
-        0,
-        0
-      ],
-      "HighLampDuplicateProtectionCount": 2
     },
     {
       "Until": null,
@@ -272,7 +272,7 @@
   "ChainFirstAuto": true,
   "RuleVariant": "H_20261029",
   "RouletteStartDelaySeconds": 5.8,
-  "DuplicateSixthLampTeasePlateau": 0.4,
-  "DuplicateSixthLampTeaseUntil": 0.6,
+  "DuplicateSixthLampTeasePlateau": 0,
+  "DuplicateSixthLampTeaseUntil": 0,
   "DuplicateSixthLampTeaseMax": 3
 }

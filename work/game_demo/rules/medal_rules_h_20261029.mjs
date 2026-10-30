@@ -202,7 +202,11 @@ export class MedalGame extends GGame {
   }
   /** 継続の選択が出ているが、時計が0以下で、続けるには100円の追加が要る（液晶は「追加で継続」を出す） */
   get chainNeedsAdd() {
-    return !!this.rules.ChainContinueNeedsAddAtZero && this.phase === MedalPhase.ChainChoice && !!this.jackpotChain?.choicePending && this.secondsLeft <= 0;
+    return !!this.rules.ChainContinueNeedsAddAtZero && this.phase === MedalPhase.ChainChoice && !!this.jackpotChain?.choicePending && this.secondsLeft <= 0 && this.extraCreditsUsed < this.rules.MaxExtraCredits;
+  }
+  /** 時計0で追加の上限（MaxExtraCredits）に達していたら、続ける手段が無いので継続の選択を出さずに確定する（10/31。押しても何も起きない「追加で継続」を出さない）。 */
+  get chainTooLate() {
+    return super.chainTooLate || (!!this.rules.ChainContinueNeedsAddAtZero && this.secondsLeft <= 0 && this.extraCreditsUsed >= this.rules.MaxExtraCredits);
   }
   get endStatus() {
     const s = super.endStatus; if (!s) return s;
