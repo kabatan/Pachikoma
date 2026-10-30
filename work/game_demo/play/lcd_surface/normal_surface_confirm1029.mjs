@@ -323,7 +323,10 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       const historyEligible=!!resultHistory?.active;
       const videoEligible=historyEligible||!!videoBackend&&!videoFailed&&(fadeLeft<=0||choiceBridge)&&!mode&&!(guard&&clock<guard.until)&&!choiceWrites(this);
       if(!videoEligible)materializeGpu('normal-overlay-owner');
-      const videoSnapshot=clips.frame(dt,videoEligible?null:hold,W,H);
+      // The attract wrapper owns every visible pixel here. Keep the player's
+      // timeline and lighting updates, but omit its covered video-to-Canvas copy.
+      const coveredPaint=this.attractCoveredPaint===true&&['attract','title','howto'].includes(mode?.id);
+      const videoSnapshot=clips.frame(dt,videoEligible||coveredPaint?null:hold,W,H);
       shotOn = !!clips.shot || clips.pending > 0;
       // Keep the original pulse lifetime and render equations; only its target changes.
       launchPulses = launchPulses.filter(t => clock - t < .8);

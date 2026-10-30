@@ -24,6 +24,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   const ctx=lcd.canvas.getContext('2d'),errors=[];
   const query=new URLSearchParams(globalThis.location?.search??'');
   const gpuEnabled=query.get('attractgpu')!=='0',skipEnabled=query.get('attractskip')!=='0';
+  const innerSkip=query.get('attractinner')!=='0';
   const liteMedia=m=>query.get('videolite')==='1'&&m.liteSource===m.file&&m.liteFile?m.liteFile:m.file;
   const attractLoaded=await loadVideo(new URL(liteMedia(man),base).href,{loop:true,label:'attract',errors});
   // チュートリアル動画。読めなくても待機は動かす(その場合 howto は従来の説明に戻る)
@@ -84,7 +85,11 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
     // Only these fully covered title modes use the simple normal Canvas path.
     // JP/choice/result and all transition ownership still execute unmodified.
     const skip=active&&skipEnabled&&cur.v.readyState>=2&&(kind==='attract'?['attract','title']:['howto']).includes(lcd.current?.mode);
-    if(skip){paint.run(()=>original.frame(dt,F));stats.hiddenFrames++;}else original.frame(dt,F);
+    if(skip){
+      const prior=lcd.attractCoveredPaint;lcd.attractCoveredPaint=innerSkip;
+      try{paint.run(()=>original.frame(dt,F));stats.hiddenFrames++;}
+      finally{lcd.attractCoveredPaint=prior;}
+    }else original.frame(dt,F);
     if(!active)return;
     stats.frames++;refresh();
     if(!direct()||!cur.heldFrame){published=false;draw();}
@@ -127,7 +132,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
     get directActive(){return active&&direct();},
     compose(){if(!active||!direct())return null;const texture=cur.gpu.compose(cur.frameRevision);published=!!texture;return texture;},
     materialize,
-    diagnostics:()=>({...stats,gpuEnabled,skipEnabled,kind,frameRevision:cur.frameRevision,heldFrame:!!cur.heldFrame,paintSkipped:paint.stats.skipped,tutorialWarm:warm.tutorial,gpu:Object.fromEntries(Object.entries(sources).map(([k,s])=>[k,s?.gpu?.diagnostics()??null])),tutorialQuality:(q=>q?{total:q.totalVideoFrames,dropped:q.droppedVideoFrames,corrupted:q.corruptedVideoFrames}:null)(sources.tutorial?.v.getVideoPlaybackQuality?.())})};
+    diagnostics:()=>({...stats,gpuEnabled,skipEnabled,innerSkip,kind,frameRevision:cur.frameRevision,heldFrame:!!cur.heldFrame,paintSkipped:paint.stats.skipped,tutorialWarm:warm.tutorial,gpu:Object.fromEntries(Object.entries(sources).map(([k,s])=>[k,s?.gpu?.diagnostics()??null])),tutorialQuality:(q=>q?{total:q.totalVideoFrames,dropped:q.droppedVideoFrames,corrupted:q.corruptedVideoFrames}:null)(sources.tutorial?.v.getVideoPlaybackQuality?.())})};
   lcd.dispose=()=>{
     if(disposed)return;disposed=true;
     for(const s of all){if(s.callback!==null)s.v.cancelVideoFrameCallback?.(s.callback);s.heldFrame?.close();s.heldFrame=null;s.gpu?.dispose();s.v.pause();s.v.removeEventListener('seeked',s.decoded);s.v.removeEventListener('loadeddata',s.decoded);s.v.removeAttribute('src');s.v.load();}

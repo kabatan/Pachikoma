@@ -6,3 +6,5 @@
 | 流用(新規作成なし) | `n_lamp1〜6`(`work/audio/sfx/`)、`v5_s_coin`(`work/audio/jp_proto_1029/runtime_assets_v5/sfx/`) | 既存の自作合成音(上の JP/通常時の記録に従う) | 同上 |
 | プレビュー動画の背景音 | `jp_through_v05_sfx_p1.mp4` の雷・JP曲・RUSH直後の打音 | 既存の JP 音(jp_audio_v5 の素材。JP曲は監督提供素材) | JP曲は監督提供素材の扱いに従う |
 - 声・人の発話・AI音声は使っていない。実機(海物語・北斗無双・逆シャア等)の音の抽出・サンプリングはしていない(作り方・構成・タイミングの考え方だけを参考にした)。
+
+- 10/30 追加分(jpc_hit / jpc_hit_chain / jpc_riser / rl_* / mt_*):すべて src/make_jp.py の合成(numpy/scipy)。外部素材なし。

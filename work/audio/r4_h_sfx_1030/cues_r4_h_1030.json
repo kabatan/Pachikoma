@@ -1253,5 +1253,64 @@
    0,
    0.6
   ]
+ },
+ "jp_confirm": {
+  "first": [
+   "jpc_hit",
+   0
+  ],
+  "chain": [
+   "jpc_hit_chain",
+   0
+  ],
+  "riser": [
+   "jpc_riser",
+   -3
+  ],
+  "press": [
+   "rl_press",
+   -3
+  ],
+  "stop": [
+   "rl_stop",
+   -4
+  ],
+  "note": "既定H:rouletteStopPress→滑走の上昇音(riser)、rouletteStopped(=JP確定/継続成功の同じ瞬間)→衝撃・ブラス・きらめき・玉・余韻"
+ },
+ "roulette": {
+  "tick": [
+   "rl_tick",
+   -7
+  ],
+  "period": [
+   0.36,
+   0.1
+  ],
+  "rate": [
+   1.0,
+   1.4
+  ],
+  "note": "回転中の刻み。自動停止が近づくほど速く高く"
+ },
+ "meter": {
+  "ready": [
+   "mt_ready",
+   -4
+  ],
+  "go": [
+   "mt_go",
+   -2
+  ],
+  "max": [
+   "mt_max",
+   0
+  ]
+ },
+ "choice_wait": {
+  "tick": [
+   "rl_tick",
+   -17
+  ],
+  "period": 0.8
  }
 }

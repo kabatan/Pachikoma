@@ -95,6 +95,7 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
       if (st?.kind === 'chain' && st.threshold > 0) {
         const T = st.threshold, d = pickD(cm[1], T);
         if (d) {
+          S.final = false;   // 直前のJPの成功が残っていても、継続の挑戦は最初から
           const n = N(d), c = stageOf(S.final ? T : st.count | 0, T, n);
           S.T = T;
           name = c <= 0 ? nm(d, 'in') : c >= n ? nm(d, 'open') : nm(d, `s${c}`); S.swaps++; note('redirect:chain', { to: name, T, n });

@@ -132,7 +132,31 @@ export async function installR4Sfx(engine, { lcd, controller, cuesUrl = new URL(
     if (e.hit) { const u = Number.isFinite(e.count) && e.threshold > 0 ? Math.min(1, e.count / e.threshold) : 0; play(...cues.hole.hit, { pan, rate: 1 + .26 * u }); api.meterHits = (api.meterHits ?? 0) + 1; }
     else play(...cues.hole.miss, { pan });
   });
-  const timer = setInterval(() => { if (ctx.state !== 'running') return; try { tick(); choiceTick(); timerTick(); meterTick(); } catch (e) { if (!api.error) { api.error = e.message; console.error('[r4-sfx]', e); } } }, 12);
-  api.dispose = () => { clearInterval(timer); try { actOff?.(); } catch { } ambStop(.05); for (const s of nodes) { try { s.stop(); } catch { } } out.disconnect(); };
+  // ---- 既定H:メーター導入・開始・満タン、ルーレットの刻み、ボタン停止、JP確定(衝撃・ブラス・きらめき・余韻)。規則のイベント(controller.onAction)から ----
+  let rlNext = 0, cwNext = 0;
+  function rouletteTick() {
+    const g = controller.game, r = g?.roulette, t = now();
+    if (r && r.stage === 'spinning' && r.age >= 0) {
+      if (t >= rlNext) {
+        const total = Math.max(1, (g.rules?.RouletteAutoStopSeconds ?? 8)), u = Math.min(1, r.age / total), R = cues.roulette;
+        const per = R.period[0] + (R.period[1] - R.period[0]) * u * u, rate = R.rate[0] + (R.rate[1] - R.rate[0]) * u;
+        play(R.tick[0], R.tick[1] + 5 * u, { rate }); rlNext = t + per;
+      }
+    } else rlNext = 0;
+    const c = lcd.choiceV20;
+    if (c?.active && !r) { if (t >= cwNext) { play(cues.choice_wait.tick[0], cues.choice_wait.tick[1]); cwNext = t + cues.choice_wait.period; } } else cwNext = 0;
+  }
+  let actOff2 = null;
+  if (controller?.onAction) actOff2 = controller.onAction(act => {
+    const e = controller.lastGameEvent; if (!e || e.type !== act) return;
+    const M = cues.meter, C = cues.jp_confirm;
+    if (act === 'meterReady') play(...M.ready);
+    else if (act === 'meterStart') play(...M.go);
+    else if (act === 'meterEnd') { if (e.success) play(...M.max); }
+    else if (act === 'rouletteStopPress') { play(...C.press); const sl = Number(e.slideSeconds) || 1.15; play(C.riser[0], C.riser[1], { rate: 1.15 / sl }); }
+    else if (act === 'rouletteStopped') { play(...C.stop); play(...(e.kind === 'chain' ? C.chain : C.first)); api.jpHits = (api.jpHits ?? 0) + 1; }
+  });
+  const timer = setInterval(() => { if (ctx.state !== 'running') return; try { tick(); choiceTick(); timerTick(); meterTick(); rouletteTick(); } catch (e) { if (!api.error) { api.error = e.message; console.error('[r4-sfx]', e); } } }, 12);
+  api.dispose = () => { clearInterval(timer); try { actOff?.(); actOff2?.(); } catch { } ambStop(.05); for (const s of nodes) { try { s.stop(); } catch { } } out.disconnect(); };
   return api;
 }
