@@ -1,7 +1,11 @@
 // 10/30 Blender-glyph HUD (replaces timer_display_20261029). Shared production HUD. Values are read directly from the rule state, never counted here.
+import * as THREE from '../../web/vendor/three/three.module.js';
+import { layerTexture } from './lcd_split_1030.mjs';
 const PX=34,PY=28,SPRITE_LIMIT=104;
 // 10/30 pair style: the seconds HUD mirrors the lit-count badge (top-left "N灯") — same baked glyph family, same scale (0.38 px per glyph unit), same height, mirrored margins. ?timerhud=0 restores the previous HUD.
 const TIMEUP_SKIP=!(typeof location!=='undefined'&&(new URLSearchParams(location.search).get('timeupskip')==='0'||new URLSearchParams(location.search).get('hudhandoff')==='0'));
+const TIMER_SPLIT=!(typeof location!=='undefined'&&new URLSearchParams(location.search).get('timersplit')==='0');   // 時計を液晶 canvas に描かず小さい層で重ねる(保存・復元の drawImage 読み戻しを無くす)。?timersplit=0 で従来
+const SPLIT_PHASES=new Set(['Ready','Flight','Effect','Fault','Meter','Roulette']);   // 時計の上に重ね描きする外側の層(選択・時間切れ・スタッフ)が出ない局面だけ
 const PAIR=!(typeof location!=='undefined'&&new URLSearchParams(location.search).get('timerhud')==='0');
 // HUD region in panel-canvas px (1240x1510). The GPU compositors hard-code the same rectangle (vec2(690.,130.)/vec2(496.,410.)); change both together.
 const HUD={x:690,y:130,w:496,h:410};
@@ -27,7 +31,7 @@ export function attachTimerDisplay(lcd,{getState,hudCache=new URLSearchParams(gl
   const updateRevision=()=>{
     const base=sourceRevision?.call(lcd);
     if(!Number.isSafeInteger(base)||base<0){frameRevision=undefined;uploadKey=null;return;}
-    const key=JSON.stringify([base,shown?.seconds,shown?.offer,shown?.warning,shown?.warning?Math.round(shown.pulse*40):null,shown?.offer<=10?Math.round(shown?.offerPulse*40):null,ready]);
+    const key=sp.on?JSON.stringify([base,'split']):JSON.stringify([base,shown?.seconds,shown?.offer,shown?.warning,shown?.warning?Math.round(shown.pulse*40):null,shown?.offer<=10?Math.round(shown?.offerPulse*40):null,ready]);
     if(key!==uploadKey){uploadKey=key;revision++;}frameRevision=revision;
   };
   // 10/30 version: glyphs are Blender-baked 3D parts (timer_assets_20261030/glyphs), composed per second.
@@ -101,9 +105,17 @@ export function attachTimerDisplay(lcd,{getState,hudCache=new URLSearchParams(gl
     put(ctx,sprite(label,n,warning),PX+r.x,PY+r.y,warning,pulse);
   };
   const paintGpu=(i,label,n,warning,pulse)=>put(gpuHudCtx,sprite(label,n,warning),PAIR?0:866-HUD.x,PAIR?0:156-HUD.y+i*158,warning,pulse);
+  const sp={on:false,tex:null,hudRev:-1};
+  const splitLayer=()=>{
+    if(!sp.on||!shown)return null;
+    sp.tex??=layerTexture(THREE,gpuHud);
+    if(sp.hudRev!==hudRevision||!hudCache){sp.tex.needsUpdate=true;sp.hudRev=hudRevision;}
+    return {tex:sp.tex,w:HUD.w,h:HUD.h,ax:0,ay:0,x:HUD.x,y:HUD.y,rot:0,sc:1,alpha:1,add:false};
+  };
+  lcd.timerSplit={layer:splitLayer};
   const base={frame:lcd.frame.bind(lcd),onEvent:lcd.onEvent.bind(lcd),dispose:lcd.dispose.bind(lcd)};
   lcd.frame=(dt,F)=>{
-    clear();base.frame(dt,F);shown=timerValues(getState());
+    clear();sp.on=false;base.frame(dt,F);shown=timerValues(getState());
     if(lcd.gpuPanelSource){
       // Warning motion uses the exact pulse, without rounding. Ordinary timer
       // pixels depend only on the displayed integer and the loaded glyph set.
@@ -114,6 +126,14 @@ export function attachTimerDisplay(lcd,{getState,hudCache=new URLSearchParams(gl
         hudKey=nextKey;hudRevision++;hudStats.paints++;
       }else hudStats.reuses++;
       lcd.gpuPanelSource.backend.setHudCanvas(shown?gpuHud:null,hudCache?hudRevision:undefined);
+    }else if(TIMER_SPLIT&&shown&&ready&&PAIR&&!lcd.splitBroken&&SPLIT_PHASES.has(getState().phase)&&!lcd.timeupSurface?.active&&!lcd.choiceV20?.active&&!lcd.choiceV20?.holding&&!lcd.displayRecoveryActive&&!globalThis.__timerSplitOff){
+      sp.on=true;   // 時計は小さい canvas(gpuHud)へ。液晶 canvas には描かない→保存・復元の読み戻しなし。play_fx が層として重ねる
+      const nextKey=JSON.stringify([ready,shown.seconds,shown.offer,shown.warning,shown.warning?shown.pulse:null,shown.offer!==null&&shown.offer<=10?shown.offerPulse:null]);
+      if(!hudCache||nextKey!==hudKey){
+        gpuHudCtx.clearRect(0,0,HUD.w,HUD.h);
+        paintGpu(0,'残り時間',shown.seconds,shown.warning,shown.pulse);if(shown.offer!==null)paintGpu(1,'追加受付',shown.offer,shown.offer<=10,shown.offerPulse);
+        hudKey=nextKey;hudRevision++;hudStats.paints++;
+      }else hudStats.reuses++;
     }else if(shown&&!(TIMEUP_SKIP&&lcd.timeupSurface?.active)){   // 時間切れ画面は全面を上書きするので、その下に時計を描いて保存・復元するのは無駄(?timeupskip=0 で従来)
       paint(0,'残り時間',shown.seconds,shown.warning,shown.pulse);
       if(shown.offer!==null)paint(1,'追加受付',shown.offer,shown.offer<=10,shown.offerPulse);

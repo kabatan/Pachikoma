@@ -240,6 +240,14 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
         const stable=Number.isSafeInteger(revision)&&revision>=0&&plate.tex.image===last.lcd;
         if(!stable||uploadCanvas!==last.lcd||uploadTexture!==plate.tex||plate.tex.image!==last.lcd||uploadRevision!==revision)plate.tex.needsUpdate=true;
         uploadCanvas=last.lcd;uploadTexture=plate.tex;uploadRevision=stable?revision:undefined;
+        {   // 時計(残り時間)は液晶 canvas に描かず小さい層で重ねる: 液晶 canvas の保存・復元(読み戻し)を無くす。?timersplit=0 で従来
+          const tl=!lcd?.displayRecoveryActive&&!lcd?.splitBroken?lcd?.timerSplit?.layer():null;
+          if(tl&&last.lcd.width===1240&&last.lcd.height===1510){
+            let tex=null;
+            try{tex=(splitComp??=createSplitCompositor(THREE,hr.renderer)).compose([{tex:plate.tex,w:1240,h:1510,ax:0,ay:0,x:0,y:0,rot:0,sc:1,alpha:1,add:false},tl]);}catch(e){lcd.splitBroken=true;console.warn('[lcdsplit] 時計の合成に失敗。従来へ戻します',e);}
+            if(tex){window.__timerSplitTexture=tex;plate.mat.uniforms.uT.value=tex;}
+          }
+        }
       }
       return last;
     },
