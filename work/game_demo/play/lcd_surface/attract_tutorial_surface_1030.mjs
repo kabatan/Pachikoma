@@ -18,26 +18,33 @@ async function loadVideo(url,{loop,label,errors}) {
   });
   return {v,error};
 }
-export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('../../../effects/attract/prod/manifest.json',import.meta.url),tutorialManifestUrl=new URL('../../../effects/tutorial/prod/manifest.json',import.meta.url)}={}) {
+export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('../../../effects/attract/prod/manifest.json',import.meta.url),tutorialManifestUrl=null,tutorialShortManifestUrl=new URL('../../../effects/tutorial/prod/manifest_short.json',import.meta.url)}={}) {
   if(!lcd?.production||lcd.attractSurface)return lcd;
   const response=await fetch(manifestUrl);if(!response.ok)throw Error(`attract manifest: HTTP ${response.status}`);
   const man=await response.json(),base=new URL('.',manifestUrl);
   const ctx=lcd.canvas.getContext('2d'),errors=[];
   const query=new URLSearchParams(globalThis.location?.search??'');
+  // 10/30 v09: 説明は ?tutv=old で旧(v07, 16秒)に戻る。既定は新(v09)。2回目の客(結果の「もう一度」経由)には短い版(要点3行のまとめ)を流す(?tutshort=0 で常に通常版)
+  if(!tutorialManifestUrl)tutorialManifestUrl=new URL(query.get('tutv')==='old'?'../../../effects/tutorial/prod/manifest_v07.json':'../../../effects/tutorial/prod/manifest.json',import.meta.url);
+  const shortEnabled=query.get('tutv')!=='old'&&query.get('tutshort')!=='0';
   const gpuEnabled=query.get('attractgpu')!=='0',skipEnabled=query.get('attractskip')!=='0';
   const innerSkip=query.get('attractinner')==='1';   // 10/30 実機で待機映像が映らない件で既定は切（=1で隠しコピー省略）
   const liteMedia=m=>query.get('videolite')==='1'&&m.liteSource===m.file&&m.liteFile?m.liteFile:m.file;
   const attractLoaded=await loadVideo(new URL(liteMedia(man),base).href,{loop:true,label:'attract',errors});
   // チュートリアル動画。読めなくても待機は動かす(その場合 howto は従来の説明に戻る)
-  let tman=null,tloaded=null;
-  try {
-    const tr=await fetch(tutorialManifestUrl);if(!tr.ok)throw Error(`HTTP ${tr.status}`);
-    tman=await tr.json();tloaded=await loadVideo(new URL(liteMedia(tman),new URL('.',tutorialManifestUrl)).href,{loop:false,label:'tutorial',errors});
-  } catch(e){console.error('tutorial video unavailable: '+(e?.message??e));errors.push('tutorial: '+(e?.message??e));tman=null;tloaded=null;}
+  const loadTut=async(url,label)=>{
+    try {
+      const tr=await fetch(url);if(!tr.ok)throw Error(`HTTP ${tr.status}`);
+      const m=await tr.json();const l=await loadVideo(new URL(liteMedia(m),new URL('.',url)).href,{loop:false,label,errors});return [m,l];
+    } catch(e){console.error(label+' video unavailable: '+(e?.message??e));errors.push(label+': '+(e?.message??e));return [null,null];}
+  };
+  const [tman,tloaded]=await loadTut(tutorialManifestUrl,'tutorial');
+  const [sman,sloaded]=tman&&shortEnabled?await loadTut(tutorialShortManifestUrl,'tutorialShort'):[null,null];
   let disposed=false;
   const stats={frames:0,hiddenFrames:0,canvasDraws:0,decodedFrames:0,boundaryCopies:0};
   const mk=(v,m)=>({v,man:m,gpu:null,frameRevision:0,heldFrame:null,heldRevision:-1,callback:null,fallbackKey:null});
-  const sources={attract:mk(attractLoaded.v,man),tutorial:tloaded?mk(tloaded.v,tman):null};
+  const sources={attract:mk(attractLoaded.v,man),tutorial:tloaded?mk(tloaded.v,tman):null,tutorialShort:sloaded?mk(sloaded.v,sman):null};
+  const isTut=k=>k==='tutorial'||k==='tutorialShort';
   const all=Object.values(sources).filter(Boolean);
   for(const s of all){
     s.decoded=()=>{s.frameRevision++;stats.decodedFrames++;};
@@ -45,7 +52,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
     if(gpuEnabled&&typeof s.v.requestVideoFrameCallback==='function')s.watch();
     s.v.addEventListener('seeked',s.decoded);s.v.addEventListener('loadeddata',s.decoded);
   }
-  const skipOv=sources.tutorial&&query.get('tutskip')!=='0'?createSkipOverlay({x:PX+OV_VIDEO_X,y:PY+OV_Y_MAIN,videoTop:PY}):null;
+  const skipOv=(sources.tutorial||sources.tutorialShort)&&query.get('tutskip')!=='0'?createSkipOverlay({x:PX+OV_VIDEO_X,y:PY+OV_Y_MAIN,videoTop:PY}):null;
   let active=false,kind=null,manual=false,time=0,published=false,cur=sources.attract;
   const paint=skipEnabled?suppressCanvasPaint(ctx):{stats:{skipped:0},run:fn=>fn(),dispose(){}};
   const refresh=()=>{
@@ -65,12 +72,12 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   const draw=(boundary=false)=>{
     ctx.fillStyle='#000';ctx.fillRect(0,0,lcd.canvas.width,lcd.canvas.height);
     if(cur.v.readyState>=2)ctx.drawImage(boundary?(cur.heldFrame??cur.v):cur.v,PX,PY,W,H);
-    if(skipOv?.visible&&cur===sources.tutorial)ctx.drawImage(skipOv.canvas,skipOv.x,skipOv.y,skipOv.w,skipOv.h);
+    if(skipOv?.visible&&isTut(kind))ctx.drawImage(skipOv.canvas,skipOv.x,skipOv.y,skipOv.w,skipOv.h);
     stats.canvasDraws++;
   };
   const materialize=()=>{draw(true);published=false;stats.boundaryCopies++;};
   // 何を流すか: Attract 中、howto でなければ待機ループ、howto 中(動画が読めていれば)チュートリアル
-  const wantedKind=()=>{const s=getState();if(lcd.displayRecoveryActive||s.phase!=='Attract')return null;return s.howto?(sources.tutorial?'tutorial':null):'attract';};
+  const wantedKind=()=>{const s=getState();if(lcd.displayRecoveryActive||s.phase!=='Attract')return null;return s.howto?((s.repeat&&sources.tutorialShort)?'tutorialShort':sources.tutorial?'tutorial':null):'attract';};
   const original={frame:lcd.frame.bind(lcd),onEvent:lcd.onEvent.bind(lcd),prepare:lcd.prepare.bind(lcd),setManual:lcd.setManual.bind(lcd),applyLights:lcd.applyLights.bind(lcd),dispose:lcd.dispose.bind(lcd)};
   const revision=Object.getOwnPropertyDescriptor(lcd,'uploadRevision')?.get;
   const sync=()=>{
@@ -85,7 +92,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   };
   lcd.frame=(dt,F)=>{
     sync();
-    if(skipOv)skipOv.update(kind==='tutorial'?getState().skip:null,kind==='tutorial'?cur.v.currentTime:0);
+    if(skipOv)skipOv.update(isTut(kind)?getState().skip:null,isTut(kind)?cur.v.currentTime:0,isTut(kind)?cur.man.skipLayout:null);
     // Only these fully covered title modes use the simple normal Canvas path.
     // JP/choice/result and all transition ownership still execute unmodified.
     const skip=active&&skipEnabled&&cur.v.readyState>=2&&(kind==='attract'?['attract','title']:['howto']).includes(lcd.current?.mode);
@@ -102,7 +109,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   lcd.onEvent=(id,...args)=>{
     if(active&&published)materialize();
     if(id==='attract'){sources.attract.v.currentTime=0;if(kind==='attract')time=0;}
-    if(id==='howto'&&sources.tutorial){sources.tutorial.v.currentTime=0;if(kind==='tutorial')time=0;}
+    if(id==='howto'){for(const k of ['tutorial','tutorialShort'])if(sources[k]){sources[k].v.currentTime=0;if(kind===k)time=0;}}
     const result=original.onEvent(id,...args);sync();return result;
   };
   lcd.setManual=on=>{manual=!!on;for(const s of all)s.v.pause();original.setManual(on);sync();};
@@ -117,26 +124,26 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   lcd.applyLights=F=>original.applyLights(F);
   if(revision)Object.defineProperty(lcd,'uploadRevision',{configurable:true,enumerable:true,get:()=>active?undefined:revision.call(lcd)});
   // 起動時の予熱: チュートリアルのデコーダを一度動かして最初のフレームを用意する(開始ボタン後の初回再生で遅れない)
-  const warm={tutorial:null};
-  if(sources.tutorial){
-    try{warm.tutorial=await withRestored2D(ctx,()=>warmPausedVideo(sources.tutorial.v,v=>{ctx.drawImage(v,PX,PY,W,H);}));}
-    catch(e){warm.tutorial={skipped:true,reason:String(e?.message??e)};}
+  const warm={tutorial:null,tutorialShort:null};
+  for(const k of ['tutorial','tutorialShort'])if(sources[k]){
+    try{warm[k]=await withRestored2D(ctx,()=>warmPausedVideo(sources[k].v,v=>{ctx.drawImage(v,PX,PY,W,H);}));}
+    catch(e){warm[k]={skipped:true,reason:String(e?.message??e)};}
   }
   lcd.attractSurface={video:sources.attract.v,manifest:man,errors,
-    tutorial:sources.tutorial?{video:sources.tutorial.v,manifest:tman,duration:tman.duration,warm}:null,
-    get kind(){return kind;},get active(){return active;},get time(){return manual?time:cur.v.currentTime;},
+    tutorial:sources.tutorial?{video:sources.tutorial.v,manifest:tman,duration:tman.duration,durationShort:sources.tutorialShort?sman.duration:null,warm}:null,
+    get kind(){return kind;},get sceneKey(){return active&&isTut(kind)?(cur.man.lightScene??null):null;},get active(){return active;},get time(){return manual?time:cur.v.currentTime;},
     connectGpu(options){
       if(!gpuEnabled)return;
       for(const s of all)if(!s.gpu){
-        s.gpu=createAttractGpu({...options,video:s.v,width:lcd.canvas.width,height:lcd.canvas.height,overlay:s===sources.tutorial&&skipOv?skipOv:null});
+        s.gpu=createAttractGpu({...options,video:s.v,width:lcd.canvas.width,height:lcd.canvas.height,overlay:(s===sources.tutorial||s===sources.tutorialShort)&&skipOv?skipOv:null});
         // 切替時の初回合成でシェーダ/ターゲットを作らせない(ここで一度だけ描いておく。revisionは使われない値)
-        if(s===sources.tutorial){try{s.gpu.compose(-2);}catch(e){errors.push('tutorial gpu warm: '+(e?.message??e));}}
+        if(s===sources.tutorial||s===sources.tutorialShort){try{s.gpu.compose(-2);}catch(e){errors.push('tutorial gpu warm: '+(e?.message??e));}}
       }
     },
     get directActive(){return active&&direct();},
-    compose(){if(!active||!direct())return null;const texture=cur.gpu.compose(cur.frameRevision,cur===sources.tutorial&&skipOv?skipOv.revision:0);published=!!texture;return texture;},
+    compose(){if(!active||!direct())return null;const texture=cur.gpu.compose(cur.frameRevision,isTut(kind)&&skipOv?skipOv.revision:0);published=!!texture;return texture;},
     materialize,
-    diagnostics:()=>({...stats,gpuEnabled,skipEnabled,innerSkip,kind,frameRevision:cur.frameRevision,heldFrame:!!cur.heldFrame,paintSkipped:paint.stats.skipped,tutorialWarm:warm.tutorial,gpu:Object.fromEntries(Object.entries(sources).map(([k,s])=>[k,s?.gpu?.diagnostics()??null])),tutorialQuality:(q=>q?{total:q.totalVideoFrames,dropped:q.droppedVideoFrames,corrupted:q.corruptedVideoFrames}:null)(sources.tutorial?.v.getVideoPlaybackQuality?.())})};
+    diagnostics:()=>({...stats,gpuEnabled,skipEnabled,innerSkip,kind,frameRevision:cur.frameRevision,heldFrame:!!cur.heldFrame,paintSkipped:paint.stats.skipped,tutorialWarm:warm.tutorial,tutorialShortWarm:warm.tutorialShort,gpu:Object.fromEntries(Object.entries(sources).map(([k,s])=>[k,s?.gpu?.diagnostics()??null])),tutorialQuality:(q=>q?{total:q.totalVideoFrames,dropped:q.droppedVideoFrames,corrupted:q.corruptedVideoFrames}:null)(sources.tutorial?.v.getVideoPlaybackQuality?.())})};
   lcd.dispose=()=>{
     if(disposed)return;disposed=true;
     for(const s of all){if(s.callback!==null)s.v.cancelVideoFrameCallback?.(s.callback);s.heldFrame?.close();s.heldFrame=null;s.gpu?.dispose();s.v.pause();s.v.removeEventListener('seeked',s.decoded);s.v.removeEventListener('loadeddata',s.decoded);s.v.removeAttribute('src');s.v.load();}

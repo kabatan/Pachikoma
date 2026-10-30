@@ -21,7 +21,7 @@ export class MedalController {
     this.fireGateEnabled = true; this.fireGate = null; this.lastFireGate = null; this.fireGateDrops = 0;
     this.droppedInputs = [];   // R-04: 勝負ボタンの先押しを0.3秒だけ1回保持。捨てた押しは記録
     this.inputLog = [];
-    this.howtoSeconds = 0; this.howtoMinDwell = 0.5; this.howtoPanels = 5; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
+    this.howtoSeconds = 0; this.howtoSecondsFull = null; this.howtoSecondsShort = null; this.repeatVisit = false; /* 10/30 2回目の客(結果の「もう一度」経由)は短い説明。play.mjs が Full/Short を設定 */ this.howtoMinDwell = 0.5; this.howtoPanels = 5; this.howto = null; // ルール説明(開始前、時計に含めない)。0なら即開始
     // 説明(howto)の長押しスキップ(10/30。?tutskip=0 で従来=押すと0.5秒後から飛ばせる)。play.mjs が液晶のゲージを付けたときだけ true にする。
     // 短い押下(連打)では飛ばさず、押している間 holdSeconds 満ちたら飛ばす。説明が始まって graceSeconds 以内の押下(開始ボタンの余韻の連打)は長押しの数に入れない。
     this.tutSkipEnabled = false; this.tutSkipHoldSeconds = 1.0; this.tutSkipGraceSeconds = 0.8;
@@ -135,7 +135,7 @@ export class MedalController {
           if (h.t - k * per >= dwell) { if (k >= this.howtoPanels - 1) { this._startNow(); return true; } h.t = (k + 1) * per; this._lastActionFrame = this.frame; return true; }
           break;   // 読ませている間の押下は無視
         }
-        if (this.howtoSeconds > 0) { this.howto = { t: 0 }; ok = true; action = 'howto'; break; }
+        if (this.howtoSeconds > 0) { if (this.howtoSecondsFull != null) this.howtoSeconds = this.repeatVisit && this.howtoSecondsShort != null ? this.howtoSecondsShort : this.howtoSecondsFull; this.howto = { t: 0 }; ok = true; action = 'howto'; break; }
         this.hooks.cancelFlights?.(); ok = g.start(); this.sessionId++; break;
       case 'fire': ok = this._fire(); break;
       case 'challenge':
@@ -162,9 +162,9 @@ export class MedalController {
       case 'settleFault': if (g.phase === MedalPhase.Fault) ok = g.finish(); break;
       case 'replay':   // 客用の「もう一度」: 結果が出て3秒後から。スタッフ用の 'reset'(R)は即時
         if ((this.resultAge ?? 0) < this.replayAfter) break;
-        return this.dispatch('reset');
+        { const r = this.dispatch('reset'); if (r) this.repeatVisit = true; return r; }   // 10/30 客用の「もう一度」だけ 2回目扱い(スタッフの 'reset' は新しい客)
       case 'reset':
-        if (g.phase === MedalPhase.Result && (this.hooks.canReset?.() ?? true)) { this.hooks.cancelFlights?.(); this.game = new MedalGame(this.rules, this.seed == null ? undefined : this.seed + 1 + this.sessionId); this.aimClock = 0; this.confirmFinish = false; this.fireBuffer = this.preBuffer = null; ok = true; }
+        if (g.phase === MedalPhase.Result && (this.hooks.canReset?.() ?? true)) { this.repeatVisit = false; this.hooks.cancelFlights?.(); this.game = new MedalGame(this.rules, this.seed == null ? undefined : this.seed + 1 + this.sessionId); this.aimClock = 0; this.confirmFinish = false; this.fireBuffer = this.preBuffer = null; ok = true; }
         break;
       case 'quit': ok = true; break;
     }

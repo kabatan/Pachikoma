@@ -209,11 +209,77 @@ function sealIdle(o, c) {
   sealStage(o, c.clock, rem, N, 99);
 }
 registerGrammar('nl_tut06', tut06);
+// ---------------------------------------------------------------- 1b. 冒頭チュートリアル v09（50.2秒・14カット。2回目向けの短い版は t+40 秒の位置から）
+// 0 目標(0-4.0) / 1 残り時間(-6.8) / 2 ボタン(-10.6) / 3 玉→ランプ(-14.0) / 4 ついていない穴(-16.8) / 5 重複(-21.0) / 6 5灯→雷(-23.6) / 7 扉(-25.6) / 8 JACKPOT CHANCE(-27.3) / 9 連打・鎖(-30.7) / 10 解放(-33.3) / 11 玉がドッと(-36.7) / 12 継続(-40.0) / 13 まとめ(-47.4) / 14 はじめよう(-50.2)
+// 注意：どの量も時間とともに増え続けない（v06 は終わりに白が増え続けて液晶が白く飛んだ）。最後の状態で止まる。
+const TUT09 = [0, 4.0, 6.8, 10.6, 14.0, 16.8, 21.0, 23.6, 25.6, 27.3, 30.7, 33.3, 36.7, 40.0, 47.4, 50.2];
+const LIT4 = [1, .82, .55];
+function tut09(o, c) {
+  const t = c.t, ck = c.clock; begin(o);
+  let cut = 0; while (cut < 14 && t >= TUT09[cut + 1]) cut++;
+  const u = t - TUT09[cut], pl = .5 + .5 * Math.sin(TAU * 2.4 * ck - 1.57), ps = pl * pl * (3 - 2 * pl);
+  switch (cut) {
+    case 0: for (let i = 0; i < 8; i++) reg(o, i, .5 + .5 * crest(i, ck * .6, 1.5) * ease(u / .5), GOLD); rings(o, .12); hit(o, FLASH(u, .15, .14) * .6); break;   // 目標：金のゆっくりした波
+    case 1: all(o, .25, BLUE); grp(o, HEAD, .6 + .8 * ps, mixc(GOLD, WHITE, ps * .5)); rings(o, .1); hit(o, FLASH(u, .5, .1) * .3); break;   // 残り時間（上の表示器）を指す
+    case 2: {   // ボタン：左の柱が金→白に脈打つ。押した瞬間(0.35s)に一発
+      all(o, .22, BLUE); grp(o, LEFT, .8 + .85 * ps, mixc(GOLD, WHITE, ps * .7)); reg(o, 7, .3 + .5 * crest(4, ck * 2.4, 3), GOLD); rings(o, .08 + .1 * ps); hit(o, FLASH(u, .35, .12) * .55); break;
+    }
+    case 3: {   // 玉が穴に入ってランプが光る(1.6s)：穴が1つ白く閃いて点く
+      all(o, .3, BLUE); if (u >= 1.55) { const f = FLASH(u, 1.55, .12); holes(o, 0, 1.5 + 9 * f, f > .3 ? WHITE : LIT4); reg(o, 7, .4 + .9 * f, mixc(GOLD, WHITE, f * .5)); hit(o, f * .35); } rings(o, .1); break;
+    }
+    case 4: {   // ついていない穴をねらう：4つ点灯、残る2つが金で脈打つ
+      all(o, .3, BLUE); for (let k = 0; k < 4; k++) holes(o, k, 1.4, LIT4);
+      for (let k = 4; k < 6; k++) holes(o, k, .5 + 1.5 * ps, mixc(GOLD, WHITE, ps * .6)); rings(o, .1); break;
+    }
+    case 5: {   // 重複：赤く警告（2.4Hz）。「重複!!」(1.6s)で白、ランプが1つ消える(3.0s)
+      const n = u < 3.0 ? 4 : 3; for (let k = 0; k < n; k++) holes(o, k, 1.3, LIT4);
+      const a = .35 + .65 * ps; all(o, (u < 1.5 ? .3 : .6 + .6 * a), RED); rings(o, .1 + .15 * a);
+      hit(o, FLASH(u, 1.6, .12) * .5 + FLASH(u, 3.0, .12) * .4); break;
+    }
+    case 6: {   // 5灯→紫の雷：はじめ金の交互（5Hz）、1.2s から紫（雷は囲いも紫）
+      for (let k = 0; k < 6; k++) holes(o, k, 1.5, LIT4);
+      if (u < 1.2) { const a = sq(ck * 5, .55); all(o, a ? 1.4 : .3, a ? GOLD : RED); rings(o, a ? .35 : .08); hit(o, FLASH(u, 0, .12) * .6); }
+      else { const a = sq(ck * 5, .5); all(o, a ? 1.4 : .35, a ? VIOLET : PBLK); rings(o, a ? .35 : .1); hit(o, FLASH(u, 1.2, .1) * .7); }
+      break;
+    }
+    case 7: for (let k = 0; k < 6; k++) holes(o, k, 1.5, LIT4); for (let i = 0; i < 8; i++) reg(o, i, .6 + .5 * crest(i, ck * 1.2, 2), VIOLET); rings(o, .12); break;   // 扉へ近づく
+    case 8: {   // JACKPOT CHANCE（題字）：金の強い脈動＋一発
+      for (let k = 0; k < 6; k++) holes(o, k, 1.5, LIT4); holes(o, 6, .6 + 1.6 * ps, mixc(GOLD, WHITE, ps * .6));
+      for (let i = 0; i < 8; i++) reg(o, i, 1.0 + .5 * crest(i, ck * 2.4, 2), GOLD); rings(o, .25); hit(o, FLASH(u, .1, .14) * .8); break;
+    }
+    case 9: {   // 連打・鎖：残った1つの穴が金で脈打つ。頭は紫
+      for (let k = 0; k < 6; k++) holes(o, k, 1.2, LIT4); holes(o, 6, .6 + 1.8 * ps, mixc(GOLD, WHITE, ps * .7));
+      for (let i = 0; i < 8; i++) reg(o, i, .55 + .45 * crest(i, ck * 2, 2), i < 3 ? VIOLET : PBLK); rings(o, .12); hit(o, FLASH(u, 1.7, .1) * .25); break;
+    }
+    case 10: {   // 解放：白金の一発→金
+      for (let k = 0; k < 7; k++) holes(o, k, 1.6, GOLD); for (let i = 0; i < 8; i++) reg(o, i, 1.0 + .5 * crest(i, ck * 2.4, 2), GOLD); rings(o, .3); hit(o, FLASH(u, 0.3, .14) * .9); break;
+    }
+    case 11: {   // 玉がドッと：虹が回る
+      const k = clamp(u / 1.5), hz = 3 + 2 * k, step = Math.floor(ck * hz) / 8;
+      for (let i = 0; i < 8; i++) { hsvTo(tmp, 0, step + .55 * PH[i]); reg(o, i, (.8 + .5 * k) * (.75 + .25 * crest(i, ck * 2, 2)), tmp); } rings(o, .25); hit(o, FLASH(u, 0, .1) * .4); break;
+    }
+    case 12: {   // 継続：赤と金の交互（2.4Hz）
+      const a = frac(ck * 2.4) < .5; all(o, 1.0 + .3 * crest(2, ck * 2, 2), a ? RED : GOLD); rings(o, .2); hit(o, FLASH(u, 0, .1) * .5); break;
+    }
+    case 13: {   // まとめ：行が出るごと（0.2/2.2/4.3s）に穴が点く。落ち着いた青＋金
+      all(o, .35 + .1 * ps, BLUE); const n = u < 2.2 ? 1 : u < 4.3 ? 2 : 3;
+      for (let k = 0; k < 7; k++) if (k < (n === 1 ? 1 : n === 2 ? 6 : 7)) holes(o, k, 1.3, n === 3 ? GOLD : LIT4);
+      grp(o, HEAD, .5 + .3 * ps, GOLD); hit(o, FLASH(u, .2, .1) * .3 + FLASH(u, 2.2, .1) * .3 + FLASH(u, 4.3, .1) * .3); rings(o, .1); break;
+    }
+    default: {   // はじめよう：金の定常＋走る光（増え続けない）
+      if (u < .5) { const a = sq(u * 7, .5); all(o, a ? 1.5 : .25, GOLD); o.white = a && frac(u * 7) < .25 ? .4 : 0; rings(o, a ? .4 : .05); }
+      else { for (let i = 0; i < 8; i++) reg(o, i, 1.0 * (.7 + .3 * crest(i, ck * 2.5, 2)), GOLD); rings(o, .2); }
+      hit(o, FLASH(u, 0, .1) * .7);
+    }
+  }
+}
+registerGrammar('nl_tut09', tut09);
+
 registerGrammar('nl_tutjp', tutjp);
 registerGrammar('nl_chain', chain);
 registerGrammar('nl_seal', sealThrough);
 registerGrammar('nl_seal_idle', sealIdle);
-export const NL_SCENES = { tutorial_v06: 'nl_tut06', jp_through_v05: 'nl_seal', chain_flow_first: 'nl_chain', chain_flow_repeat: 'nl_chain', seal_idle: 'nl_seal_idle', tutorial_jp: 'nl_tutjp' };
+export const NL_SCENES = { tutorial_v06: 'nl_tut06', tutorial_v09: 'nl_tut09', jp_through_v05: 'nl_seal', chain_flow_first: 'nl_chain', chain_flow_repeat: 'nl_chain', seal_idle: 'nl_seal_idle', tutorial_jp: 'nl_tutjp' };
 export const NL_TIMES = { TUT06, TJP_BURST, TJP_TICK, CH, SEAL_KB, SEAL_T };
 
 // ---------------------------------------------------------------- 5. 待機画面（attract / title）：囲い・盤面電飾・穴・外部LEDが常に虹色に点滅（10/30 監督）

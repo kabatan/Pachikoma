@@ -72,11 +72,12 @@ export function createSkipOverlay({ x, y, videoTop = 28 }) {
   return {
     canvas, get x() { return self.x; }, get y() { return self.y; }, get w() { return self.w; }, get h() { return self.h; }, get revision() { return rev; }, get visible() { return visible; },
     /** view = controller.tutSkipView()。見えるべきなら true。 */
-    update(view, vt = 0) {
+    update(view, vt = 0, layout = null) {   // layout = 映像ごとの置き場所表 { low:[[秒,秒]...](ゲージを下げる区間), hideFrom:秒|null }。無ければ旧(v07)の表
       const busy = !!view && (view.holding || view.level > 0.02 || view.done || view.flash > 0);
-      const last = vt >= 14.4 && !busy;   // 最後のロゴの場面は字と重なるので、押していなければ出さない
+      const hideFrom = layout ? (layout.hideFrom ?? Infinity) : 14.4, lows = layout ? (layout.low ?? []) : [[7.95, 8.75]];
+      const last = vt >= hideFrom && !busy;   // 最後のロゴの場面は字と重なるので、押していなければ出さない
       const a = view?.active && !last ? Math.min(1, Math.max(0, (view.t - 0.3) / 0.5)) : 0;
-      const yy = videoTop + (vt >= 7.95 && vt < 8.75 ? OV_Y_FIVE : OV_Y_MAIN);
+      const yy = videoTop + (lows.some(([a, b]) => vt >= a && vt < b) ? OV_Y_FIVE : OV_Y_MAIN);
       if (yy !== self.y) { self.y = yy; key = ''; }
       visible = a > 0.001;
       const level = view?.level ?? 0, tap = view?.tap ?? 0, flash = view?.flash ?? 0, done = !!view?.done, holding = !!view?.holding;

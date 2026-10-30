@@ -81,7 +81,10 @@ export async function attachCabinetLightScript(lcd,{getLamps=()=>[],getState=()=
  const specFor=(name)=>nlSpec[name]??=(NL_SCENES[name]?{offset:baseAt,frames:1,loop:true,tailFrom:null,grammar:NL_SCENES[name]}:null);
  const resolveNew=(w,shown)=>{
    if(ext)return ext;
-   const as=lcd.attractSurface;if(as?.active&&as.kind==='tutorial'&&NL_SCENES.tutorial_v06){ext0.name='tutorial_v06';ext0.time=Math.max(0,as.time);ext0.x=null;return ext0;}
+   const as=lcd.attractSurface;if(as?.active&&(as.kind==='tutorial'||as.kind==='tutorialShort')){const ls=as.sceneKey;   // 10/30 v09：説明の映像ごとの光（短い版は v09 の「まとめ」の位置 +40 秒から。旧 v07 は v06 の台本）
+     if(ls==='tutorial_v09'&&NL_SCENES.tutorial_v09){ext0.name='tutorial_v09';ext0.time=Math.max(0,as.time);ext0.x=null;return ext0;}
+     if(ls==='tutorial_v09_short'&&NL_SCENES.tutorial_v09){ext0.name='tutorial_v09';ext0.time=Math.max(0,as.time)+40;ext0.x=null;return ext0;}
+     if(as.kind==='tutorial'&&NL_SCENES.tutorial_v06){ext0.name='tutorial_v06';ext0.time=Math.max(0,as.time);ext0.x=null;return ext0;}}
    if(as?.active&&as.kind==='attract'){ext0.name='attract_rainbow';ext0.time=Math.max(0,as.time);ext0.x=null;return ext0;}
    if(!w&&!lcd.choiceV20?.active&&(lcd.current?.mode==='attract'||lcd.current?.mode==='title')){ext0.name='attract_rainbow';ext0.time=clock%20;ext0.x=null;return ext0;}
    const nm=shown?.name??w?.name;if(!nm)return null;

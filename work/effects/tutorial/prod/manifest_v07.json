@@ -1,0 +1,20 @@
+{
+  "version": 20261030,
+  "file": "tutorial_v07_prod.mp4",
+  "width": 1152,
+  "height": 1268,
+  "fps": 30,
+  "frames": 480,
+  "duration": 16.0,
+  "loop": false,
+  "codec": "h264",
+  "crf": 17,
+  "preset": "slow",
+  "pixelFormat": "yuv420p",
+  "source": "work/effects/r4_h_fx/tutorial/comp/pv_v07.py + cuts_v07.json",
+  "profile": "main",
+  "liteFile": "tutorial_v07_prod_lite1030.mp4",
+  "liteSource": "tutorial_v07_prod.mp4",
+  "liteWidth": 576,
+  "liteHeight": 634
+}
