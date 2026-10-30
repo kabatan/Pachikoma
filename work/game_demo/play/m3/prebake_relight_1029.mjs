@@ -142,6 +142,7 @@ void main(){
   // 10/31 低い段（low・lower・lowest）だけ照明の焼きを 2 フレームに 1 回に（?halfbake=0 で従来）。偶数フレームで環境光（奥・手前）と盤の光、
   //  奇数フレームで枠の焼きと球のプローブ。光の変化は最大 1 フレーム（16.7ms）遅れる。既定の medium 以上は毎フレームのまま。
   //  ?halfbake=1 で常に半分、auto（既定）は low 以下、または medium で fps が足りないとき解像度を下げる前に先に半分にする。
+  const idle30Mode=pq.get('idle30')==='0'?'0':pq.get('idle30')==='2'?'2':'1';let idleOdd=false;
   const halfBakeArg=pq.get('halfbake'),halfBake=halfBakeArg!=='0',halfBakeForce=halfBakeArg==='1';
   // 10/30 F0/F4 の混ぜ（uK4・uGlass）が厳密に 0 か 1 のとき、2 枚読んで混ぜる代わりに片方だけ読む（?k4branch=0 で従来）。
   //  遊技中の約 3 割の時間は 1。条件は uniform なので画素ごとに分岐はばらけない。
@@ -493,6 +494,14 @@ vec4 prebakeC(ivec2 p){`);
     if(!enabled||hr.viewMode!==0||U.uM3Off.value!==0||!plate?.mat.uniforms.uPanel){stats.legacyFrames++;restoreFull();return legacy.call(hr);}
     if(dispFit)applyFit();
     qualityTick();prepareStep();
+    // 10/31 待機中は 30Hz（?idle30=0 で従来、?idle30=2 は性能に関係なく常に＝確認用）：待機（attract）中で球が 0 個、かつ低性能（照明の半頻度に入った／
+    //  画質が low 以下）のとき、2 フレームに 1 回だけ描く。描かない回は GPU を何も使わず、画面は前のコマのまま（canvas は描かれなければ前の絵が残る）。
+    //  待機の虹電飾と液晶の映像は 30Hz 相当の変化なので動きは変わらない。待機が終わる（キー・ボタン）と次のコマから毎フレーム。
+    if(idle30Mode!=='0'){
+      const att=globalThis.window?.__lcdSurface?.attractSurface?.active===true;
+      if(att&&!hr.balls.count&&(idle30Mode==='2'||quality.index>=2||quality.lightHalf)){idleOdd=!idleOdd;if(idleOdd){stats.idleSkipped=(stats.idleSkipped??0)+1;return;}}
+      else idleOdd=false;
+    }
     hr.trayVisualHandle?.update();stats.frames++;
     hr._updateEnvUniforms();
     r.setScissorTest(false);
