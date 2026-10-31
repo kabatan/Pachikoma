@@ -180,6 +180,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
     if (F.cur && !F.cur.edge) { const k = 1 - Math.exp(-dt * 5); if (F.ux === null) { const p0 = F.cur.holes ? null : 1; F.ux = p0 ? F.cur.upaX : 124; F.uy = p0 ? F.cur.upaY : GROUND; } F.ux += (F.cur.upaX - F.ux) * k; F.uy += (F.cur.upaY - F.uy) * k; } else F.ux = F.uy = null;
     if (F.pendTime && (g.meterStatus || g.rouletteStatus || lcd.jp?.model?.active)) F.pendTime = false;   // 開始の案内はJPに入ったら出さない（JP明けに「あと◯個」の行へ被る）
     if (F.cur?.id === 'time_start' && lcd.jp?.model?.active) F.cur = null;   // JPの見せ場に残さない
+    if (g.phase === 'Result' || g.phase === 'Attract') { F.pendTime = false; if (F.cur?.edge) F.cur = null; }   // 11/1 開始直後に終わった客の結果画面へ開始の台詞を残さない
     if (F.cur?.id === 'time_start' && Math.round(g.secondsLeft) !== F.cur.sec) { F.cur.sec = Math.round(g.secondsLeft); compose(smallC, 'time_start', { tails: [{ x: F.cur.tailAt, up: false }], leftAt: 130 }); T.small.needsUpdate = true; }   // 秒数は時計に合わせる
     if (F.pendTime && !F.cur && !g.meterStatus && !liveVisible()) { F.pendTime = false; show('time_start', true); }
     // ---- 新しいメーター ----
