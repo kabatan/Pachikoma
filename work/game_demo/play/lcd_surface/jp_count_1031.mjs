@@ -96,6 +96,10 @@ export async function attachJpCount(lcd, { controller, log = () => {} } = {}) {
     S.fxBeat = b;
     if (V.fl) { flx.globalCompositeOperation = 'source-over'; flx.clearRect(0, 0, 576, 634); const vw = V.fl.videoWidth || 448, vh = V.fl.videoHeight || 448; flx.drawImage(V.fl, 0, 0, vw, vh, -40, 0, 656, 634); flx.globalCompositeOperation = 'destination-in'; flx.drawImage(flMask, 0, 0); FXT.fl.needsUpdate = true; }
   };
+  // 11/1 最適化：カウントダウンが終わったら実写の炎・光の筋・火の粉の動画（loop）を止める。止めないと以後ずっと 3 本（448²×2・640×360, 30fps）が
+  //  デコードされ続ける（表示は S.on の間だけ）。次のカウントダウンは拍の頭で currentTime=0 から play し直すので見た目は同じ。?jpcountpause=0 で従来。
+  const FXPAUSE = qs.get('jpcountpause') !== '0';
+  const pauseFx = () => { if (!FXPAUSE || S.manual) return; for (const v of Object.values(V)) { try { if (v && !v.paused) v.pause(); } catch {} } S.fxBeat = -1; };
   const T = { d3: layerTexture(THREE, G.d3), d2: layerTexture(THREE, G.d2), d1: layerTexture(THREE, G.d1), go: layerTexture(THREE, G.go), g3: layerTexture(THREE, GL.d3), g2: layerTexture(THREE, GL.d2), g1: layerTexture(THREE, GL.d1), gg: layerTexture(THREE, GL.go),
     flash: layerTexture(THREE, flashC), ring: layerTexture(THREE, ringC), ray: layerTexture(THREE, rayC), sp: layerTexture(THREE, spC) };
   (lcd.splitWarmers ??= []).push({ name: 'jpcount', done: false, step(r) { for (const t of [...Object.values(T), ...Object.values(FXT)]) { try { r.initTexture(t); } catch {} } return (this.done = true); } });
@@ -142,7 +146,7 @@ export async function attachJpCount(lcd, { controller, log = () => {} } = {}) {
     } else if (S.on) {
       // 開始の字は、規則が撃てるようにした後も 0.4秒だけ余韻として残す
       if (!S.out) { S.out = S.frameN; S.outT = 0; }
-      S.outT += dt; if (S.outT > 0.45) { S.on = false; S.out = 0; S.beat = -1; }
+      S.outT += dt; if (S.outT > 0.45) { S.on = false; S.out = 0; S.beat = -1; pauseFx(); }
     }
   };
 
