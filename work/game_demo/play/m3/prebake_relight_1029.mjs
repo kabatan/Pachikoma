@@ -341,6 +341,16 @@ vec4 prebakeC(ivec2 p){`);
     b=replace(b,'void main() {\n','void main() {\n  FCv = vec4(gl_FragCoord.xy + vec2(uPBSo), gl_FragCoord.zw);\n');
     bakeStatic=make(b,{...U,...(scaledFC?{uPBK}:{}),uPBSo:staticUni.uPBSo});
   }
+  // 11/1 最適化(内蔵GPU向け、画は全画素一致)：①盤面電飾の wash・ring が全部 0 のコマは、その基底の 3 回のテクスチャ読みと 12 項の和を飛ばす(wash=0 なら足す光は厳密に 0)
+  //   ②庇(mouth)の計算は庇の箱の外では何も変えないので、箱の外の画素では飛ばす ③uDither が 0 なら乱数を作らない。?finalopt=0 で従来
+  const FINALOPT=new URLSearchParams(globalThis.location?.search??'').get('finalopt')!=='0';
+  if(FINALOPT){
+    shader=replace(shader,'vec4 w0 = dec(texture(uME, vec3(ue, 0.0))) * uEs[0], w1 = dec(texture(uME, vec3(ue, 1.0))) * uEs[1], r0 = dec(texture(uME, vec3(ue, 2.0))) * uEs[2];','vec4 w0 = vec4(0.0), w1 = vec4(0.0), r0 = vec4(0.0);\n      if (uWashOn > 0.5) { w0 = dec(texture(uME, vec3(ue, 0.0))) * uEs[0]; w1 = dec(texture(uME, vec3(ue, 1.0))) * uEs[1]; r0 = dec(texture(uME, vec3(ue, 2.0))) * uEs[2]; }');
+    shader=replace(shader,'if (uM3Off == 0 && uMouthK > 0.0) {','if (uM3Off == 0 && uMouthK > 0.0 && px.x >= uMouth.x - 12.0 && px.x <= uMouth.z + 12.0 && px.y >= uMouth.y - 9.0 && px.y <= uMouth.w + 9.0) {');
+    shader=replace(shader,'o += uDither * (','if (uDither != 0.0) o += uDither * (');
+    shader='uniform float uWashOn;\n'+shader;
+    extra.uWashOn={value:1};
+  }
   const final=make(shader,{...U,...extra,uD:{value:balls.texture},...(dispFit||renderLite?{uPBK}:{}),...(staticBake?staticUni:{})});
   // 段の切り替え：合成・球のバッファを作り直す（シェーダはそのまま）。古いバッファは捨てる。
   // 10/31 次の段のバッファを先に用意する（既定オフ：stablecanvas で段切替の主因が無くなり、確保 0.5〜1.9ms の差しか出なかった。?tierprep=1 で有効）：段を下げる瞬間に、新しい球バッファ（MSAA 付き）と切り詰め用の 2 枚を
@@ -561,6 +571,7 @@ vec4 prebakeC(ivec2 p){`);
       if(bSame)ballCheckAfter();
     }
     U.uUseLut.value=hr.lutEnabled?1:0;
+    if(FINALOPT){let any=0;const nz=v=>{if(typeof v==='number')return Math.abs(v);return Math.abs(v?.x??v?.r??0)+Math.abs(v?.y??v?.g??0)+Math.abs(v?.z??v?.b??0);};const w=U.uWash.value,g=U.uRing.value;for(let i=0;i<8;i++)any+=nz(w[i]);for(let i=0;i<4;i++)any+=nz(g[i]);extra.uWashOn.value=any>0?1:0;}
     if(stableCanvas&&liteCanvas){
       setCanvas(baseCW,baseCH);
       if(sDisplay){r.setRenderTarget(sDisplay);r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);presentS.material.uniforms.uImage.value=sDisplay.texture;r.setRenderTarget(null);r.setViewport(0,0,baseCW,baseCH);r.render(presentS.scene,hr.fsCam);stats.stablePresents=(stats.stablePresents??0)+1;}
