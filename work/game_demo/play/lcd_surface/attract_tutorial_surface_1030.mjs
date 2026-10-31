@@ -3,6 +3,7 @@
 // ルールのhowto(開始ボタン→howto→ticket→開始、押すと飛ばせる)は ctrl 側のまま。?tutorial=old のとき play.mjs はこのファイルを使わず従来の attract_surface_20261029 を使う。
 import {createAttractGpu,suppressCanvasPaint} from './attract_gpu_1030.mjs';
 import {warmPausedVideo,withRestored2D} from './startup_warm.mjs';
+import {createAttractPush} from './attract_push_1031.mjs';   // 10/31 待機の常時案内「ボタンを押してスタート」(?attractpush=0 で無し)
 import {createSkipOverlay,OV_VIDEO_X,OV_Y_MAIN} from './tutorial_skip_overlay_1030.mjs';   // 10/30 説明中の「長押しでスキップ」ゲージ(controller.tutSkipView を getState().skip で受ける)
 const W=1152,H=1268,PX=34,PY=28;
 async function loadVideo(url,{loop,label,errors}) {
@@ -53,6 +54,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
     s.v.addEventListener('seeked',s.decoded);s.v.addEventListener('loadeddata',s.decoded);
   }
   const skipOv=(sources.tutorial||sources.tutorialShort)&&query.get('tutskip')!=='0'?createSkipOverlay({x:PX+OV_VIDEO_X,y:PY+OV_Y_MAIN,videoTop:PY}):null;
+  let push=null;if(query.get('attractpush')!=='0'){try{push=await createAttractPush({px:PX,py:PY});}catch(e){console.error('attract push: '+(e?.message??e));errors.push('attract push: '+(e?.message??e));}}
   let active=false,kind=null,manual=false,time=0,published=false,cur=sources.attract;
   const paint=skipEnabled?suppressCanvasPaint(ctx):{stats:{skipped:0},run:fn=>fn(),dispose(){}};
   const refresh=()=>{
@@ -73,6 +75,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
     ctx.fillStyle='#000';ctx.fillRect(0,0,lcd.canvas.width,lcd.canvas.height);
     if(cur.v.readyState>=2)ctx.drawImage(boundary?(cur.heldFrame??cur.v):cur.v,PX,PY,W,H);
     if(skipOv?.visible&&isTut(kind))ctx.drawImage(skipOv.canvas,skipOv.x,skipOv.y,skipOv.w,skipOv.h);
+    if(push&&kind==='attract')push.draw2d(ctx);
     stats.canvasDraws++;
   };
   const materialize=()=>{draw(true);published=false;stats.boundaryCopies++;};
@@ -135,13 +138,13 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
     connectGpu(options){
       if(!gpuEnabled)return;
       for(const s of all)if(!s.gpu){
-        s.gpu=createAttractGpu({...options,video:s.v,width:lcd.canvas.width,height:lcd.canvas.height,overlay:(s===sources.tutorial||s===sources.tutorialShort)&&skipOv?skipOv:null});
+        s.gpu=createAttractGpu({...options,video:s.v,width:lcd.canvas.width,height:lcd.canvas.height,overlay:s===sources.attract?push:(s===sources.tutorial||s===sources.tutorialShort)&&skipOv?skipOv:null});
         // 切替時の初回合成でシェーダ/ターゲットを作らせない(ここで一度だけ描いておく。revisionは使われない値)
         if(s===sources.tutorial||s===sources.tutorialShort){try{s.gpu.compose(-2);}catch(e){errors.push('tutorial gpu warm: '+(e?.message??e));}}
       }
     },
     get directActive(){return active&&direct();},
-    compose(){if(!active||!direct())return null;const texture=cur.gpu.compose(cur.frameRevision,isTut(kind)&&skipOv?skipOv.revision:0);published=!!texture;return texture;},
+    compose(){if(!active||!direct())return null;const texture=cur.gpu.compose(cur.frameRevision,isTut(kind)&&skipOv?skipOv.revision:0,kind==='attract'&&push?push.gain():1);published=!!texture;return texture;},
     materialize,
     diagnostics:()=>({...stats,gpuEnabled,skipEnabled,innerSkip,kind,frameRevision:cur.frameRevision,heldFrame:!!cur.heldFrame,paintSkipped:paint.stats.skipped,tutorialWarm:warm.tutorial,tutorialShortWarm:warm.tutorialShort,gpu:Object.fromEntries(Object.entries(sources).map(([k,s])=>[k,s?.gpu?.diagnostics()??null])),tutorialQuality:(q=>q?{total:q.totalVideoFrames,dropped:q.droppedVideoFrames,corrupted:q.corruptedVideoFrames}:null)(sources.tutorial?.v.getVideoPlaybackQuality?.())})};
   lcd.dispose=()=>{

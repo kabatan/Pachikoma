@@ -11,23 +11,23 @@ export function createAttractGpu({THREE:T,renderer:r,video,width,height,overlay=
   const target=new T.WebGLRenderTarget(width,height,{depthBuffer:false,stencilBuffer:false,generateMipmaps:false,minFilter:T.LinearFilter,magFilter:T.LinearFilter});
   const geometry=new T.PlaneGeometry(2,2),camera=new T.Camera(),scene=new T.Scene();
   const material=new T.ShaderMaterial({
-    uniforms:{video:{value:texture},panel:{value:new T.Vector2(width,height)},ov:{value:ovTex},ovRect:{value:new T.Vector4(overlay?.x??0,overlay?.y??0,overlay?.w??1,overlay?.h??1)}},
+    uniforms:{video:{value:texture},panel:{value:new T.Vector2(width,height)},ov:{value:ovTex},ovRect:{value:new T.Vector4(overlay?.x??0,overlay?.y??0,overlay?.w??1,overlay?.h??1)},ovGain:{value:1}},
     vertexShader:'varying vec2 q;void main(){q=position.xy*.5+.5;gl_Position=vec4(position.xy,0.,1.);}',
-    fragmentShader:'varying vec2 q;uniform sampler2D video;uniform vec2 panel;uniform sampler2D ov;uniform vec4 ovRect;void main(){vec2 p=vec2(q.x,1.-q.y)*panel;vec2 s=(p-vec2(34.,28.))/vec2(1152.,1268.);vec3 c=vec3(0.);if(all(greaterThanEqual(s,vec2(0.)))&&all(lessThan(s,vec2(1.))))c=texture2D(video,vec2(s.x,1.-s.y)).rgb;'+(overlay?'vec2 o=(p-ovRect.xy)/ovRect.zw;if(all(greaterThanEqual(o,vec2(0.)))&&all(lessThan(o,vec2(1.)))){vec4 a=texture2D(ov,vec2(o.x,1.-o.y));c=c*(1.-a.a)+a.rgb;}':'')+'gl_FragColor=vec4(c,1.);}',
+    fragmentShader:'varying vec2 q;uniform sampler2D video;uniform vec2 panel;uniform sampler2D ov;uniform vec4 ovRect;uniform float ovGain;void main(){vec2 p=vec2(q.x,1.-q.y)*panel;vec2 s=(p-vec2(34.,28.))/vec2(1152.,1268.);vec3 c=vec3(0.);if(all(greaterThanEqual(s,vec2(0.)))&&all(lessThan(s,vec2(1.))))c=texture2D(video,vec2(s.x,1.-s.y)).rgb;'+(overlay?'vec2 o=(p-ovRect.xy)/ovRect.zw;if(all(greaterThanEqual(o,vec2(0.)))&&all(lessThan(o,vec2(1.)))){vec4 a=texture2D(ov,vec2(o.x,1.-o.y));c=c*(1.-a.a)+a.rgb*ovGain;}':'')+'gl_FragColor=vec4(c,1.);}',
     depthTest:false,depthWrite:false,blending:T.NoBlending,toneMapped:false,dithering:false
   });
   const mesh=new T.Mesh(geometry,material);mesh.frustumCulled=false;scene.add(mesh);
-  let revision=-1,ovRevision=-1,disposed=false;
+  let revision=-1,ovRevision=-1,gainNow=1,disposed=false;
   const stats={uploads:0,draws:0,reuses:0};
   return {
-    compose(nextRevision,ovRev=0){
+    compose(nextRevision,ovRev=0,ovGain=1){   // ovGain: 重ねる絵の明るさ(待機の案内の脈動)
       if(disposed||video.readyState<2)return null;
-      if(nextRevision===revision&&ovRev===ovRevision){stats.reuses++;return target.texture;}
+      if(nextRevision===revision&&ovRev===ovRevision&&ovGain===gainNow){stats.reuses++;return target.texture;}
       if(r.getContext().isContextLost())return null;
       const old={target:r.getRenderTarget(),face:r.getActiveCubeFace(),level:r.getActiveMipmapLevel(),viewport:r.getViewport(new T.Vector4()),scissor:r.getScissor(new T.Vector4()),test:r.getScissorTest(),auto:r.autoClear};
       try {
-        if(overlay)material.uniforms.ovRect.value.set(overlay.x,overlay.y,overlay.w,overlay.h);texture.needsUpdate=true;if(ovTex&&ovRev!==ovRevision)ovTex.needsUpdate=true;r.autoClear=false;r.setRenderTarget(target);r.setScissorTest(false);r.setViewport(0,0,width,height);r.render(scene,camera);
-        revision=nextRevision;ovRevision=ovRev;stats.uploads++;stats.draws++;return target.texture;
+        if(overlay)material.uniforms.ovRect.value.set(overlay.x,overlay.y,overlay.w,overlay.h);material.uniforms.ovGain.value=ovGain;texture.needsUpdate=true;if(ovTex&&ovRev!==ovRevision)ovTex.needsUpdate=true;r.autoClear=false;r.setRenderTarget(target);r.setScissorTest(false);r.setViewport(0,0,width,height);r.render(scene,camera);
+        revision=nextRevision;ovRevision=ovRev;gainNow=ovGain;stats.uploads++;stats.draws++;return target.texture;
       } finally {r.setRenderTarget(old.target,old.face,old.level);r.setViewport(old.viewport);r.setScissor(old.scissor);r.setScissorTest(old.test);r.autoClear=old.auto;}
     },
     diagnostics:()=>({...stats,revision,targetBytes:width*height*4,disposed}),
