@@ -37,7 +37,12 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
   if (!L || !OPEN || !TITLE) return lcd;   // 封印の扉の導入（jp_seal_1030 の jpOpen）が無いときは今のまま
   const black = qs.get('jpblack') === '1';
   const HOLD = clamp(+(qs.get('jpstart_hold') ?? 0.5), 0.1, 1.2);
-  const SKIP = Math.round(clamp(+(qs.get('jpstart_open') ?? 30), 0, 50));
+  // 11/1 紫の雷のあとの暗い所：扉の頭30コマを「飛ばす」seek が約0.2秒止まって黒く抜けていた → 頭を切った映像（jp_open_a_s29.mp4＝29コマ目から無劣化コピー）に差し替え、飛ばしをなくす。
+  //   さらに題字直前の暗転は時計でなく映像の時刻で出す（映像の遅れ分だけ暗転が伸びていた：約0.17→0.5秒）。?jpdark=1 で旧（seek で飛ばす・時計の暗転）に戻す
+  const DARK_OLD = qs.get('jpdark') === '1';
+  const TRIM_FILE = 'seal_jp/jp_open_a_s29.mp4', TRIM_AT = 29;
+  const useTrim = !DARK_OLD && !black && man.scenes.jp_chance_open_d4?.file === 'seal_jp/jp_open_a.mp4';
+  const SKIP = useTrim ? TRIM_AT : Math.round(clamp(+(qs.get('jpstart_open') ?? 30), 0, 50));
   const OLDTEXT = qs.get('jpstart_oldtext') === '1';   // 10/31 導入の「PUSH 連打」「封印解除!!」「押せ！」の字。既定は出さず、題字のあと直接メーターへ。?jpstart_oldtext=1 で戻す
   const SND = qs.get('jpstart_snd') !== '0', SHAKE = qs.get('jpstart_shake') !== '0', CUTL = qs.get('jpstart_cut') === '1' || (OLDTEXT && qs.get('jpstart_cut') !== '0');   // 押せ・連打のカットイン（層）。既定は出さない
   const S = { clock: 0, hold: HOLD, black, skip: SKIP, ph: null, name: '', serial: -1, t0: 0, audioKicked: -1, thumps: 0, frameN: 0, cutOn: false, cutFrames: 0, events: [], manual: false };
@@ -45,11 +50,16 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
 
   // ---- manifest ----
   const orig = { lNext: L.next, dFrames: man.scenes.jp_intro_dopamine?.frames, openSkip: {} };
-  for (let d = 1; d <= 7; d++) { const s = man.scenes[`jp_chance_open_d${d}`]; if (s) { orig.openSkip[d] = s.skip; if (SKIP > 0) s.skip = [[0, SKIP]]; } }
-  const openPlayed = (OPEN.frames - SKIP) / fps;
+  const openFrames = OPEN.frames - SKIP, openPlayed = openFrames / fps;
+  for (let d = 1; d <= 7; d++) {
+    const s = man.scenes[`jp_chance_open_d${d}`]; if (!s) continue;
+    orig.openSkip[d] = s.skip;
+    if (useTrim && s.file === 'seal_jp/jp_open_a.mp4') { s.file = TRIM_FILE; s.frames -= TRIM_AT; s.lights_from = (+s.lights_from || 0) + TRIM_AT; s.skip = undefined; }   // コマ番号は頭を切った分ずれる（照明の表は lights_from で合わせる）
+    else if (SKIP > 0) s.skip = [[0, SKIP]];
+  }
   if (!black) {
     L.next = 'jp_chance_open_d4';                                  // 雷の次を扉の寄りへ（実行時に _d{d} へ置き換わる）
-    if (man.scenes.jp_intro_dopamine) man.scenes.jp_intro_dopamine.frames = OPEN.frames - SKIP;   // jp_audio_v5 の「導入の長さ」（JP曲の入りから題字までのコマ数）を、扉の寄りの長さに
+    if (man.scenes.jp_intro_dopamine) man.scenes.jp_intro_dopamine.frames = openFrames;   // jp_audio_v5 の「導入の長さ」（JP曲の入りから題字までのコマ数）を、扉の寄りの長さに
   }
   const skipSec = (n) => (man.scenes[n]?.skip ?? []).reduce((a, [x, y]) => a + (y - x), 0) / fps;
   const blackSec = black ? ((man.scenes.jp_intro_dopamine?.frames ?? 54) / fps - skipSec('jp_intro_dopamine')) : 0;
@@ -179,7 +189,7 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
     if (!model.active || model.chainMode) return null;
     const n = model.name ?? '', t = S.clock - S.t0;
     if (n === 'jp_intro_lightning') return model.delay > 0 ? { k: 'hold', t: clamp(HOLD - model.delay, 0, HOLD) } : { k: 'light', t };
-    if (/^jp_chance_open_d\d$/.test(n)) return { k: 'open', t, left: openPlayed - t };
+    if (/^jp_chance_open_d\d$/.test(n)) return { k: 'open', t, left: openPlayed - (DARK_OLD || !useTrim ? t : Math.max(0, model.time ?? 0)) };   // 映像の時刻（頭を切った映像は 0 から）
     if (/^jp_chance_d\d$/.test(n)) return { k: 'title', t };
     if (OLDTEXT ? /^jp_aim_seal_d\d_in$/.test(n) : /^jp_aim_seal_d\d_s0$/.test(n)) return { k: 'in', t };
     return null;
