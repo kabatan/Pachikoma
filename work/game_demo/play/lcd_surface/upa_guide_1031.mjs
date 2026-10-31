@@ -36,6 +36,7 @@ export function createGuide({ game, quiet = () => false, held = () => false, log
   const REACT = new Set([PRIO.E07, PRIO.E09, PRIO.E10, PRIO.E12, PRIO.E13, PRIO.E14]);   // 一言の反応の上限（companion.frequency_caps）：8秒以上あけ・1プレイ8回。手順と、割り込みで出す強い台詞は別枠
   const speak = (id, prio, opt = {}) => {
     const now = S.t;
+    if (!opt.force && S.queue.some((x) => x.key === (opt.key ?? id))) return false;   // 待っている同じ台詞を重ねない
     if (!opt.force && REACT.has(prio) && !IMPORTANT.has(id) && !NO_CAP.has(id)) { if ((S.reactN ?? 0) >= 8 || now - (S.reactAt ?? -99) < 8) return false; S.reactN = (S.reactN ?? 0) + 1; S.reactAt = now; }
     if (!opt.force) {
       if (S.hist.slice(-LAST_N).includes(opt.key ?? id)) return false;
@@ -78,7 +79,7 @@ export function createGuide({ game, quiet = () => false, held = () => false, log
 
   // ---- 出来事 ----
   out.start = ({ repeat = false } = {}) => {
-    Object.assign(S, { on: true, repeat, playT: 0, stepsDone: repeat, stepIdx: 0, hands: !repeat, firstPressAt: null, lastInputAt: 0, presses: [], firstWin: false, firstDup: false, jp: false, lamps: g()?.lampCount ?? 0, lampsPrev: 0, drop: null, once: {}, queue: [], resetN: 0 });
+    Object.assign(S, { on: true, repeat, playT: 0, stepsDone: repeat, stepIdx: 0, hands: !repeat, firstPressAt: null, lastInputAt: 0, presses: [], firstWin: false, firstDup: false, jp: false, lamps: g()?.lampCount ?? 0, lampsPrev: 0, drop: null, once: {}, queue: [], resetN: 0, reactN: 0, reactAt: -99, hist: [], lastSpokenAt: {} });   // 反応の上限と重複の記録は客ごと
     S.cnt = { slow: 0, safe: 0, fast: 0, idle: 0 }; S.startIdle = { a: false, b: false }; S.pressesDuringStep = []; S.idleAcc = 0; S.idleI = S.idleI ?? 0;
     log('upa:guide-start', { repeat });
   };

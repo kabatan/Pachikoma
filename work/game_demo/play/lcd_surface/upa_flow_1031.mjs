@@ -282,7 +282,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
     if (FIRST_CHOICE && M?.man?.scenes?.[CUT]) {   // 継続を選んだら、盤面の前に継続チャンスのカットイン。chain_seal／jp_seal の差し替えより外側（カットインのあとで元の場面名を渡す）
       const st = M.start.bind(M), sp = M.stop.bind(M);
       M.start = (name) => { const g = game(), id = g?.meter?.id; if (/^chain_jp_aim_d\d$/.test(name ?? '') && g?.meterStatus?.kind === 'chain' && F.cutKey !== id) { F.cutKey = id; F.cutNext = name; F.log.push({ t: +F.t.toFixed(2), id: 'cutin', clock: +g.secondsLeft.toFixed(2) }); return st(CUT); } return st(name); };
-      M.stop = (r) => { const was = M.name, x = sp(r), n = F.cutNext; if (was === CUT && n) { F.cutNext = null; if ((r === undefined || r === 'end') && game()?.meterStatus?.kind === 'chain') st(n); } return x; };
+      M.stop = (r) => { const was = M.name, x = sp(r), n = F.cutNext; if (was === CUT && n) { F.cutNext = null; if ((r === undefined || r === 'end' || r === 'watchdog') && game()?.meterStatus?.kind === 'chain') st(n); } return x; };
     }
   };
   return {
