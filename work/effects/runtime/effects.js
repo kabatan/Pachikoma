@@ -102,7 +102,8 @@
       if (name === 'clear') { S.hint = null; return; }
       const H = S.hint || (S.hint = {}), until = p.secs > 0 ? d.t + p.secs : 0;
       if (name === 'holes') H.holes = { pockets: p.pockets || 'unlit', mode: p.mode === 'steady' || p.mode === 'red' ? p.mode : 'soft', t0: d.t, until };
-      else if (name === 'button') H.button = { side: p.side === 'right' ? 'right' : 'left', t0: d.t, until };
+      else if (name === 'button') H.button = { side: p.side === 'right' ? 'right' : p.side === 'both' ? 'both' : 'left', t0: d.t, until, hz: p.hz > 0 ? p.hz : 0 };   // 11/01 side:'both' + hz：左右が交互に速く点滅（冒頭の「れんだ」の促し。hz は点滅の周期、片側の秒間回数）
+      else if (name === 'button_off') { if (S.hint) S.hint.button = null; }
     }
     _clearLater(tag) { if (this._laterQ) this._laterQ = tag ? this._laterQ.filter((q) => q.tag !== tag) : []; }
     _ended() { return !!this._endedFlag; }

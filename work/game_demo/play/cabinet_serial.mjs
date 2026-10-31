@@ -17,6 +17,7 @@ export function parseCabinetLine(line) {
 }
 
 export function buttonLeds(ctrl, now) {
+  const ov = ctrl.ledOverride?.(now); if (ov) return ov;   // 11/01 冒頭の「れんだ」の促し：左右が交互に点滅（renda_prompt_1101）
   const g = ctrl.game;
   const playable = g.canFire && !ctrl.confirmFinish && !ctrl.freezeRules;
   const chainContinue = ctrl.phase === 'ChainChoice' && g.wallet > 0 && g.secondsLeft > 0 && !g.endPending;
