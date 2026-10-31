@@ -11,7 +11,7 @@ import { HOLE_X } from './tutorial_jp_overlay_1030.mjs';
 
 const PX = 34, PY = 28, W = 1152, GROUND = 1262, CELL = 6, MG = 8 * CELL, BROWN = '#30180a', GOLD = '#f0b840', CREAM = '#fff6de';
 const TIP_Y = 1176;   // しっぽの先（穴の少し上。穴のLEDを隠さない）
-const ASK_SEC = 4, ASK_GATE = 1.5, ASK_MAX = 2, EXPRS = ['idle', 'joy', 'big_joy', 'surprise', 'oshii', 'sad', 'cheer', 'panic'];
+const ASK_SEC = 3, ASK_GATE = 1.5, ASK_MAX = 2, EXPRS = ['idle', 'joy', 'big_joy', 'surprise', 'oshii', 'sad', 'cheer', 'panic'];
 const LINE_EXPR = { time_start: 'surprise', jp8_wow: 'surprise', jp8_come: 'big_joy', jp8_last: 'joy', jp8_award: 'big_joy', jp8_hole: 'cheer', jp8_free: 'joy', jp8_go: 'cheer', jp8s: 'cheer', ch15_how: 'cheer', ch15s: 'cheer', jp9_go: 'cheer', jp9_good: 'big_joy', jp9_slow: 'cheer', jp9_half: 'cheer', jp9_close: 'panic', jp9_oshii: 'oshii', rl11_how: 'cheer', rl11_short: 'cheer', jp12_clock: 'cheer', jp12_noclock: 'oshii', ch13_next: 'joy', ch13_a: 'big_joy', ch13_safe: 'joy', ch13_pick: 'idle', ch13_noclock: 'surprise', ch14_rate: 'joy', ch14_again: 'panic', ch14_keep: 'joy', ask_jp: 'idle', ask_chain: 'idle' };
 const JP_SEC = 22, CH_SEC = 16, GRACE = 8, SKIP_GAP = 0.4, SKIP_AGE = 0.8;
 const UPA_N = 12, UPA_FOOT = 1170, ARROW_W = 200, ARROW_H = 300, ARROW_AT = 0.35, HOLE_LINE = /^(jp8_hole|jp8s|ch15_how|ch15s)$/, CUT = 'chain_announce_cutin', CUT_SEC = 2.8;   // 説明の主役のうぱは大きく。穴を指す文は穴の横へ歩いて、大きな矢印で実際の穴を指す
@@ -50,7 +50,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
   // ---- 数字 ----
   const vals = () => {
     const g = game(), r = g.rules, m = g.meterStatus, c = g.jackpotChain, [num, den] = String(r.ChainDisplayProbability ?? '2/3').split('/');
-    return { CLOCK: Math.round(g.secondsLeft), SEC: m ? Math.round(m.seconds) : 0, N: m?.threshold ?? 0, HOLE_COUNT: m?.targets?.length ?? 0, AWARD_MAX: Math.max(...r.JackpotAwards), AT_RISK: c?.pendingAward ?? 0, FIRST: c?.baseAward ?? 0, RATE_TEXT: { den, num }, PCT: Math.round((+num / +den) * 100) };
+    return { ADD_SEC: r.ExtraSeconds, ADD_BALLS: g.extraLoanBallsNow ?? r.ExtraLoanBalls, CLOCK: Math.round(g.secondsLeft), SEC: m ? Math.round(m.seconds) : 0, N: m?.threshold ?? 0, HOLE_COUNT: m?.targets?.length ?? 0, AWARD_MAX: Math.max(...r.JackpotAwards), AT_RISK: c?.pendingAward ?? 0, FIRST: c?.baseAward ?? 0, RATE_TEXT: { den, num }, PCT: Math.round((+num / +den) * 100) };
   };
   // ---- 字を並べる ----
   const lineItems = (toks, sk, V) => {
@@ -126,15 +126,15 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
     if (edge) {
       const p = place() ?? { x: 124, y: GROUND, n: 5 }, c = smallC, r = compose(c, id, { tails: [{ x: p.x, up: false }], leftAt: 130 });
       const tipY = p.y - 21 * p.n - 10;
-      T.small.needsUpdate = true; F.cur = { id, edge: true, t: 0, dur: L.dur, tex: T.small, cw: c.width, ch: c.height, x: 130 - MG, y: tipY - r.tip.dy - MG, tipX: p.x - 130 + MG, tipY: r.tip.dy + MG, r };
+      T.small.needsUpdate = true; F.cur = { id, edge: true, t: 0, dur: L.dur, tex: T.small, cw: c.width, ch: c.height, x: 130 - MG, y: tipY - r.tip.dy - MG, tipX: p.x - 130 + MG, tipY: r.tip.dy + MG, r, tailAt: p.x, sec: Math.round(g.secondsLeft) };
     } else {
       const c = bigC, plates = /^ask_/.test(id), tall = 23 * UPA_N;
       if (holes.length) {   // 穴の横まで歩く。吹き出しはうぱの上
         const hx = holes.reduce((a, b) => (Math.abs(b - 576) < Math.abs(a - 576) ? b : a)), upaX = clamp(hx < 576 ? hx + 300 : hx - 300, 200, W - 200), r = compose(c, id, { tails: [{ x: upaX, up: false }], minw: 700 }), y = UPA_FOOT - tall - 6 * CELL - r.h;
         T.big.needsUpdate = true; F.cur = { id, edge: false, t: 0, dur: L.dur, tex: T.big, cw: c.width, ch: c.height, x: r.left - MG, y: y - MG, tipX: 576 - (r.left - MG), tipY: r.h + MG, upaX, upaY: UPA_FOOT, holes, r };
       } else {
-        const onChoice = !!F.ch, upaX = onChoice ? 560 : F.cur?.upaX && !F.cur.edge && !F.cur.holes ? F.cur.upaX : 252, r = compose(c, id, { tails: [{ x: upaX, up: true }], minw: onChoice ? W - 24 : plates ? 800 : 700, plates }), y = onChoice ? 785 - r0h(id) : TIP_Y - 6 * CELL - r.h;   // 選択画面：残り時間の下〜「確定」「継続」の上（選択肢と時間を隠さない）
-        T.big.needsUpdate = true; F.cur = { id, edge: false, t: 0, dur: L.dur, tex: T.big, cw: c.width, ch: c.height, x: r.left - MG, y: y - MG, tipX: 576 - (r.left - MG), tipY: r.h + MG, upaX, upaY: y - 6 * CELL + 2, holes: null, upaN: onChoice ? 8 : UPA_N, r };
+        const onChoice = !!F.ch, upaX = F.ch?.add ? 230 : onChoice ? 560 : F.cur?.upaX && !F.cur.edge && !F.cur.holes ? F.cur.upaX : 252, r = compose(c, id, { tails: [{ x: upaX, up: true }], minw: onChoice ? W - 24 : plates ? 800 : 700, plates }), y = F.ch?.add ? 615 - r0h(id) : onChoice ? 785 - r0h(id) : TIP_Y - 6 * CELL - r.h;   // 選択画面：残り時間の下〜「確定」「継続」の上（選択肢と時間を隠さない）
+        T.big.needsUpdate = true; F.cur = { id, edge: false, t: 0, dur: L.dur, tex: T.big, cw: c.width, ch: c.height, x: r.left - MG, y: y - MG, tipX: 576 - (r.left - MG), tipY: r.h + MG, upaX, upaY: y - 6 * CELL + 2, holes: null, upaN: F.ch?.add ? 4 : onChoice ? 8 : UPA_N, r };
       }
       if (/^ask_/.test(id)) { F.ask = { sc: { ask_jp: 'jp', ask_chain: 'chain' }[id], at: F.t }; F.cur.dur = ASK_SEC; }
     }
@@ -143,8 +143,9 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
   };
   const say = (id, force) => { if (F.seq || (!force && showpiece())) return; show(id, true); };
 
-  const shortSeq = (sc) => (sc === 'jp' ? ['jp8s'] : ['ch15s']);
-  const fullSeq = (sc) => (sc === 'jp' ? ['jp8_award', 'jp8_hole', 'jp8_free', 'jp8_go'] : ['ch15_how', 'jp8_free', 'jp8_go']);
+  const howLine = () => ((game()?.meterStatus?.targets?.length ?? 1) > 1 ? 'ch15_how' : 'jp8_hole');   // 「何秒で、どの穴に、何回」は全部の経路で必ず出す
+  const shortSeq = () => [howLine()];
+  const fullSeq = (sc) => (sc === 'jp' ? ['jp8_award', howLine(), 'jp8_free', 'jp8_go'] : [howLine(), 'jp8_free', 'jp8_go']);
   const answer = (side, why) => {   // 左=きかない／右=きく。答えなしは「きく」
     const a = F.ask; if (!a) return; F.ask = null; const yes = side === 'R'; if (yes) F.heard[a.sc] = true;
     F.log.push({ t: +F.t.toFixed(2), id: `ask:${a.sc}:${yes ? 'きく' : 'きかない'}:${why}`, clock: +game().secondsLeft.toFixed(2) }); sfx?.click?.();
@@ -164,7 +165,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
     if (F.cur && !F.cur.edge) { const k = 1 - Math.exp(-dt * 5); if (F.ux === null) { const p0 = F.cur.holes ? null : 1; F.ux = p0 ? F.cur.upaX : 124; F.uy = p0 ? F.cur.upaY : GROUND; } F.ux += (F.cur.upaX - F.ux) * k; F.uy += (F.cur.upaY - F.uy) * k; } else F.ux = F.uy = null;
     if (F.pendTime && (g.meterStatus || g.rouletteStatus || lcd.jp?.model?.active)) F.pendTime = false;   // 開始の案内はJPに入ったら出さない（JP明けに「あと◯個」の行へ被る）
     if (F.cur?.id === 'time_start' && lcd.jp?.model?.active) F.cur = null;   // JPの見せ場に残さない
-    if (F.cur?.id === 'time_start' && liveVisible()) { F.cur = null; if (!F.timeAgain) { F.timeAgain = true; F.pendTime = true; } }   // 案内の吹き出し（おかえり等）と重ねない。1回だけ後回し
+    if (F.cur?.id === 'time_start' && Math.round(g.secondsLeft) !== F.cur.sec) { F.cur.sec = Math.round(g.secondsLeft); compose(smallC, 'time_start', { tails: [{ x: F.cur.tailAt, up: false }], leftAt: 130 }); T.small.needsUpdate = true; }   // 秒数は時計に合わせる
     if (F.pendTime && !F.cur && !g.meterStatus && !liveVisible()) { F.pendTime = false; show('time_start', true); }
     // ---- 新しいメーター ----
     if (m && mid !== F.mid) {
@@ -227,9 +228,13 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
         startSeq(g.chainNeedsAdd ? ['ch13_noclock'] : say2);
       }
     }
+    // ---- 時間切れの100円追加の画面：1セリフ。選ぶのは客、受付の秒と誤選択防止はそのまま ----
+    F.addAge = g.phase === 'Continue' && lcd.timeupSurface?.active && (g.offerLeft ?? 0) > 0 ? (F.addAge ?? 0) + dt : 0;
+    if (!F.addAge) F.addSaid = false;
+    else if (F.addAge >= 1 && !F.addSaid && !F.ch && !F.seq) { F.addSaid = true; F.ch = { t: 0, add: true }; F.tutAt = F.t; startSeq([(g.extraLoanBallsNow ?? 1) > 0 ? 'add_offer' : 'add_offer_nb']); }
     if (F.ch) {
       F.ch.t += dt;
-      if (g.phase !== 'ChainChoice' || !F.seq) { F.ch = null; F.seq = null; F.cur = null; F.ask = null; }
+      if (g.phase !== (F.ch.add ? 'Continue' : 'ChainChoice') || !F.seq) { F.ch = null; F.seq = null; F.cur = null; F.ask = null; }
       else {
         if (F.cur && F.cur.t >= F.cur.dur) seqNext();
       }
@@ -253,7 +258,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
     if (!R.ready) return null;
     const c = F.cur, p = place(), out = [];
     if (F.ch) {   // 選択画面の説明：背景を沈める。時計は吹き出しの下に隠れるので札で出す
-      out.push({ tex: T.dim, w: W, h: 1268, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 0.42 * clamp(F.ch.t / 0.2, 0, 1), add: false });
+      if (!F.ch.add) out.push({ tex: T.dim, w: W, h: 1268, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 0.42 * clamp(F.ch.t / 0.2, 0, 1), add: false });
     }
     if (p && R.comp) {
       const e = expr(), lively = e !== 'idle', fr = lively ? Math.floor(F.t * 5) % 2 : (F.t % 3.2 < 0.14 ? 2 : 0), tex = T.comp[`${e}${fr}`];
@@ -272,6 +277,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
     const o = lcd.jpHud.splitLayers.bind(lcd.jpHud);
     lcd.jpHud.splitLayers = () => { const a = o(), b = layers(); return a && b ? [...a, ...b] : (a ?? b); };
     hooked = true;
+    if (lcd.splitSources) lcd.splitSources = lcd.splitSources.map((f) => () => { const a = f(); if (!a || !F.ch?.add) return a; const b = layers(); return b ? [...a, ...b] : a; });   // 追加の画面は全面の層が先に返る
     const M = lcd.jp?.model;
     if (FIRST_CHOICE && M?.man?.scenes?.[CUT]) {   // 継続を選んだら、盤面の前に継続チャンスのカットイン。chain_seal／jp_seal の差し替えより外側（カットインのあとで元の場面名を渡す）
       const st = M.start.bind(M), sp = M.stop.bind(M);
@@ -282,7 +288,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
   return {
     state: F, ready, tick: (dt) => { hook(); tick(dt); },
     get busy() { return !!F.cur || !!F.pendTime; },
-    timeStart() { F.pendTime = true; F.timeAgain = false; },
+    timeStart() { F.pendTime = true; },
     get asking() { return !!F.ask; },
     get holding() { return false; },
     begin({ repeat = false } = {}) { Object.assign(F, { on: true, repeat, heard: { jp: false, chain: false, choice: false }, asked: { jp: 0, chain: 0, choice: 0 }, ch: null, chKey: null, cutNext: null, cutKey: null, ux: null, uy: null, ask: null, react: [], annFirst: !repeat, rlFirst: !repeat, mid: null, seq: null, cur: null, pendFail: false, rl: null, annKey: null, seqDone: false }); },
@@ -298,7 +304,10 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
       F.prevPress = F.lastPress; const gap = F.t - F.lastPress; F.lastPress = F.t;
       const m = game()?.meterStatus; if (!F.seq || (m?.stage !== 'tutorial' && !F.ch) || F.t - F.tutAt < SKIP_AGE || gap < SKIP_GAP) return;   // 連打のまま流れ込んだ押しでは飛ばさない（手を止めてから押すと飛ばす）
       const last = F.seq.length - 1;
-      if (F.i < last) { F.i = last; show(F.seq[last], false); }
+      const how = F.seq.findIndex((id) => /^(jp8_hole|ch15_how)$/.test(id));
+      if (how === F.i && F.cur && F.cur.t < 1.5) return;   // 穴の文は押しても読む時間を残す
+      if (how > F.i) { F.i = how; show(F.seq[how], false); }
+      else if (F.i < last) { F.i = last; show(F.seq[last], false); }
       else if (F.seq.length === 1 || F.ch) seqFinish('skip');
     },
     dispose() { offAct?.(); },

@@ -1,10 +1,10 @@
 // 10/31 うぱ接客の冒頭（チュートリアルの置き換え）。監督 v02 の映像（effects/upa_host/intro_v02/）を、液晶の重ね描きとして実装する。
 //   ボタン（START の札）のあと、通常画面だけが映る → 巨大なスライムのうぱが落ちて画面を覆う → 上半分へ縮む
-//   → 「プレイは はじめて？ せつめいを きく？」 左ボタン=きく／右ボタン=きかない（12秒押さなければ「きく」）
-//   きかない → 「ルールは きかなくて だいじょうぶ？」（左=やっぱり きく／右=だいじょうぶ）→ 「じゃあ またね！」→ うぱが飛んで消え、時計が動き出す
+//   → 「プレイは はじめて？ せつめいを きく？」 左ボタン=きかない／右ボタン=きく（12秒押さなければ「きく」）
+//   きかない → 「ルールは きかなくて だいじょうぶ？」（左=だいじょうぶ／右=やっぱり きく）→ 「じゃあ またね！」→ うぱが飛んで消え、時計が動き出す
 //   きく   → 「じゃあ せつめい するね！」（全画面）→ 「パチコマは 玉を ふやす ゲームだよ！」（大量の玉）→ 「500こ ためると Switch 2 が もらえるよ！」（写真）
-//          → 左下（案Aの席）へ移り「ボタンを れんだ しよう！」。ここで時計が動き出す。最初のボタンかお10秒で引っ込む
-//   2回目の客（ctrl.repeatVisit）は短く：左下へ跳んできて「おかえり！ いってみよう！」で開始。
+//          → 左下（案Aの席）へ移り「ボタンを れんだ しよう！」。ここで時計が動き出す。最初のボタンか10秒で引っ込む
+//   もう一度プレイも次の客とみなし、毎回この流れ（10/31 おかえりは廃止）。
 // 規則・演出は変えない：冒頭の間だけ規則の時計を止め（ctrl.freezeRules）、時計の表示を隠す（ctrl.howto を立てる＝既存の仕組み）。ボタンは冒頭の間だけ選択に使い、玉は撃たせない。
 // ?upahost=0 でこのファイルは読まれず、従来どおり（play.mjs の差し込み）。?upavoice=1 で effects/upa_host/voice/<id>.ogg|wav があれば声を鳴らす（既定は文字＋効果音だけ）。
 // 数字は規則から読む：S賞のしきい値（PrizeThresholds の最後）。台本の直書きはしない。
@@ -26,10 +26,10 @@ const frac = (x) => x - Math.floor(x);
 const A = new URL('./upa_host_assets/', import.meta.url);
 
 const CX = 576, GROUND = 1262, PARK = 410, MBIG = 24;
-// 映像の時刻（tv）での台本。listen は press=8.0 を基準にした続き
-const T = { FALL: 1.3, LAND: 1.8, SHR: 3.3, PARK: 4.2, ASK: [4.3, 8.3], BTN: 5.4, PRESS: 8.0,
-  Q_CONF: 8.9, Q_BTN: 9.7, Q_PRESS: 11.4, Q_BYE: 11.8, LAUNCH: 13.0,
-  G_UP: 8.6, G_LAND: 9.7, EXPL: [10.1, 11.9], SHR2: 11.8, BALLS: [12.3, 16.3], SW: [16.7, 20.0], JPC: [20.1, 22.5], LAMP: [22.6, 26.6], SEAT0: 26.7, SEAT: [27.7, 30.8] };
+// 映像の時刻（tv）での台本。listen は press=6.5 を基準にした続き
+const T = { FALL: 1.3, LAND: 1.8, SHR: 2.35, PARK: 2.75, ASK: [2.8, 6.8], BTN: 3.9, PRESS: 6.5,
+  Q_CONF: 6.9, Q_BTN: 7.7, Q_PRESS: 9.4, Q_BYE: 9.6, LAUNCH: 10.6,
+  G_UP: 6.75, G_LAND: 7.25, EXPL: [7.5, 8.7], SHR2: 8.6, BALLS: [8.85, 11.35], SW: [11.45, 14.45], JPC: [14.5, 16.6], LAMP: [16.65, 20.15], SEAT0: 20.2, SEAT: [20.7, 23.8] };   // 10/31 台詞以外の間を半分以下に（入り3.25→1.6秒、押してから1文目2.1→1.0秒）
 const lampLift = (v) => 72 * Math.min(1, Math.max(0, Math.min((v - T.JPC[1]) / 0.25, (T.LAMP[1] - v) / 0.25)));   // ランプの説明の間はうぱを少し上げて矢印を空ける
 const CLOCK_IDLE_START = 20;   // 10/31 発射しないまま放置したら、促しのあとこの秒数で時計を動かす（スタッフ待ちで詰まらせない保険）
 
@@ -189,8 +189,8 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   const ASK_TIMEOUT = 12;
   // ---------------- 開始後のライブ案内（頭脳は upa_guide_1031.mjs、描くのはここ）----------------
   const sceneQuiet = () => { const g = game(); return !g || !['Ready', 'Flight', 'Effect'].includes(g.phase) || !!g.meterStatus || !!g.rouletteStatus || !!g.chainStatus || (g.lampCount ?? 0) >= 6 || g.secondsLeft <= 0 || !!lcd.jp?.model?.active || !!lcd.choiceV20?.active || !!lcd.rulesH?.hint?.state?.active; };   // 黙る場面（JP・メーター・ルーレット・結果/選択・継続・時間切れ・ワンポイント）
-  const jpQuiet = () => U.active || controller.freezeRules || sceneQuiet() || !!FL?.busy;
-  const GD = createGuide({ game: () => game(), quiet: jpQuiet, log });
+  const jpQuiet = () => U.active || controller.freezeRules || sceneQuiet();
+  const GD = createGuide({ game: () => game(), quiet: jpQuiet, held: () => !!FL?.busy, log });
   let FL = null;   // JP・継続の説明（upa_flow_1031）。drawSlime が要るので下で作る
   GD.setFrozen(() => !!controller.freezeRules);
   const Lv = { vis: false, art: null, tone: 'normal', small: false, t0: 0, last: null, outAt: null, presence: 0, dup: false, t: 0 };
@@ -200,7 +200,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   const unHide = () => { if (preHide) { preHide = false; controller.howto = null; controller.howtoSeconds = 0; } };
   const begin = (atTicket = false) => {   // 10/31 開始の操作（ticket）で始める。払い出しの段は規則を止めず、'start'（Ready）で止める
     if (!R.ready || U.active) return false;
-    const g = game(); begunFor = g; reset(); U.active = true; U.t = T.FALL - 0.25; U.lateFreeze = atTicket; U.short = !!controller.repeatVisit;
+    const g = game(); begunFor = g; reset(); U.active = true; U.t = T.FALL - 0.1; U.lateFreeze = atTicket; U.short = false;   // 10/31 もう一度プレイも次の客として同じ流れ（おかえりは廃止）
     preHide = false; U.saved = { howtoSeconds: 0, secs: g.secondsLeft, freeze: controller.freezeRules, game: g }; prebuild();
     controller.howtoSeconds = Infinity; controller.howto = { t: 0 };   // 時計の表示を隠す（timer_display は howto 中は出さない）。howtoSeconds=∞ で規則の開始処理は走らない
     controller.freezeRules = !atTicket; log('upa:begin', { repeat: U.short, atTicket });
@@ -219,6 +219,11 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
 
   // ---------------- 入力：冒頭の間は左=fire・右=challenge を選択に使い、規則へは渡さない ----------------
   const dispatch0 = controller.dispatch.bind(controller);
+  const LINE_AT = [T.EXPL[0], T.BALLS[0], T.SW[0], T.JPC[0], T.LAMP[0], T.SEAT0];
+  const skipLine = () => {   // 説明中のボタン：1押しで次の文へ。今の文が1.2秒出るまでは受けない（連打で全部は飛ばない）
+    const v = tv(), i = LINE_AT.findLastIndex((a) => v >= a), next = LINE_AT[i + 1]; if (i < 0 || next === undefined || v - LINE_AT[i] < 1.2) return;
+    U.pressT -= next - v; for (let k = 0; k < 5; k++) U.fired.add('tw' + k); log('upa:skip-line', { to: next });
+  };
   const choose = (side) => {   // 'L' | 'R'
     const t = U.t;
     if (U.branch === null && U.pressT === null) {   // 最初の質問（ボタンが出てから）
@@ -235,6 +240,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     if (FL?.holding && btn) { FL.press(); return false; }   // 選択画面の説明の間は選ばせない（押すと飛ばす）。説明が終わると選択の秒も誤選択防止も頭から
     if (action === 'fire' && clockHold && !sceneQuiet()) clockStart('fire');
     if (!U.active && (action === 'fire' || action === 'challenge')) FL?.press();
+    if (U.active && !U.released && U.branch === 'listen' && (action === 'fire' || action === 'challenge')) { skipLine(); return false; }
     if (U.active && !U.released) { if (action === 'fire') { choose('L'); return false; } if (action === 'challenge') { choose('R'); return false; } return false; }
     if (action === 'fire' && !sceneQuiet()) { GD.S.introShowing = !!(U.active && U.hold && !U.exit); GD.press(); }
     if (U.active && U.hold && action === 'fire' && !U.exit) { if (U.t - U.hold.at >= 2.5) U.exit = { at: U.t }; else U.hold.pressed = true; }   // 台本の最後の文を読む時間は残す   // 最初のボタンでうぱは引っ込む（ボタン自体は規則へ通す）
@@ -278,8 +284,8 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     if (t >= T.G_LAND && t < T.SHR2) { const uu = t - T.G_LAND, sy = spring(uu, 0.55, 3.4, 2.0); Object.assign(s, { face: uu < 1.6 ? joy() : idle(), m: MBIG, y: GROUND, sy, sx: 1 + (1 - sy) * 0.75, belly: 0.25 * Math.exp(-3 * uu), wob: 10 * Math.exp(-2 * uu) + 1.0 }); }
     if (t >= T.SHR2 && t < T.SHR2 + 0.9) { const k = (t - T.SHR2) / 0.9, e = easeOut(k), st = 1 + 0.12 * hop(k); Object.assign(s, { face: joy(), m: lerp(MBIG, 14, e), y: GROUND, sy: st, sx: 1 / Math.sqrt(st), wob: 6 * (1 - k) }); }
     if (t >= T.SHR2 + 0.9 && t < T.SEAT0) { const uu = t - T.SHR2 - 0.9, sy = uu < 0.8 ? spring(uu, 0.8, 6, 2.6) : 1 + 0.012 * Math.sin(ta * 3.1); Object.assign(s, { face: joy(), m: 14, y: GROUND - lampLift(t), sy, sx: 1 + (1 - sy) * 0.7, wob: 1.2 }); }
-    if (t >= T.SEAT0 && t < T.SEAT0 + 1.0) { const k = (t - T.SEAT0) / 1.0, e = easeOut(k), st = 1 + 0.14 * hop(Math.min(1, k * 1.3)); Object.assign(s, { face: k < 0.6 ? joy() : idle(), m: lerp(14, 7, e), x: lerp(CX, 235, e), y: GROUND - 330 * hop(k), sy: st, sx: 1 / Math.sqrt(st), wob: 6 * (1 - k) }); }
-    if (t >= T.SEAT0 + 1.0) { const uu = t - T.SEAT0 - 1.0, sy = uu < 0.8 ? spring(uu, 0.78, 6, 2.6) : 1 + 0.012 * Math.sin(ta * 3.1); Object.assign(s, { face: t < T.SEAT[1] ? joy() : idle(), m: 7, x: 235, y: GROUND, sy, sx: 1 + (1 - sy) * 0.7, wob: 1.0 }); }
+    if (t >= T.SEAT0 && t < T.SEAT0 + 0.5) { const k = (t - T.SEAT0) / 0.5, e = easeOut(k), st = 1 + 0.14 * hop(Math.min(1, k * 1.3)); Object.assign(s, { face: k < 0.6 ? joy() : idle(), m: lerp(14, 7, e), x: lerp(CX, 235, e), y: GROUND - 330 * hop(k), sy: st, sx: 1 / Math.sqrt(st), wob: 6 * (1 - k) }); }
+    if (t >= T.SEAT0 + 0.5) { const uu = t - T.SEAT0 - 0.5, sy = uu < 0.8 ? spring(uu, 0.78, 6, 2.6) : 1 + 0.012 * Math.sin(ta * 3.1); Object.assign(s, { face: t < T.SEAT[1] ? joy() : idle(), m: 7, x: 235, y: GROUND, sy, sx: 1 + (1 - sy) * 0.7, wob: 1.0 }); }
     return s;
   }
   // 2回目の客：上から左下の席へ跳んでくる
@@ -373,7 +379,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     if (!U.short) {
       if (U.branch === 'listen' && v >= T.SEAT[0] && !U.hold) { U.hold = { at: U.t }; release('seat'); }
       if (U.branch === 'quit' && U.press2T !== null && v >= T.LAUNCH && !U.released) release('quit');
-      if (U.branch === 'quit' && U.press2T !== null && v >= T.LAUNCH + 1.0) { finish('quit-gone'); return; }
+      if (U.branch === 'quit' && U.press2T !== null && v >= T.LAUNCH + 0.6) { finish('quit-gone'); return; }
       if (U.hold && !U.exit && (t - U.hold.at > 10 || (t - U.hold.at >= 2.5 && (U.hold.pressed || GD.pending())))) U.exit = { at: t };
       if (U.exit && t - U.exit.at > 0.9) { finish('exit'); return; }
       // 押されないまま：12秒で「きく」
@@ -381,7 +387,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
       if (U.branch === 'quit' && U.press2T === null && tv() >= T.Q_BTN + 0.3 && t - (U.pressT + (T.Q_BTN + 0.3 - T.PRESS)) > ASK_TIMEOUT) choose('R');
     } else {
       if (shortStart === null) shortStart = t;
-      if (!U.hold && t > 1.0) { U.hold = { at: t }; release('short'); }
+      if (!U.hold && t > 1.0 && !U.lateFreeze) { U.hold = { at: t }; release('short'); }   // 札の段では開始しない（続く 'start' で案内が消える）
       if (U.hold && !U.exit && t - U.hold.at > 3.2) U.exit = { at: t };
       if (U.exit && t - U.exit.at > 0.9) { shortStart = null; finish('short-exit'); return; }
     }
@@ -440,7 +446,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
       };
       if (!U.switched) btns(T.BTN, U.pressT !== null ? T.PRESS + 0.3 : 1e9, 'きかない', 'きく', U.pressT !== null ? T.PRESS : null, U.branch === 'listen' ? 1 : 0, 'a');
       if (U.branch === 'quit') {
-        let w = bubbleWin(v, T.Q_CONF, U.press2T !== null ? T.Q_PRESS + 0.3 : 1e9); if (w) placeTip(ctx, Bub('conf', L.intro_quit_confirm, 92), tipUpa.x, tipUpa.y, w.p * 1.5 * w.f, w.p);
+        let w = bubbleWin(v, T.Q_CONF, U.press2T !== null ? T.Q_PRESS + 0.3 : 1e9); if (w) placeTip(ctx, Bub('conf', L.intro_quit_confirm, 92), tipUpa.x, tipUpa.y, w.p * 1.5 * w.f, w.p * 0.88);   // 下のボタン名との間を空ける
         btns(T.Q_BTN, U.press2T !== null ? T.Q_PRESS + 0.3 : 1e9, 'だいじょうぶ', 'やっぱり きく', U.press2T !== null ? T.Q_PRESS : null, 0, 'b');
         w = bubbleWin(v, T.Q_BYE, T.LAUNCH + 0.4); if (w && U.press2T !== null) placeTip(ctx, Bub('bye', L.intro_quit_bye, 100), tipUpa.x, tipUpa.y, w.p * 1.5 * w.f, w.p);
       } else if (U.branch === 'listen') {
@@ -477,7 +483,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     Object.defineProperty(cl, 'holeOverlay', (() => { let prev = cl.holeOverlay; return { configurable: true, enumerable: true, get: () => (v, ck) => {
       const uu = U.active && !U.short && U.branch === 'listen' ? tv() - T.LAMP[0] : -1;
       if (uu < 0 || tv() >= T.LAMP[1]) return prev ? prev(v, ck) : false;
-      const set = (h, L) => { v[h * 3] = L; v[h * 3 + 1] = 0.82 * L; v[h * 3 + 2] = 0.42 * L; };
+      const set = (h, L) => { v[h * 3] = L; v[h * 3 + 1] = 0.58 * L; v[h * 3 + 2] = 0; };   // 実際の穴の色（hole7.rgb）
       if (uu < 1.5) for (let h = 0; h < 7; h++) { const d = (uu * 7 / 0.75) % 7 - h; set(h, d >= 0 && d < 1.6 ? 2.2 : 0.06); }
       else for (let h = 0; h < 7; h++) set(h, h === 3 ? 0 : Math.min(1, (uu - 1.5 - Math.abs(h - 3) * 0.08) / 0.12) > 0 ? 1.8 : 0.06);
       return true;

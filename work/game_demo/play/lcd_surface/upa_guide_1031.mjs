@@ -20,9 +20,11 @@ export const GAP = 1.2, SAME = 20, LAST_N = 3, WAIT_DROP = 2.0, MIN_SHOW = 1.0;
 const TONE = { go_more: 'joy', praise_first: 'joy', praise_4: 'joy', praise_5: 'joy', praise_fast: 'joy', praise_recover: 'joy', dup_safe: 'joy', skip_known: 'joy', go_six: 'joy', go_fire: 'joy',
   jp_early: 'surp', dup_first_reset: 'surp', dup_reset_5: 'surp', drop_all: 'surp', time_10: 'surp', time_10_close: 'surp', time_5: 'surp' };
 export const IMPORTANT = new Set(['go_dup', 'dup_first_reset', 'dup_reset_5', 'drop_all', 'jp_early', 'time_10', 'time_10_close']), MIN_IMPORTANT = 3;   // 10/31 大事な説明：最低3秒は見せ、弱い一言で上書きしない。待ちでも捨てない
+const NO_CAP = new Set(['praise_4', 'praise_5']);   // 4灯・5灯の一言は上限の対象外
+const DUP_TEXT_SEC = 2.2;   // 演出の字（同じ穴！・ランプが消えた…）が引くまで、消灯の説明を待つ
 const SMALL = new Set(['idle_1', 'idle_2', 'idle_3', 'idle_4', 'idle_5', 'time_5']);   // 小さく出す（吹き出しの画像は同じ。描く倍率を下げる）
 
-export function createGuide({ game, quiet = () => false, log = () => {}, rand = Math.random } = {}) {
+export function createGuide({ game, quiet = () => false, held = () => false, log = () => {}, rand = Math.random } = {}) {
   const S = { t: 0, playT: 0, on: false, repeat: false, stepsDone: false, steps: [], stepIdx: 0, hands: false,
     presses: [], firstPressAt: null, lastInputAt: null, firstWin: false, firstDup: false, jp: false, lamps: 0, lampsPrev: 0, lastLampAt: 0, drop: null,
     cnt: { slow: 0, safe: 0, fast: 0, idle: 0 }, once: {}, lastSpokenAt: {}, hist: [], lastEnd: -9, queue: [], resetN: 0, variantI: 0, pressesDuringStep: [], startIdle: { a: false, b: false }, log: [] };
@@ -33,12 +35,12 @@ export function createGuide({ game, quiet = () => false, log = () => {}, rand = 
   const REACT = new Set([PRIO.E07, PRIO.E09, PRIO.E10, PRIO.E12, PRIO.E13, PRIO.E14]);   // 一言の反応の上限（companion.frequency_caps）：8秒以上あけ・1プレイ8回。手順と、割り込みで出す強い台詞は別枠
   const speak = (id, prio, opt = {}) => {
     const now = S.t;
-    if (!opt.force && REACT.has(prio) && !IMPORTANT.has(id)) { if ((S.reactN ?? 0) >= 8 || now - (S.reactAt ?? -99) < 8) return false; S.reactN = (S.reactN ?? 0) + 1; S.reactAt = now; }
+    if (!opt.force && REACT.has(prio) && !IMPORTANT.has(id) && !NO_CAP.has(id)) { if ((S.reactN ?? 0) >= 8 || now - (S.reactAt ?? -99) < 8) return false; S.reactN = (S.reactN ?? 0) + 1; S.reactAt = now; }
     if (!opt.force) {
       if (S.hist.slice(-LAST_N).includes(opt.key ?? id)) return false;
       const last = S.lastSpokenAt[opt.key ?? id]; if (last !== undefined && now - last < SAME && !opt.noCooldown) return false;
     }
-    S.queue.push({ id, key: opt.key ?? id, prio, at: now, expire: now + (IMPORTANT.has(id) ? 10 : opt.wait ?? WAIT_DROP), dur: IMPORTANT.has(id) ? Math.max(MIN_IMPORTANT + 0.2, opt.dur ?? 0) : opt.dur ?? null, step: opt.step ?? null, hold: opt.hold ?? 0, art: opt.art ?? id });
+    S.queue.push({ id, key: opt.key ?? id, prio, at: now, expire: now + (opt.after ?? 0) + (IMPORTANT.has(id) ? 10 : opt.wait ?? WAIT_DROP), dur: IMPORTANT.has(id) ? Math.max(MIN_IMPORTANT + 0.2, opt.dur ?? 0) : opt.dur ?? null, step: opt.step ?? null, hold: opt.hold ?? 0, art: opt.art ?? id, notBefore: now + (opt.after ?? 0) });
     return true;
   };
   const begin = (q) => {
@@ -97,8 +99,8 @@ export function createGuide({ game, quiet = () => false, log = () => {}, rand = 
       const before = S.lamps; S.lamps = n;
       if (!S.firstWin) { S.firstWin = true; S.once.firstHitSaidAt = S.t; if (!S.repeat || true) speak('praise_first', PRIO.E07, { dur: 1.5, wait: 4 }); }
       if (S.drop && S.t - S.drop.at <= 10 && n >= S.drop.n) { speak('praise_recover', PRIO.E12, { dur: 2.9 }); S.drop = null; }
-      if (id === 'lamp4') speak('praise_4', PRIO.E13, { dur: 2.3 });
-      if (id === 'lamp5') speak('praise_5', PRIO.E13, { dur: 2.0 });
+      if (id === 'lamp4') speak('praise_4', PRIO.E13, { dur: 2.3, wait: 4 });
+      if (id === 'lamp5') speak('praise_5', PRIO.E13, { dur: 2.0, wait: 4 });
     } else if (id === 'lamp6') {
       S.lamps = 6;
       if (!S.stepsDone) { skipSteps('all'); S.stepsDone = true; end(); S.queue = []; S.jpEarlyReshow = true; }   // JP の映像は6灯目の瞬間から始まり、字に重ねられない。JP が終わって通常に戻ったら言う
@@ -114,8 +116,8 @@ export function createGuide({ game, quiet = () => false, log = () => {}, rand = 
       const from = p.n_from ?? S.lamps, k = p.k ?? p.removedCount ?? 1, to = Math.max(0, from - k); S.resetN++;
       const first = !S.firstDup; if (first) { S.firstDup = true; }
       S.lamps = to;
-      if (first && !S.once.dupReset) { S.once.dupReset = true; if (!S.stepsDone) { skipSteps('all'); S.stepsDone = true; } end(); S.queue = S.queue.filter((x) => x.prio >= 3); speak('dup_first_reset', PRIO.E08, { dur: 4.4, force: true, art: 'dup_first_reset' }); }
-      else if (from === 5 && to === 4) speak('dup_reset_5', PRIO.E10, { dur: 2.9, art: 'dup_reset_5' + (S.variantI++ % 3 === 0 ? '' : `_v${(S.variantI % 2)}`) });
+      if (first && !S.once.dupReset) { S.once.dupReset = true; if (!S.stepsDone) { skipSteps('all'); S.stepsDone = true; } end(); S.queue = S.queue.filter((x) => x.prio >= 3); speak('dup_first_reset', PRIO.E08, { dur: 4.4, force: true, art: 'dup_first_reset', after: DUP_TEXT_SEC }); }
+      else if (from === 5 && to === 4) speak('dup_reset_5', PRIO.E10, { dur: 2.9, after: DUP_TEXT_SEC, art: 'dup_reset_5' + (S.variantI++ % 3 === 0 ? '' : `_v${(S.variantI % 2)}`) });
       if (from >= 3 && to === 0 && !S.once.dropAll) { S.once.dropAll = true; speak('drop_all', PRIO.E11, { dur: 2.0 }); }
       S.drop = { at: S.t, n: from };
     } else if (id === 'warn10') {
@@ -140,7 +142,7 @@ export function createGuide({ game, quiet = () => false, log = () => {}, rand = 
     if (S.hands && !S.handsDone && out.cur === null && S.playT > 0.2 && S.on && !S.introExt) { /* 席の吹き出しは冒頭の側 */ }
     const sd = stepDue(); if (sd && S.handsDone && !S.queue.some((x) => x.id === sd) && !(out.cur?.id === sd)) speak(sd, PRIO.E01, { dur: DUR[sd], step: sd, wait: 6, noCooldown: true });
     // E04：開始から押さない
-    if (S.firstPressAt === null && !S.repeat) {
+    if (S.firstPressAt === null) {
       if (!S.startIdle.a && S.playT >= 4) { S.startIdle.a = true; speak('adlib_start_idle', PRIO.E04, { dur: 2.3 }); }
       if (S.startIdle.a && !S.startIdle.b && S.playT >= 10) { S.startIdle.b = true; S.idleAcc = 0; speak('adlib_start_idle2', PRIO.E04, { dur: 3.2 }); }
       else if (S.startIdle.b && S.idleAcc >= IDLE_EVERY && out.cur?.prio !== PRIO.E05 && !S.queue.some((x) => x.prio === PRIO.E05)) { S.idleAcc = 0; const id = IDLE_POOL[S.idleI++ % IDLE_POOL.length]; speak(id, PRIO.E05, { dur: IDLE_DUR[id], force: true, wait: 3 }); }
@@ -156,9 +158,11 @@ export function createGuide({ game, quiet = () => false, log = () => {}, rand = 
     // 台詞の調停
     const c = out.cur;
     if (c && S.t - c.t0 >= c.dur) end();
+    if (held()) { for (const x of S.queue) { x.expire += dt; x.notBefore += dt; } return; }   // 開始の案内が出ている間は待つ（捨てない）
     S.queue = S.queue.filter((x) => x.expire > S.t);
-    if (S.queue.length) {
-      S.queue.sort((a, b) => (IMPORTANT.has(b.id) - IMPORTANT.has(a.id)) || a.prio - b.prio || a.at - b.at); const nx = S.queue[0], cc = out.cur;
+    const due = S.queue.filter((x) => x.notBefore <= S.t);
+    if (due.length) {
+      due.sort((a, b) => (IMPORTANT.has(b.id) - IMPORTANT.has(a.id)) || a.prio - b.prio || a.at - b.at); const nx = due[0], cc = out.cur;
       if (!cc) { if ((S.t - S.lastEnd >= GAP || nx.prio <= PRIO.E02) && (S.handsDone || !S.hands)) begin(nx); }
       else if (nx.prio < cc.prio && S.t - cc.t0 >= (IMPORTANT.has(cc.id) ? (IMPORTANT.has(nx.id) ? MIN_SHOW : MIN_IMPORTANT) : Math.min(MIN_SHOW, cc.hold || MIN_SHOW))) begin(nx);
     }
