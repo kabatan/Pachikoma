@@ -127,7 +127,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     intro_listen: [[['じゃあ', false]], [['せつめい', true], [' するね！', false]]],
     rule_goal: [[['玉', true], ['を ふやす', false]], [['ゲーム', true], ['だよ！', false]]],
     rule_prize: [[[`${sPrize()}こ `, true], ['ためると', false]], [['Switch 2', true], [' が もらえるよ！', false]]],
-    rule_jp: [[['玉を たくさん もらうには', false]], [['JPチャンス', true], ['！', false]]],
+    rule_jp: [[['玉を たくさん もらうには', false]], [['大当たりチャンス', true], ['！', false]]],
     rule_lamp: [[['ランプを ', false], ['6こ', true], [' つけると', false]], [['玉が たくさん もらえる', false]], [['チャンス', true], ['！', false]]],
     rule_hands: [[['ボタンを ', false], ['れんだ', true], ['して、', false]], [['穴', true], ['に 玉を入れよう！', false]], [['入った穴の ', false], ['ランプ', true], ['が つくよ！', false]]],
     intro_repeat: [[['おかえり！', true]], [['いってみよう！', false]]],
@@ -547,7 +547,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     ctx.restore();
   };
   // 描画は液晶 canvas へ直接（first_timer の ?ftsplit=0 と同じ作法）。冒頭の間は GPU の映像経路でなく2Dの面で描かせる
-  lcd.frame = (dt, F) => { const r = frame0(dt, F); if (clockHold) { const g = game(); if (g !== clockHold.game || !['Ready', 'Flight', 'Effect'].includes(g.phase)) clockHold = null; else { g.secondsLeft = clockHold.sec; clockHold.t += dt; if (clockHold.t >= CLOCK_IDLE_START) clockStart('idle'); } } hookHoles(); if (U.active) { try { draw(dt); } catch (e) { console.warn('[upa-host] draw', e); finish('error'); } } if (RP?.vis) { try { RP.tick(dt, { quiet: sceneQuiet() }); RP.draw(mainCtx); } catch (e) { console.warn('[renda-prompt]', e); RP.reset(); } } if (!U.active && R.ready) { try { FL?.tick(dt); } catch (e) { console.warn('[upa-flow]', e); controller.game?.endJpTutorial?.(); } try { updateLive(dt); if (Lv.vis) drawLive(); } catch (e) { console.warn('[upa-host] live', e); Lv.vis = false; GD.reset(); } } return r; };
+  lcd.frame = (dt, F) => { const r = frame0(dt, F); if (clockHold) { const g = game(); if (g !== clockHold.game || !['Ready', 'Flight', 'Effect'].includes(g.phase)) clockHold = null; else { g.secondsLeft = clockHold.sec; clockHold.t += dt; if (clockHold.t >= CLOCK_IDLE_START) clockStart('idle'); } } hookHoles(); /* 11/01 促しの暗い縁取り・光はうぱの吹き出しより下に敷く（吹き出しが暗くなり縁取りの下端で段差が出ていた） */ if (RP?.vis) { try { RP.tick(dt, { quiet: sceneQuiet() }); RP.draw(mainCtx); } catch (e) { console.warn('[renda-prompt]', e); RP.reset(); } } if (U.active) { try { draw(dt); } catch (e) { console.warn('[upa-host] draw', e); finish('error'); } } if (!U.active && R.ready) { try { FL?.tick(dt); } catch (e) { console.warn('[upa-flow]', e); controller.game?.endJpTutorial?.(); } try { updateLive(dt); if (Lv.vis) drawLive(); } catch (e) { console.warn('[upa-host] live', e); Lv.vis = false; GD.reset(); } } return r; };
   const hold0 = lcd.overlayHold;
   lcd.overlayHold = () => (U.active || Lv.vis || RP?.vis ? true : (hold0 ? hold0() : false));
   const rev = Object.getOwnPropertyDescriptor(lcd, 'uploadRevision')?.get;

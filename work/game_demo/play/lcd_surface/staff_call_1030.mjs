@@ -133,7 +133,7 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     ctx.save(); ctx.globalAlpha = bandIn; ctx.translate(W / 2, bandY + (1 - bandIn) * -60);
     const bg2 = ctx.createLinearGradient(-300, 0, 300, 0); bg2.addColorStop(0, 'rgba(160,10,30,.0)'); bg2.addColorStop(.2, `rgba(${170 + 70 * pulse},20,40,.95)`); bg2.addColorStop(.8, `rgba(${170 + 70 * pulse},20,40,.95)`); bg2.addColorStop(1, 'rgba(160,10,30,0)');
     ctx.fillStyle = bg2; ctx.fillRect(-460, -50, 920, 100);
-    textPath(ctx, HELP ? 'スタッフを呼んでいます' : '係員をお呼びします', 0, 30, 62, { fill: WHITE, glow: '#ff3050' });
+    textPath(ctx, HELP ? 'スタッフを呼んでいます' : 'スタッフを お呼びします', 0, 30, 62, { fill: WHITE, glow: '#ff3050' });
     ctx.restore();
     // ほんぶん: 「スタッフに」「チケットを」「渡してください」
     const rise = (d, y) => { const k = ease((t - d) / .4); return [y + (1 - k) * 70, k]; };
@@ -211,7 +211,7 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
     x.save(); x.globalAlpha = 1; x.translate(W / 2, 150);
     const bg2 = x.createLinearGradient(-300, 0, 300, 0); bg2.addColorStop(0, 'rgba(160,10,30,.0)'); bg2.addColorStop(.2, `rgba(${170 + 70 * pulse},20,40,.95)`); bg2.addColorStop(.8, `rgba(${170 + 70 * pulse},20,40,.95)`); bg2.addColorStop(1, 'rgba(160,10,30,0)');
     x.fillStyle = bg2; x.fillRect(-460, -50, 920, 100);
-    textPath(x, HELP ? 'スタッフを呼んでいます' : '係員をお呼びします', 0, 30, 62, { fill: WHITE, glow: '#ff3050' });
+    textPath(x, HELP ? 'スタッフを呼んでいます' : 'スタッフを お呼びします', 0, 30, 62, { fill: WHITE, glow: '#ff3050' });
     x.restore();
   };
   const elArrows = (x, t) => {
