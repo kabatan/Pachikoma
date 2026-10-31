@@ -23,6 +23,7 @@ export class MedalRules extends GRules {
     // --- 連打メーター（JPチャンス） ---
     this.JpMeterThreshold = o.JpMeterThreshold ?? 3;          // 残り1穴に入った球がこの数に届いたら成功
     this.JpMeterSeconds = o.JpMeterSeconds ?? 9;              // 撃てる時間（導入の後、タイマーが動く間）
+    this.ChainChoiceAddSeconds = o.ChainChoiceAddSeconds ?? 30;   // 10/31 チケットが要る継続の選択の制限時間
     this.MeterCountdownSeconds = o.MeterCountdownSeconds ?? 0;   // 10/31 連打メーター（JP・継続）の開始前のカウントダウン（3→2→1→開始）の秒数。0で無し（既定）。液晶（jp_start_1031）が入れる。この間は制限時間も連打の数えも止める
     this.JpMeterIntroSeconds = o.JpMeterIntroSeconds ?? 2;    // 6灯が揃ってから撃てるまでの導入（時計は進む。この間の押しは1回だけ保持）
     // JPチャンスのチュートリアル（10/30）。導入のあと、撃てるようになる前に液晶が説明の映像を流す間、時計を止める（制限時間を食わない）。0で無し（既定）。
@@ -569,8 +570,8 @@ export class MedalGame extends GGame {
   }
   /** 時計0で継続に追加（100円）が要る状態か。この選択は客が決める（自動で継続・スタッフ待ちへ進めない）。 */
   _chainNeedsAddNow() { return !!this.rules.ChainContinueNeedsAddAtZero && this.secondsLeft <= 0; }
-  /** 追加が要る選択は財布を出す時間が要るので、追加の勧誘（ContinueSeconds）と同じ長さにする。 */
-  _chainChoiceSeconds() { const r = this.rules; return this._chainNeedsAddNow() ? Math.max(r.ChainChoiceSeconds, r.ContinueSeconds) : r.ChainChoiceSeconds; }
+  /** 追加（チケット）が要る選択は財布を出す時間が要るので 30 秒（10/31 監督）。 */
+  _chainChoiceSeconds() { const r = this.rules; return this._chainNeedsAddNow() ? r.ChainChoiceAddSeconds : r.ChainChoiceSeconds; }
   /** 告知の間は選択の制限時間を減らさない。告知が終わったら、最初の継続は自動で継続、2回目以降は選択画面へ。 */
   _advanceChainChoice(seconds) {
     if (this.phase === MedalPhase.ChainChoice && (this.announceLeft ?? 0) > 0) {
@@ -580,6 +581,10 @@ export class MedalGame extends GGame {
       this.announceLeft = 0; this.choiceLeft = this._chainChoiceSeconds();
       if (this._announceFirst && !this._chainNeedsAddNow()) return this.chooseChain(true);   // 10/30 監督: 追加（100円）が要る選択は自動で決めない。時計0なら最初でも選択画面
       return false;
+    }
+    if (this.phase === MedalPhase.ChainChoice && this._chainNeedsAddNow()) {   // 選択中に時計が0になった時も、チケットが要る時点から 30 秒
+      const key = `${this._chainSerial ?? 0}:${this.jackpotChain?.stage}`;
+      if (this._choiceAddKey !== key) { this._choiceAddKey = key; this.choiceLeft = Math.max(this.choiceLeft ?? 0, this._chainChoiceSeconds()); }
     }
     return super._advanceChainChoice(seconds);
   }
