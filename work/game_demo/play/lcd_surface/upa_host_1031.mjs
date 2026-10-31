@@ -31,7 +31,8 @@ const CX = 576, GROUND = 1262, PARK = 410, MBIG = 24;
 // 映像の時刻（tv）での台本。listen は press=6.5 を基準にした続き
 const T = { FALL: 1.3, LAND: 1.8, SHR: 2.35, PARK: 2.75, ASK: [2.8, 6.8], BTN: 3.9, PRESS: 6.5,
   Q_CONF: 6.9, Q_BTN: 7.7, Q_PRESS: 9.4, Q_BYE: 9.6, LAUNCH: 10.6,
-  G_UP: 6.75, G_LAND: 7.25, EXPL: [7.5, 8.7], SHR2: 8.6, BALLS: [8.85, 11.35], SW: [11.45, 14.45], JPC: [14.5, 16.6], LAMP: [16.65, 20.15], SEAT0: 20.2, SEAT: [20.7, 23.8] };   // 10/31 台詞以外の間を半分以下に（入り3.25→1.6秒、押してから1文目2.1→1.0秒）
+  G_UP: 6.75, G_LAND: 7.25, EXPL: [7.5, 8.7], SHR2: 8.6, BALLS: [8.85, 11.35], SW: [11.45, 14.45], JPC: [14.5, 14.5], LAMP: [14.5, 18.0], SEAT0: 18.05, SEAT: [18.55, 21.65] };   // 11/01 JPの2つの台詞を rule_lamp に一本化（2.15秒短縮）
+//   // 10/31 台詞以外の間を半分以下に（入り3.25→1.6秒、押してから1文目2.1→1.0秒）
 const lampLift = (v) => 72 * Math.min(1, Math.max(0, Math.min((v - T.JPC[1]) / 0.25, (T.LAMP[1] - v) / 0.25)));   // ランプの説明の間はうぱを少し上げて矢印を空ける
 const CLOCK_IDLE_START = 20;   // 10/31 発射しないまま放置したら、促しのあとこの秒数で時計を動かす（スタッフ待ちで詰まらせない保険）
 
@@ -127,7 +128,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     rule_goal: [[['玉', true], ['を ふやす', false]], [['ゲーム', true], ['だよ！', false]]],
     rule_prize: [[[`${sPrize()}こ `, true], ['ためると', false]], [['Switch 2', true], [' が もらえるよ！', false]]],
     rule_jp: [[['玉を たくさん もらうには', false]], [['JPチャンス', true], ['！', false]]],
-    rule_lamp: [[['7この ', false], ['ランプ', true], ['のうち', false]], [['6こ', true], [' 光らせたら', false]], [['JPチャンス', true], ['だよ！', false]]],
+    rule_lamp: [[['ランプを ', false], ['6こ', true], [' つけると', false]], [['玉が たくさん もらえる', false]], [['チャンス', true], ['！', false]]],
     rule_hands: [[['ボタンを ', false], ['れんだ', true], ['して、', false]], [['穴', true], ['に 玉を入れよう！', false]], [['入った穴の ', false], ['ランプ', true], ['が つくよ！', false]]],
     intro_repeat: [[['おかえり！', true]], [['いってみよう！', false]]],
     renda_strong: [[['ボタンを ', false], ['れんだ', true], ['！', false]]],   // 押さないまま3秒：席の吹き出しをこれに替える（effects/upa_host/lines.json の renda_push）
@@ -347,8 +348,9 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   }
   const sprBubble = (d) => cached('wb' + d, () => { const c = mk(d + 8, d + 8), x = c.getContext('2d'), r = d / 2, m = (d + 8) / 2; const g = x.createRadialGradient(m, m, r * 0.6, m, m, r); g.addColorStop(0, 'rgba(215,240,255,.08)'); g.addColorStop(0.85, 'rgba(215,240,255,.25)'); g.addColorStop(1, 'rgba(235,250,255,.9)'); x.fillStyle = g; x.beginPath(); x.arc(m, m, r, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,.85)'; x.beginPath(); x.ellipse(m - r * 0.35, m - r * 0.35, r * 0.2, r * 0.13, -0.7, 0, 7); x.fill(); return c; });
   const sprDrop = (d) => cached('dp' + d, () => { const c = mk(d + 8, d + 8), x = c.getContext('2d'), r = d / 2, m = (d + 8) / 2; const g = x.createRadialGradient(m - r * 0.35, m - r * 0.4, r * 0.1, m, m, r); g.addColorStop(0, 'rgb(255,225,240)'); g.addColorStop(0.35, 'rgb(255,150,190)'); g.addColorStop(1, 'rgb(190,60,110)'); x.fillStyle = g; x.beginPath(); x.arc(m, m, r, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,.9)'; x.beginPath(); x.ellipse(m - r * 0.35, m - r * 0.4, r * 0.22, r * 0.14, -0.7, 0, 7); x.fill(); return c; });
-  const BC = btnColorOn(), pal = (side) => btnPalette(side, BC), face = (c) => c.flat ? c.top : c;
-  const RP = rendaPromptOn() ? createRendaPrompt({ eng, palette: pal, log }) : null;   // 席の吹き出し（最後の説明）の間、左右ボタンの絵が沈み続け「連打」が出る。発射で即消える   // 旧は単色(配列)
+  const BC = btnColorOn(), pal = (side) => btnPalette(side, BC), face = (c) => c.flat ? c.top : c;   // 旧は単色(配列)
+  const RP = rendaPromptOn() ? createRendaPrompt({ eng, palette: pal, log }) : null;   // 席の吹き出し（最後の説明）の間、左右ボタンの絵が沈み続け「連打」が出る。発射で即消える
+  if (RP) controller.ledOverride = (now) => RP.leds(now);   // 実機の左右ボタンLEDの交互点滅（cabinet_serial.mjs の buttonLeds が読む）
   const sprButton = (col, pressed) => cached('bt' + (Array.isArray(col) ? col : [...col.top, ...col.mid, ...col.bot]) + pressed + BC, () => {
     const d = 215, M = 40, Wc = d + 2 * M, c = mk(Wc, Wc), x = c.getContext('2d'), m = Wc / 2, r = d / 2;
     const ring = x.createLinearGradient(0, m - r * 1.18, 0, m + r * 1.18); ring.addColorStop(0, 'rgb(86,84,106)'); ring.addColorStop(1, 'rgb(40,38,52)'); x.fillStyle = ring; x.beginPath(); x.arc(m, m + d * 0.05, r * 1.18, 0, 7); x.fill();
@@ -392,7 +394,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
       fire('lst', () => { sfx.pop(740); speak('intro_listen'); }, T.EXPL[0]); fire('hop2', () => sfx.hop(), T.SHR2); fire('park2', () => sfx.park(), T.SHR2 + 0.9);
       fire('ballpop', () => { sfx.pop(900); speak('rule_goal'); }, T.BALLS[0]); fire('rattle', () => sfx.rattle(), T.BALLS[0] + 0.2);
       fire('photo', () => { sfx.photo(); speak('rule_prize'); }, T.SW[0]); for (let i = 0; i < 5; i++) fire('tw' + i, () => sfx.twinkle(), T.SW[0] + 0.9 + i * 0.55);
-      fire('jpcpop', () => { sfx.pop(980); speak('rule_jp'); }, T.JPC[0]); fire('lamppop', () => { sfx.pop(1020); speak('rule_lamp'); }, T.LAMP[0]); fire('hop3', () => sfx.hop(), T.SEAT0); fire('seatpop', () => { sfx.pop(1040, 0.4); speak('rule_hands'); }, T.SEAT[0]);
+      fire('lamppop', () => { sfx.pop(1020); speak('rule_lamp'); }, T.LAMP[0]); fire('hop3', () => sfx.hop(), T.SEAT0); fire('seatpop', () => { sfx.pop(1040, 0.4); speak('rule_hands'); }, T.SEAT[0]);
     }
   };
   let shortStart = null;
@@ -492,7 +494,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
         }
         w = bubbleWin(v, T.SW[0], T.SW[1]); if (w) placeTip(ctx, Bub('sw', L.rule_prize, 84, { tail: 'b' }), CX, 948, w.p * 1.5 * w.f, w.p);
         const exitA = U.exit ? Math.max(0, 1 - (t - U.exit.at) / 0.3) : 1;
-        w = bubbleWin(v, T.JPC[0], T.JPC[1]); if (w) placeTip(ctx, Bub('jp', L.rule_jp, 78, { tail: 'b' }), CX, 948, w.p * 1.5 * w.f, w.p);
+        
         w = bubbleWin(v, T.LAMP[0], T.LAMP[1]);
         if (w) {   // 実際の7つのランプ（穴）を、液晶の下端の矢印で指す。穴のLEDそのものは光らせない
           placeTip(ctx, Bub('lamp', L.rule_lamp, 80, { tail: 'b' }), CX, 948 - lampLift(v), w.p * 1.5 * w.f, w.p);

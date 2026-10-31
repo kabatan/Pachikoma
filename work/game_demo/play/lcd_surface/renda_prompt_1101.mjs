@@ -14,7 +14,7 @@ const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Mat
 export const rendaPromptOn = (search = globalThis.location?.search ?? '') => new URLSearchParams(search).get('rendaprompt') !== '0';
 
 // 置き場所と秒数（試作の値。実画面で見て調整）
-const LAYOUT = { btnY: 400, btnLX: 150, btnRX: 1002, btnD: 215, textY: 395, textW: 640, balls: 9, rise: 250 };   // 「連打」の左右に左右ボタンの絵（実機の左右と同じ並び）。真ん中下は席の吹き出し（ほぼ同じ大きさのまま、少し下げて縮める）
+const LAYOUT = { btnY: 450, btnLX: 150, btnRX: 1002, btnD: 235, textY: 450, textW: 560, balls: 9, rise: 250 };   // 「連打」の左右に左右ボタンの絵（実機の左右と同じ並び）。真ん中下は席の吹き出し（ほぼ同じ大きさのまま、少し下げて縮める）
 const BEAT = 0.1;            // 左右が交互に沈む間隔（秒）。合計で毎秒10回＝人が連打する速さ
 const STRONG_AT = 3.2;       // 押さないまま強い促しへ（監督：3〜5秒）
 const QUIT_AT = 30;          // これ以上は音と LED を止める（絵だけ残す）
@@ -73,8 +73,8 @@ export function createRendaPrompt({ eng, palette, log = () => {} } = {}) {
     out: safe(() => { const o = o0(-10); if (!o) return; tone(o, 900, 1500, 0, 0.1, { gain: 0.3, type: 'triangle' }); }),
   };
 
-  // ---------------- LED（左右ボタンの交互点滅：effects.hint('button', {side:'both', hz})） ----------------
-  const led = (on) => { try { const fx = globalThis.__effects; if (!fx?.hint) return; if (on) fx.hint('button', { side: 'both', hz: 1 / (BEAT * 2), secs: QUIT_AT }); else fx.hint('button_off'); S.ledOn = on; } catch (e) { console.warn('[renda-prompt] led', e); } };
+  // ---------------- LED（左右ボタンの交互点滅）。3D筐体の光＝fx.hint('button', {side:'both', hz})（effects.js/lightbus.js）、実機のESP32 LED＝controller.ledOverride（cabinet_serial.mjs の buttonLeds が読む） ----------------
+  const led = (on) => { try { const fx = globalThis.__play?.fxApi?.fx; if (!fx?.hint) { S.ledOn = on; return; } if (on) fx.hint('button', { side: 'both', hz: 1 / (BEAT * 2), secs: QUIT_AT }); else fx.hint('button_off'); S.ledOn = on; } catch (e) { console.warn('[renda-prompt] led', e); } };
 
   // ---------------- 状態 ----------------
   out.begin = () => { if (!rendaPromptOn() || !out.ready) return false; Object.assign(S, { on: true, t: 0, leave: null, strong: false, strongAt: 0, tickN: -1, warnN: -1, slamAt: 0, balls: [], shown: 0 }); sfx.slam(1); led(true); log('renda:begin'); return true; };
@@ -83,6 +83,7 @@ export function createRendaPrompt({ eng, palette, log = () => {} } = {}) {
   Object.defineProperty(out, 'vis', { get: () => S.on });
   Object.defineProperty(out, 'strong', { get: () => S.on && S.strong && !S.leave });
   out.t = () => S.t;
+  out.leds = (nowMs) => (S.on && !S.leave && S.ledOn ? (Math.floor(nowMs / (BEAT * 1000)) & 1 ? [0, 1] : [1, 0]) : null);   // 絵と同じ周期で左右が交互（絵が沈む側のLEDを消す＝押した感じ。どちらでも同じ動作）
 
   out.tick = (dt, { quiet = false } = {}) => {
     if (!S.on) return;
@@ -106,7 +107,7 @@ export function createRendaPrompt({ eng, palette, log = () => {} } = {}) {
     const inK = easeBack((t - 0.0) / 0.28), fade = clamp(t / 0.1);
     ctx.save(); ctx.translate(PX, PY); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); ctx.translate(ox, oy);
     ctx.globalAlpha = A * fade; ctx.drawImage(G.vign, 0, 40);   // 場面を少し暗くして絵を立てる（強いときは赤みを足す）
-    if (strong) { const k = 0.5 + 0.5 * Math.sin(st * TAU * 2.0); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = A * (0.10 + 0.14 * k); ctx.fillStyle = 'rgb(255,40,20)'; ctx.fillRect(-20, 40, W + 40, 900); ctx.restore(); }
+    if (strong) { const k = 0.5 + 0.5 * Math.sin(st * TAU * 2.0); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = A * (0.16 + 0.26 * k); ctx.fillStyle = 'rgb(255,36,16)'; ctx.fillRect(-20, 40, W + 40, 900); ctx.restore(); }
     // ボタン2つ：交互に沈む
     const beatPhase = (side) => { const u = ((t - 0.25) / (BEAT * 2) - (side ? 0.5 : 0)); return t < 0.25 ? 1 : u - Math.floor(u); };   // 0..0.5 が沈んでいる
     for (const side of [0, 1]) {
