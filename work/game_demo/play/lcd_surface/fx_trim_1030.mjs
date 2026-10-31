@@ -40,6 +40,14 @@ export const PAY_TRIM = {
   announce: { first: { scene: 'chain_announce_first', skip: [[8, 26], [40, 50], [212, 266]] }, repeat: { scene: 'chain_announce_repeat', skip: [[6, 48], [124, 174], [196, 252]], short: true } },   // 最初の告知 303 → 221（7.4秒）。2回目以降 288 → 142（4.7秒。2/3 の説明は客が一度見た：タイトルの溜めと 67% の組み上がりを省き、没収の玉数は残す）
   announceMargin: 0.3,                                                                                                       // 規則の告知の秒数は映像より 0.3 秒短く（映像の最後の白で終わる）
 };
+// 11/1 配当 30・40 だけさらに短く（監督：「30とか40の時に100以上と同じ長い演出をやる必要があるのか。もうちょっとコンパクトに」）。100・200・500 は上の PAY_TRIM のまま。?payshort2=0 で 30・40 も上の長さに戻す。ルールHだけ。
+//   映像（コマ番号は元の 203 コマのもの）：コイン 0〜2 → FEVER の字 27〜46（M 27・V アップ 37）→ 白い閃光のいちばん白い 46 から、2回目の白い閃光 109（配当額が引いて全景に出る所。音の決め L2 も同じ所）へ飛ぶ → 109〜139（配当額が読める 116 以降を 0.8 秒見せる）。
+//   つなぎは白と白（輝度 221→211）なので切り貼りに見えない。うぱの明滅（3〜26）・FEVER の寄りの焦らし（47〜108）を省く。203 → 54 コマ（1.8 秒。3.7 秒から）。
+//   音：配当の出来事（jp_events_v5.json の reward_*）は 100 以上と共有なので、30・40 だけ別の表（globalThis.__sceneEvents）を jp_audio_v5 が引く。
+//     鳴らさない＝うぱの明滅(3)・白い光の爆発 L1(46)・「OVER」の叩きつけ(55)（L1 は 46→109 の白でつながった L2 と1コマ差で同時になるため、55 は映像ごと無いため）。
+//     動かす＝閃光1(139)→ 133（短くした映像の終わりに間に合わせる。133 は明るさの脈動の頂点）。 閃光2・3（163・187）は映像の終わりより後なので鳴らさない。
+export const PAY_TRIM2 = { scenes: ['reward_30', 'reward_40'], skip: [[3, 27], [47, 109]], frames: 140, audio: { drop: [3, 46, 55], move: { 139: 133 } } };
+export function payShort2Enabled(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('payshort2') !== '0'; }
 export function payShortEnabled(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('payshort') !== '0'; }
 const skippedOf = (ranges) => ranges.reduce((n, [a, b]) => n + (b - a), 0);
 
@@ -56,9 +64,11 @@ export function attachFxTrim(lcd, { controller, log = () => {} } = {}) {
   skip(FX_TRIM.bridge.scene, FX_TRIM.bridge.skip);
   const pay = payShortEnabled();
   const rewardSkip = pay ? PAY_TRIM.reward.skip : FX_TRIM.reward.skip;
-  for (const n of FX_TRIM.reward.scenes) skip(n, rewardSkip);
+  const pay2 = pay && payShort2Enabled();
+  const skipFor = (n) => (pay2 && PAY_TRIM2.scenes.includes(n) ? PAY_TRIM2.skip : rewardSkip);   // 配当 30・40 だけ別の飛ばし方
+  for (const n of FX_TRIM.reward.scenes) skip(n, skipFor(n));
   if (pay) {
-    for (const n of PAY_TRIM.reward.scenes) tail(n, PAY_TRIM.reward.frames);
+    for (const n of PAY_TRIM.reward.scenes) tail(n, pay2 && PAY_TRIM2.scenes.includes(n) ? PAY_TRIM2.frames : PAY_TRIM.reward.frames);
     skip(PAY_TRIM.success.scene, PAY_TRIM.success.skip); tail(PAY_TRIM.success.scene, PAY_TRIM.success.frames);
     for (const k of ['first', 'repeat']) skip(PAY_TRIM.announce[k].scene, PAY_TRIM.announce[k].skip);
   }
@@ -75,7 +85,7 @@ export function attachFxTrim(lcd, { controller, log = () => {} } = {}) {
   const payRules = () => {
     const sc = man.scenes, fps = man.fps || 30, out = {};
     const awards = [30, 40, 100, 200, 500];
-    const film = awards.map((a) => { const ro = sc[`roulette_${a}`], rw = sc[`reward_${a}`]; return ro && rw && Number.isFinite(ro.stop_frame) ? (ro.frames - ro.stop_frame + rw.frames - skippedOf(rewardSkip.filter(([x]) => x < rw.frames))) / fps : null; });
+    const film = awards.map((a) => { const ro = sc[`roulette_${a}`], rw = sc[`reward_${a}`]; return ro && rw && Number.isFinite(ro.stop_frame) ? (ro.frames - ro.stop_frame + rw.frames - skippedOf(skipFor(`reward_${a}`).filter(([x]) => x < rw.frames))) / fps : null; });
     out.filmAfterStop = film;
     for (const [k, key] of [['first', 'ChainAnnounceSecondsFirst'], ['repeat', 'ChainAnnounceSeconds']]) {
       const a = sc[PAY_TRIM.announce[k].scene]; if (a) out[key] = +((a.frames - skippedOf(PAY_TRIM.announce[k].skip)) / fps - PAY_TRIM.announceMargin).toFixed(3);
@@ -94,6 +104,15 @@ export function attachFxTrim(lcd, { controller, log = () => {} } = {}) {
   const ev = window.__jpAudio?.events?.events;
   if (Array.isArray(ev) && !ev.__fxTrim) {
     const shift = { jp_bridge: FX_TRIM.bridge.skip, 'reward_*': rewardSkip };   // 黒背景＋字には JP音の出来事が無い
+    const mapOff = (off, ranges) => { let o = off; for (const [a, b] of [...ranges].reverse()) { if (off >= b) o -= b - a; else if (off >= a) o = a; } return o; };
+    if (pay2) {   // 配当 30・40 だけ別の出来事の表（元の表の写しから作る。jp_audio_v5 の fireScene が __sceneEvents[場面名] を優先して引く）。共有の表を直す前に写す
+      const tbl = {};
+      for (const sn of PAY_TRIM2.scenes) {
+        tbl[sn] = ev.filter((e) => e.scene === 'reward_*' && e.ref !== 'stop' && Number.isFinite(e.off) && !PAY_TRIM2.audio.drop.includes(e.off) && (PAY_TRIM2.audio.move[e.off] ?? e.off) < PAY_TRIM2.frames)
+          .map((e) => ({ ...e, off: mapOff(PAY_TRIM2.audio.move[e.off] ?? e.off, PAY_TRIM2.skip) }));
+      }
+      globalThis.__sceneEvents = { ...(globalThis.__sceneEvents ?? {}), ...tbl }; audio += Object.values(tbl).reduce((n, l) => n + l.length, 0);
+    }
     for (const e of ev) {
       const ranges = shift[e.scene]; if (!ranges || e.ref === 'stop' || !Number.isFinite(e.off)) continue;
       if (pay && e.scene === 'reward_*' && e.off >= PAY_TRIM.reward.frames) { e.do = []; audio++; continue; }   // 短くした映像の終わりより後の音（配当画面の閃光3）は鳴らさない
@@ -108,7 +127,7 @@ export function attachFxTrim(lcd, { controller, log = () => {} } = {}) {
     }
     Object.defineProperty(ev, '__fxTrim', { value: true });
   }
-  lcd.fxTrim = { applied, rules: { ...FX_TRIM_RULES, FailFilmSeconds: FX_TRIM_FAIL_SECONDS }, audioEventsShifted: audio, payshort: pay ? { ...PAY_TRIM, rules: payR } : false };
+  lcd.fxTrim = { applied, rules: { ...FX_TRIM_RULES, FailFilmSeconds: FX_TRIM_FAIL_SECONDS }, audioEventsShifted: audio, payshort: pay ? { ...PAY_TRIM, rules: payR } : false, payshort2: pay2 ? PAY_TRIM2 : false };
   log('fxtrim', lcd.fxTrim);
   return lcd;
 }

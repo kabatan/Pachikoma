@@ -181,7 +181,7 @@ export async function installJpAudioV5(engine, opts = {}) {
 
   // ---- 場面ごとの音(場面の開始 t からのフレーム数。出来事の表は jp_events_v5.json) ----
   function fireScene(key, t, extra = {}) {
-    for (const e of BYSCENE[key] ?? []) {
+    for (const e of (extra.scene && globalThis.__sceneEvents?.[extra.scene]) || BYSCENE[key] || []) {   // 11/1 配当 30・40 は短い映像用の別の表（fx_trim_1030.mjs が __sceneEvents[場面名] に入れたときだけ）
       if (key === 'jp_chance_d*' && globalThis.__jpChanceTrim && e.off >= globalThis.__jpChanceTrim) continue;   // 10/30 JACKPOT CHANCE が短くなった（〇を狙えが無い）ので、その分の音は鳴らさない
       const tt = e.ref === 'stop' ? frT(extra.tStop, e.off) : frT(t, e.off);
       runDo(tt, e.do, key === 'jp_chance_d*' && st.done.has('chancePre') ? { riser: 0 } : {});
@@ -216,7 +216,7 @@ export async function installJpAudioV5(engine, opts = {}) {
     else if (/^chain_jp_gold_d\d$/.test(name)) tier('M', t, { clang: 'Fs' });
     else if (name === 'jp_rush') once('rush', () => fireScene(key, t));
     else if (/^roulette_\d+$/.test(name)) roulette(name, t);
-    else if (/^(chain_offer|chain_offer2|chain_success|chain_confirm)$/.test(name) || /^reward_\d+$/.test(name) || BYSCENE[key]) fireScene(key, t);
+    else if (/^(chain_offer|chain_offer2|chain_success|chain_confirm)$/.test(name) || /^reward_\d+$/.test(name) || BYSCENE[key]) fireScene(key, t, /^reward_\d+$/.test(name) ? { scene: name } : {});
     else if (/^fail_/.test(name)) { if (st.inJp) endJp(t, 'E3'); }
   }
   function roulette(name, t) {
