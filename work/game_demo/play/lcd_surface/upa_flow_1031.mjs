@@ -23,7 +23,7 @@ const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; 
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const easeBack = (x) => { const c = 1.7, u = clamp(x, 0, 1) - 1; return 1 + (c + 1) * u ** 3 + c * u ** 2; };
 
-export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () => false, sfx, log = () => {} }) {
+export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveVisible = () => false, sfx, log = () => {} }) {
   const game = () => controller.game;
   const R = { meta: null, img: {}, ready: false };
   const bigC = mk(W + 2 * MG, 760), smallC = mk(W + 2 * MG, 560);
@@ -93,9 +93,10 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
       let px = ox + (w - ws[li]) / 2; const py = oy + (minh ? (h - rows.length * lead) / 2 + 22 : pad) + li * lead;
       for (const k of items) { const m = R.meta.runs[k]; x.drawImage(R.img[k], px - m.pad, py - m.pad); px += m.adv; }
     });
-    if (plates) [[0, '#d83030', '#ff7a7a'], [1, '#2f62d8', '#86aeff']].forEach(([side, col, hi]) => {   // 左=きかない（赤）／右=きく（青）。冒頭と同じ色と役割
-      const pw = 300, ph = 118, px = ox + (side ? w - pw - 40 : 40), py = oy + h - ph - 26, lab = labels?.(side);
-      x.fillStyle = BROWN; x.fillRect(px - 6, py - 6, pw + 12, ph + 12); x.fillStyle = col; x.fillRect(px, py, pw, ph); x.fillStyle = hi; x.fillRect(px, py, pw, 8);
+    if (plates) [0, 1].forEach((side) => {   // 左=きかない／右=きく。冒頭（upa_host）と同じ色と役割。11/01〜 左=白〜青／右=黄〜赤（実機のボタンの色。?btncolor=0 で旧：左赤・右青）
+      const pw = 300, ph = 118, px = ox + (side ? w - pw - 40 : 40), py = oy + h - ph - 26, lab = labels?.(side), pc = btn?.(side)?.plate ?? (side ? ['#2f62d8', '#2f62d8', '#86aeff'] : ['#d83030', '#d83030', '#ff7a7a']);
+      x.fillStyle = BROWN; x.fillRect(px - 6, py - 6, pw + 12, ph + 12);
+      const pg = x.createLinearGradient(0, py, 0, py + ph); pg.addColorStop(0, pc[0]); pg.addColorStop(1, pc[1]); x.fillStyle = pg; x.fillRect(px, py, pw, ph); x.fillStyle = pc[2]; x.fillRect(px, py, pw, 8);
       if (lab) { const k = Math.min(1, Math.min((pw - 24) / lab.width, (ph - 16) / lab.height)); x.drawImage(lab, px + (pw - lab.width * k) / 2, py + (ph - lab.height * k) / 2, lab.width * k, lab.height * k); }
     });
     return { w, h, left, tip };

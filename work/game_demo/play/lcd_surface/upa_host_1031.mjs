@@ -14,6 +14,8 @@ import { hotBus } from '../../../audio/runtime/hot_bus.mjs';
 import { createGuide } from './upa_guide_1031.mjs';
 import { createUpaFlow } from './upa_flow_1031.mjs';
 import { HOLE_X } from './tutorial_jp_overlay_1030.mjs';
+import { createRendaPrompt, rendaPromptOn } from './renda_prompt_1101.mjs';   // 11/01 最後の「ボタンを れんだ」で止まる客への促し（?rendaprompt=0 で旧）
+import { btnColorOn, btnPalette, tintedCopy } from './btn_color_1101.mjs';   // 11/01 左ボタン=白〜青／右ボタン=黄〜赤（実機に合わせる。?btncolor=0 で旧：左赤・右青）
 
 const PX = 34, PY = 28, W = 1152, H = 1268;
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
@@ -113,6 +115,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   // 焼いた吹き出し／ラベルがあればそれ（金のパチンコ字）。台詞の数字（S賞）が焼いた値と違うときだけ従来の字で組む
   const Bub = (k, lines, sz, opt) => cached('b_' + k, () => { const m = R.txtMeta?.items[k]; if (m && R.txt[k] && (k !== 'sw' || R.txtMeta.prize === sPrize())) return { c: R.txt[k], tip: { x: m.tip[0], y: m.tip[1] } }; return bubbleA(lines, sz, opt); });
   const Lab = (k, text, sz) => cached('l_' + k, () => R.txt[k] ?? dtext([[[text, false]]], sz));
+  const LabC = (k, text, sz, side) => BC && pal(side).tint ? cached('lc_' + k, () => tintedCopy(Lab(k, text, sz), pal(side).tint)) : Lab(k, text, sz);   // 左ボタンの字は白〜青側へ（右は金のまま）
 
   // ---------------- 規則から読む数字 ----------------
   const sPrize = () => { const r = game().rules, th = r.PrizeThresholds; return th?.[th.length - 1] ?? 500; };
@@ -127,6 +130,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     rule_lamp: [[['7この ', false], ['ランプ', true], ['のうち', false]], [['6こ', true], [' 光らせたら', false]], [['JPチャンス', true], ['だよ！', false]]],
     rule_hands: [[['ボタンを ', false], ['れんだ', true], ['して、', false]], [['穴', true], ['に 玉を入れよう！', false]], [['入った穴の ', false], ['ランプ', true], ['が つくよ！', false]]],
     intro_repeat: [[['おかえり！', true]], [['いってみよう！', false]]],
+    renda_strong: [[['ボタンを ', false], ['れんだ', true], ['！', false]]],   // 押さないまま3秒：席の吹き出しをこれに替える（effects/upa_host/lines.json の renda_push）
   });
 
   // ---------------- 効果音（WebAudio 合成・素材なし）----------------
@@ -259,6 +263,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     if (!U.active && (action === 'fire' || action === 'challenge')) FL?.press();
     if (U.active && !U.released && U.branch === 'listen' && (action === 'fire' || action === 'challenge')) { skipLine(); return false; }
     if (U.active && !U.released) { if (action === 'fire') { choose('L'); return false; } if (action === 'challenge') { choose('R'); return false; } return false; }
+    if (RP?.vis && (action === 'fire' || action === 'challenge')) RP.press();   // どちらのボタンでも促しは即消える
     if (action === 'fire' && !sceneQuiet()) { GD.S.introShowing = !!(U.active && U.hold && !U.exit); GD.press(); }
     if (U.active && U.hold && action === 'fire' && !U.exit) { if (U.t - U.hold.at >= 2.5) U.exit = { at: U.t }; else U.hold.pressed = true; }   // 台本の最後の文を読む時間は残す   // 最初のボタンでうぱは引っ込む（ボタン自体は規則へ通す）
     return dispatch0(action, ...r);
@@ -342,12 +347,22 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   }
   const sprBubble = (d) => cached('wb' + d, () => { const c = mk(d + 8, d + 8), x = c.getContext('2d'), r = d / 2, m = (d + 8) / 2; const g = x.createRadialGradient(m, m, r * 0.6, m, m, r); g.addColorStop(0, 'rgba(215,240,255,.08)'); g.addColorStop(0.85, 'rgba(215,240,255,.25)'); g.addColorStop(1, 'rgba(235,250,255,.9)'); x.fillStyle = g; x.beginPath(); x.arc(m, m, r, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,.85)'; x.beginPath(); x.ellipse(m - r * 0.35, m - r * 0.35, r * 0.2, r * 0.13, -0.7, 0, 7); x.fill(); return c; });
   const sprDrop = (d) => cached('dp' + d, () => { const c = mk(d + 8, d + 8), x = c.getContext('2d'), r = d / 2, m = (d + 8) / 2; const g = x.createRadialGradient(m - r * 0.35, m - r * 0.4, r * 0.1, m, m, r); g.addColorStop(0, 'rgb(255,225,240)'); g.addColorStop(0.35, 'rgb(255,150,190)'); g.addColorStop(1, 'rgb(190,60,110)'); x.fillStyle = g; x.beginPath(); x.arc(m, m, r, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,.9)'; x.beginPath(); x.ellipse(m - r * 0.35, m - r * 0.4, r * 0.22, r * 0.14, -0.7, 0, 7); x.fill(); return c; });
-  const sprButton = (col, pressed) => cached('bt' + col + pressed, () => {
+  const BC = btnColorOn(), pal = (side) => btnPalette(side, BC), face = (c) => c.flat ? c.top : c;
+  const RP = rendaPromptOn() ? createRendaPrompt({ eng, palette: pal, log }) : null;   // 席の吹き出し（最後の説明）の間、左右ボタンの絵が沈み続け「連打」が出る。発射で即消える   // 旧は単色(配列)
+  const sprButton = (col, pressed) => cached('bt' + (Array.isArray(col) ? col : [...col.top, ...col.mid, ...col.bot]) + pressed + BC, () => {
     const d = 215, M = 40, Wc = d + 2 * M, c = mk(Wc, Wc), x = c.getContext('2d'), m = Wc / 2, r = d / 2;
     const ring = x.createLinearGradient(0, m - r * 1.18, 0, m + r * 1.18); ring.addColorStop(0, 'rgb(86,84,106)'); ring.addColorStop(1, 'rgb(40,38,52)'); x.fillStyle = ring; x.beginPath(); x.arc(m, m + d * 0.05, r * 1.18, 0, 7); x.fill();
     const cy = m - (pressed ? d * 0.02 : d * 0.06), g = x.createRadialGradient(m - r * 0.35, cy - r * 0.4, r * 0.05, m, cy, r);
-    const [R0, G0, B0] = col; const k = (q) => `rgb(${Math.min(255, R0 * q) | 0},${Math.min(255, G0 * q) | 0},${Math.min(255, B0 * q) | 0})`;
-    g.addColorStop(0, k(pressed ? 1.2 : 1.5)); g.addColorStop(0.5, k(pressed ? 0.8 : 1.0)); g.addColorStop(1, k(0.35)); x.fillStyle = g; x.beginPath(); x.arc(m, cy, r, 0, 7); x.fill();
+    if (Array.isArray(col)) {
+      const [R0, G0, B0] = col; const k = (q) => `rgb(${Math.min(255, R0 * q) | 0},${Math.min(255, G0 * q) | 0},${Math.min(255, B0 * q) | 0})`;
+      g.addColorStop(0, k(pressed ? 1.2 : 1.5)); g.addColorStop(0.5, k(pressed ? 0.8 : 1.0)); g.addColorStop(1, k(0.35)); x.fillStyle = g; x.beginPath(); x.arc(m, cy, r, 0, 7); x.fill();
+    } else {   // 上＝白/黄、下＝青/赤のグラデーションの面に、縁へ向かう影を重ねる（どちらの色の実機でも合う）
+      const q = pressed ? 0.86 : 1, rgb = (c, a) => `rgb(${Math.min(255, c[0] * a) | 0},${Math.min(255, c[1] * a) | 0},${Math.min(255, c[2] * a) | 0})`;
+      const lg = x.createLinearGradient(0, cy - r, 0, cy + r); lg.addColorStop(0, rgb(col.top, q)); lg.addColorStop(0.5, rgb(col.mid, q)); lg.addColorStop(1, rgb(col.bot, q));
+      x.fillStyle = lg; x.beginPath(); x.arc(m, cy, r, 0, 7); x.fill();
+      const sh = x.createRadialGradient(m - r * 0.2, cy - r * 0.25, r * 0.3, m, cy, r); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(0.72, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.42)');
+      x.fillStyle = sh; x.beginPath(); x.arc(m, cy, r, 0, 7); x.fill();
+    }
     x.fillStyle = 'rgba(255,255,255,.75)'; x.beginPath(); x.ellipse(m - r * 0.38, cy - r * 0.45, r * 0.25, r * 0.14, -0.6, 0, 7); x.fill();
     return c;
   });
@@ -384,9 +399,9 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   const prebuild = () => {   // 吹き出し・字・ボタン・写真は冒頭の始まり（通常画面だけの静かな間）に作っておく
     const L = LINES();
     Bub('ask', L.intro_ask, 92); Bub('conf', L.intro_quit_confirm, 92); Bub('bye', L.intro_quit_bye, 100); Bub('lst', L.intro_listen, 92, { tail: 'b' });
-    Bub('ball', L.rule_goal, 96, { tail: 'b' }); Bub('sw', L.rule_prize, 84, { tail: 'b' }); Bub('jp', L.rule_jp, 78, { tail: 'b' }); Bub('lamp', L.rule_lamp, 80, { tail: 'b' }); Bub('seat', L.rule_hands, 64, { tail: 'bl', tailX: 0.07 }); Bub('rep', L.intro_repeat, 92, { tail: 'bl', tailX: 0.07 });
-    for (const [tag, labs] of [['a', ['きかない', 'きく']], ['b', ['だいじょうぶ', 'やっぱり きく']]]) labs.forEach((lab, side) => { Lab('lab' + tag + side, lab, lab === 'きく' ? 92 : 68); Lab(side ? 'subR' : 'subL', side ? '右ボタン' : '左ボタン', 44); });
-    for (const col of [[60, 130, 255], [255, 70, 70]]) { sprButton(col, false); sprButton(col, true); }
+    Bub('ball', L.rule_goal, 96, { tail: 'b' }); Bub('sw', L.rule_prize, 84, { tail: 'b' }); Bub('jp', L.rule_jp, 78, { tail: 'b' }); Bub('lamp', L.rule_lamp, 80, { tail: 'b' }); Bub('seat', L.rule_hands, 64, { tail: 'bl', tailX: 0.07 }); Bub('rep', L.intro_repeat, 92, { tail: 'bl', tailX: 0.07 }); Bub('rp', L.renda_strong, 84, { tail: 'bl', tailX: 0.07 });
+    for (const [tag, labs] of [['a', ['きかない', 'きく']], ['b', ['だいじょうぶ', 'やっぱり きく']]]) labs.forEach((lab, side) => { LabC('lab' + tag + side, lab, lab === 'きく' ? 92 : 68, side); LabC(side ? 'subR' : 'subL', side ? '右ボタン' : '左ボタン', 44, side); });
+    for (const side of [0, 1]) { sprButton(face(pal(side)), false); sprButton(face(pal(side)), true); }
     photoSprite(); for (const d of [8, 12, 16, 22, 30, 40, 52, 64]) sprDrop(d);
   };
   const draw = (dt) => {
@@ -394,7 +409,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     const ctx = mainCtx, t = U.t, ta = t; let v = tv(); const L = LINES();
     // 区切り：時計を動かす・終わる
     if (!U.short) {
-      if (U.branch === 'listen' && v >= T.SEAT[0] && !U.hold) { U.hold = { at: U.t }; release('seat'); }
+      if (U.branch === 'listen' && v >= T.SEAT[0] && !U.hold) { U.hold = { at: U.t }; release('seat'); if (RP?.begin()) GD.S.startIdle.a = true; /* 促しがある間は、案内側の「ボタンを おしてみて！」(4秒)は出さない */ }
       if (U.branch === 'quit' && U.press2T !== null && v >= T.LAUNCH && !U.released) release('quit');
       if (U.branch === 'quit' && U.press2T !== null && v >= T.LAUNCH + 0.6) { finish('quit-gone'); return; }
       if (U.hold && !U.exit && (t - U.hold.at > 10 || (t - U.hold.at >= 2.5 && (U.hold.pressed || GD.pending())))) U.exit = { at: t };
@@ -434,6 +449,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     }
     // うぱ
     const s = U.short ? upaShort(t - 0.0, ta) : upaState(v, ta);
+    if (RP?.strong && !U.exit) { s.face = ['face_surprise', Math.floor(ta * 25 / 4) % 2]; s.y -= Math.abs(Math.sin(ta * 9)) * 16; }   // 促しが強いときは、うぱも（原画の表情差分のまま）はねる
     if (U.exit) { const k = clamp((t - U.exit.at) / 0.9); if (!U.short || true) { const e = k * k; s.y = (U.short ? GROUND : GROUND) - 1500 * e * (k > 0.25 ? 1 : 0) - 120 * hop(Math.min(1, k * 4)); const st = 1 + 0.4 * Math.min(1, k * 2); s.sy *= st; s.sx *= 1 / st ** 0.6; if (k > 0.85) s.vis = false; } }
     if (s.vis) {
       if (s.y >= GROUND - 5) { const w = 560 * (s.m / MBIG) + 120; const g = ctx.createRadialGradient(s.x, GROUND - 6, 4, s.x, GROUND - 6, w * 0.5); g.addColorStop(0, 'rgba(0,0,30,.32)'); g.addColorStop(1, 'rgba(0,0,30,0)'); ctx.save(); ctx.translate(0, 0); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(s.x, GROUND - 6, w * 0.5, 22, 0, 0, 7); ctx.fill(); ctx.restore(); }
@@ -451,15 +467,15 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
       if (!U.switched) { const w = bubbleWin(v, T.ASK[0], U.pressT !== null ? T.PRESS + 0.05 : 1e9); if (w) placeTip(ctx, Bub('ask', L.intro_ask, 92), tipUpa.x, tipUpa.y, w.p * 1.5 * w.f, w.p); }
       const btns = (a, b, labL, labR, pressT, pside, tag) => {
         if (!(v >= a && v < b + 0.35)) return; const f = v >= b ? Math.max(0, 1 - (v - b) / 0.25) : 1, pp = easeBack((v - a) / 0.3);
-        [[290, [255, 70, 70], labL, '左ボタン'], [862, [60, 130, 255], labR, '右ボタン']].forEach(([xl, col, lab, sub], side) => {
+        [[290, pal(0), labL, '左ボタン'], [862, pal(1), labR, '右ボタン']].forEach(([xl, col, lab, sub], side) => {
           const pressed = pressT !== null && side === pside && v >= pressT && v < pressT + 0.35, chosen = pressT !== null && v >= pressT;
           const alpha = f * Math.min(1, pp * 1.3) * (chosen && side !== pside ? 0.35 : 1), yb = 1105 + (pp >= 1 ? 0 : (1 - pp) * 120), sc = Math.max(0.05, pp);
-          ctx.save(); ctx.globalCompositeOperation = 'lighter'; glowRing(ctx, xl, yb, 215, col.join(','), (pressed ? 0.9 : 0.55 * (0.5 + 0.5 * Math.sin((ta) * 5))) * alpha); ctx.restore();
-          const bs = sprButton(col, pressed); place(ctx, bs, xl, yb, alpha, 1);
-          place(ctx, Lab('lab' + tag + side, lab, lab === 'きく' ? 92 : 68), xl, 935, alpha, sc);
-          place(ctx, Lab(side ? 'subR' : 'subL', sub, 44), xl, 1248, alpha * 0.95, sc);
+          ctx.save(); ctx.globalCompositeOperation = 'lighter'; glowRing(ctx, xl, yb, 215, col.glow, (pressed ? 0.9 : 0.55 * (0.5 + 0.5 * Math.sin((ta) * 5))) * alpha); ctx.restore();
+          const bs = sprButton(face(col), pressed); place(ctx, bs, xl, yb, alpha, 1);
+          place(ctx, LabC('lab' + tag + side, lab, lab === 'きく' ? 92 : 68, side), xl, 935, alpha, sc);
+          place(ctx, LabC(side ? 'subR' : 'subL', sub, 44, side), xl, 1248, alpha * 0.95, sc);
         });
-        if (pressT !== null && v >= pressT && v < pressT + 0.6) { const uu = (v - pressT) / 0.6; ctx.save(); ctx.globalCompositeOperation = 'lighter'; glowRing(ctx, pside === 0 ? 290 : 862, 1105, 215 * (1 + uu * 1.4), '255,200,160', (1 - uu) * 0.9); ctx.restore(); }
+        if (pressT !== null && v >= pressT && v < pressT + 0.6) { const uu = (v - pressT) / 0.6; ctx.save(); ctx.globalCompositeOperation = 'lighter'; glowRing(ctx, pside === 0 ? 290 : 862, 1105, 215 * (1 + uu * 1.4), pal(pside === 0 ? 0 : 1).burst, (1 - uu) * 0.9); ctx.restore(); }
       };
       if (!U.switched) btns(T.BTN, U.pressT !== null ? T.PRESS + 0.3 : 1e9, 'きかない', 'きく', U.pressT !== null ? T.PRESS : null, U.branch === 'listen' ? 1 : 0, 'a');
       if (U.branch === 'quit') {
@@ -482,7 +498,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
           placeTip(ctx, Bub('lamp', L.rule_lamp, 80, { tail: 'b' }), CX, 948 - lampLift(v), w.p * 1.5 * w.f, w.p);
           ctx.save(); ctx.globalAlpha = clamp(w.p * w.f); drawArrows(ctx, HOLE_X, GOLD, 1214, v - T.LAMP[0]); ctx.restore();
         }
-        w = bubbleWin(v, T.SEAT[0], 1e9); if (w) placeTip(ctx, Bub('seat', L.rule_hands, 64, { tail: 'bl', tailX: 0.07 }), 235 + 10, GROUND - 290, w.p * 1.5 * w.f * exitA, w.p);
+        w = bubbleWin(v, T.SEAT[0], 1e9); if (w) { const rpOn = !!RP?.vis && !U.exit; placeTip(ctx, RP?.strong && !U.exit ? Bub('rp', L.renda_strong, 84, { tail: 'bl', tailX: 0.07 }) : Bub('seat', L.rule_hands, 64, { tail: 'bl', tailX: 0.07 }), 235 + 10, rpOn ? 1070 : GROUND - 290, w.p * 1.5 * w.f * exitA, w.p * (rpOn && !RP.strong ? 0.86 : 1)); }   /* 促しの間は、吹き出しを少し下げて縮め、上の「連打」と左右ボタンの絵を空ける */
       }
     } else {
       const sv = Math.max(0, t - 0.8), w = bubbleWin(sv, 0.35, 99), exitA = U.exit ? Math.max(0, 1 - (t - U.exit.at) / 0.3) : 1;
@@ -492,7 +508,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   };
   // 開始後のうぱ：左下の席にせり上がって吹き出しを出し、言い終わったら沈む。出ている間だけ液晶を2Dの面にする（それ以外は通常の経路のまま）
   const SEATX = 235, liveSeat = { x: SEATX, y: GROUND };
-  FL = createUpaFlow(lcd, { controller, base: A, labels: (side) => R.txt['laba' + side], liveVisible: () => Lv.vis || !!(U.active && U.hold), sfx, log });
+  FL = createUpaFlow(lcd, { controller, base: A, labels: (side) => side === 0 && BC ? (R.txt.laba0 && LabC('laba0', 'きかない', 68, 0)) : R.txt['laba' + side], btn: BC ? btnPalette : (s) => btnPalette(s, false), liveVisible: () => Lv.vis || !!(U.active && U.hold), sfx, log });
   // 10/31 「7このうち6こ」の間だけ、筐体の穴のランプを実演（順に流れる→6つ点灯・1つ消灯）。窓の外は元の処理のまま
   let holesHooked = false;
   const hookHoles = () => {
@@ -529,11 +545,11 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     ctx.restore();
   };
   // 描画は液晶 canvas へ直接（first_timer の ?ftsplit=0 と同じ作法）。冒頭の間は GPU の映像経路でなく2Dの面で描かせる
-  lcd.frame = (dt, F) => { const r = frame0(dt, F); if (clockHold) { const g = game(); if (g !== clockHold.game || !['Ready', 'Flight', 'Effect'].includes(g.phase)) clockHold = null; else { g.secondsLeft = clockHold.sec; clockHold.t += dt; if (clockHold.t >= CLOCK_IDLE_START) clockStart('idle'); } } hookHoles(); if (U.active) { try { draw(dt); } catch (e) { console.warn('[upa-host] draw', e); finish('error'); } } if (!U.active && R.ready) { try { FL?.tick(dt); } catch (e) { console.warn('[upa-flow]', e); controller.game?.endJpTutorial?.(); } try { updateLive(dt); if (Lv.vis) drawLive(); } catch (e) { console.warn('[upa-host] live', e); Lv.vis = false; GD.reset(); } } return r; };
+  lcd.frame = (dt, F) => { const r = frame0(dt, F); if (clockHold) { const g = game(); if (g !== clockHold.game || !['Ready', 'Flight', 'Effect'].includes(g.phase)) clockHold = null; else { g.secondsLeft = clockHold.sec; clockHold.t += dt; if (clockHold.t >= CLOCK_IDLE_START) clockStart('idle'); } } hookHoles(); if (U.active) { try { draw(dt); } catch (e) { console.warn('[upa-host] draw', e); finish('error'); } } if (RP?.vis) { try { RP.tick(dt, { quiet: sceneQuiet() }); RP.draw(mainCtx); } catch (e) { console.warn('[renda-prompt]', e); RP.reset(); } } if (!U.active && R.ready) { try { FL?.tick(dt); } catch (e) { console.warn('[upa-flow]', e); controller.game?.endJpTutorial?.(); } try { updateLive(dt); if (Lv.vis) drawLive(); } catch (e) { console.warn('[upa-host] live', e); Lv.vis = false; GD.reset(); } } return r; };
   const hold0 = lcd.overlayHold;
-  lcd.overlayHold = () => (U.active || Lv.vis ? true : (hold0 ? hold0() : false));
+  lcd.overlayHold = () => (U.active || Lv.vis || RP?.vis ? true : (hold0 ? hold0() : false));
   const rev = Object.getOwnPropertyDescriptor(lcd, 'uploadRevision')?.get;
-  if (rev) Object.defineProperty(lcd, 'uploadRevision', { configurable: true, enumerable: true, get: () => (U.active || Lv.vis ? undefined : rev.call(lcd)) });
+  if (rev) Object.defineProperty(lcd, 'uploadRevision', { configurable: true, enumerable: true, get: () => (U.active || Lv.vis || RP?.vis ? undefined : rev.call(lcd)) });
 
   // ---------------- 出来事 ----------------
   if (lcd.firstTimer?.flags) lcd.firstTimer.flags[3] = false;   // 最初の10秒の迷い対策（流れる光＋「左のボタンを押してね」）はうぱの接客に置き換える
@@ -541,6 +557,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
   lcd.onEvent = (id, p = {}) => {
     try {
       if (id === 'attract' || id === 'ticket') { if (U.active) finish('abort:' + id); }
+      if (id === 'attract' || id === 'ticket') RP?.reset();
       if (id === 'attract') { unHide(); FL?.reset(); clockHold = null; }
       if (id === 'ticket' && R.ready) { preHide = true; controller.howto = { t: 0 }; controller.howtoSeconds = Infinity; }
       GD.event(id, p); FL?.event(id);
@@ -550,6 +567,6 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     } catch (e) { console.warn('[upa-host] event', e); finish('error'); }
     return onEvent0(id, p);
   };
-  lcd.upaHost = { state: U, flow: FL, guide: GD, live: Lv, ready: () => loading, assets: R, sPrize, lines: LINES, tv, dispose() { finish('dispose'); controller.dispatch = dispatch0; delete controller.sideChoice; lcd.onEvent = onEvent0; lcd.frame = frame0; lcd.overlayHold = hold0 ?? null; } };
+  lcd.upaHost = { state: U, flow: FL, guide: GD, renda: RP, live: Lv, ready: () => loading, assets: R, sPrize, lines: LINES, tv, dispose() { finish('dispose'); RP?.dispose(); controller.dispatch = dispatch0; delete controller.sideChoice; lcd.onEvent = onEvent0; lcd.frame = frame0; lcd.overlayHold = hold0 ?? null; } };
   return lcd;
 }

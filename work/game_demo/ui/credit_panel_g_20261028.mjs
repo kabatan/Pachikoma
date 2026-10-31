@@ -7,6 +7,7 @@ export function attachCreditPanel({parent,ctrl,overlay,onInput}){
  detail.style.cssText='margin:8px 0;font-weight:400';buttons.style.cssText='display:flex;justify-content:center;gap:12px';
  const left=document.createElement('button'),right=document.createElement('button');
  for(const b of [left,right])b.style.cssText='font:inherit;padding:10px 16px;border-radius:8px;border:1px solid #dcb766;color:#fff;background:#282f53';
+ if(new URLSearchParams(globalThis.location?.search??'').get('btncolor')!=='0'){left.style.background='linear-gradient(#f4f8ff,#2f62d8)';left.style.color='#0c1a44';left.style.borderColor='#ffffff';right.style.background='linear-gradient(#ffd23a,#d83030)';right.style.color='#3a0808';right.style.borderColor='#fff0a0';}   // 11/01 実機の左ボタン=白〜青／右=黄〜赤に合わせる（?btncolor=0 で旧）
  left.textContent='左：終了する';right.textContent='右：チケット一枚で続ける';buttons.append(left,right);panel.append(title,detail,buttons);parent.append(panel);
  const input=(action,source)=>{const phase=ctrl.phase,blocked=source!=='staff-keyboard'&&entryGuard(ctrl);if(blocked)registerPress(ctrl);const accepted=blocked?false:ctrl.dispatch(action);onInput?.({source,action,accepted,phase},ctrl.game);render();};
  const onRight=()=>input('requestExtra','pointer'),onLeft=()=>input(ctrl.phase==='StaffWait'?'cancelExtra':'finish','pointer');   // R3: 左右は液晶(終わる|続ける)と同じ向き

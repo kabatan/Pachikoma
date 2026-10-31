@@ -14,6 +14,7 @@
   const smooth = (x) => { x = clamp(x); return x * x * (3 - 2 * x); };
   const lerp = (a, b, u) => a + (b - a) * u;
   const hash = (i, k = 0) => { let x = (Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(k + 1, 0x85ebca6b)) >>> 0; x = Math.imul(x ^ (x >>> 16), 0x7feb352d); x = Math.imul(x ^ (x >>> 15), 0x846ca68b); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
+  const BTN_L = (typeof location !== 'undefined' && /[?&]btncolor=0(&|$)/.test(location.search || '')) ? [1, .32, .6] : [.8, .9, 1];   // 11/01 左ボタンのLED色は白〜青（実機の左は白か青。右は赤〜黄の橙のまま）。?btncolor=0 で旧(桃)。画面には出ない値
   const HOLE_DECO = typeof location !== 'undefined' && /[?&]holedeco=1(&|$)/.test(location.search || '');   // 10/31 穴のLEDは状態だけ。演出の'pocket'レーンと初見ヒントの穴は ?holedeco=1 のときだけ
   const hsv = (h) => { const f = (n) => { const k = (n + h * 6) % 6; return 1 - Math.max(0, Math.min(k, 4 - k, 1)); }; return [f(5), f(3), f(1)]; };
   const srgb2lin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
@@ -367,8 +368,12 @@
       if (H.button) {
         const b = H.button; if (b.until > 0 && t > b.until) H.button = null; else {
           const ph = Math.max(0, t - b.t0), ramp = Math.min(smooth(ph / .25), b.until > 0 ? smooth((b.until - t) / .3) : 1), w = (.35 + .65 * (.5 + .5 * Math.sin(TAU * 1.3 * ph - Math.PI / 2))) * ramp * 1.5;
-          const c = b.side === 'right' ? [1, .62, .06] : [1, .32, .6], o = b.side === 'right' ? 3 : 0;
+          if (b.hz > 0) {   // 11/01 左右が交互に速く点滅（hz=片側の秒間回数）。左は白〜青・右は橙のまま
+            for (const [o, c, s] of [[0, BTN_L, 0], [3, [1, .62, .06], Math.PI]]) { if (b.side !== 'both' && (b.side === 'right') !== (o === 3)) continue; const k = .5 + .5 * Math.sin(TAU * b.hz * ph - s); const wk = (.08 + .92 * k * k) * ramp * 2.2; for (let q = 0; q < 3; q++) F.btn[o + q] += c[q] * wk; }
+          } else {
+          const c = b.side === 'right' ? [1, .62, .06] : BTN_L, o = b.side === 'right' ? 3 : 0;
           for (let q = 0; q < 3; q++) F.btn[o + q] += c[q] * w;
+          }
         }
       }
       if (!H.holes && !H.button) this.state.hint = null;
@@ -377,7 +382,7 @@
       const S = this.state, tut = S.tut || {}, act = (id) => this.inst.some((x) => x.id === id);
       const MUTE = ['roulette', 'ascend', 'fail', 'jp', 'finish_count', 'result', 'timeup', 'challenge_declare'];
       if (MUTE.some(act)) return;
-      const L = [1, .32, .6], R = [1, .62, .06], br = (hz, lo, hi) => lo + (hi - lo) * (.5 + .5 * Math.sin(TAU * hz * t - Math.PI / 2));
+      const L = BTN_L, R = [1, .62, .06], br = (hz, lo, hi) => lo + (hi - lo) * (.5 + .5 * Math.sin(TAU * hz * t - Math.PI / 2));
       let l = 0, r = 0;
       if (S.canLaunch !== false) l = tut.firstShot === false ? br(1.6, .35, 1.0) : br(.45, .22, .4);
       if (S.declared) { r = br(3.0, .5, 1.0); l = Math.max(l, br(2.0, .4, .9)); this.rCol = [1, .35, .05]; }

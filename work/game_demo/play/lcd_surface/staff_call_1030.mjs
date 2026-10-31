@@ -3,7 +3,8 @@
 // 液晶: lcd.frame の後ろに重ねて描く（timeup_surface が先に付いている前提）。下の液晶座標は timeup_surface と同じ 1152×1268（PX=34,PY=28）。
 import * as THREE from '../../web/vendor/three/three.module.js';
 import { layerTexture } from './lcd_split_1030.mjs';
-import { timeupHelpMode, richLine, textPath as helpText, GOLD as HGOLD, WHITE as HWHITE } from './timeup_help_1030.mjs';
+import { timeupHelpMode, richLine, textPath as helpText, GOLD as HGOLD, WHITE as HWHITE, CYAN as HCYAN } from './timeup_help_1030.mjs';
+import { btnColorOn } from './btn_color_1101.mjs';   // 11/01 左ボタンの語は白〜青側（実機の左ボタン。?btncolor=0 で旧：金）
 const HELP = timeupHelpMode() === 'new';   // 10/30 初見向けの文（?timeuphelp=0 で従来）
 const W = 1152, H = 1268, PX = 34, PY = 28;
 const RESUME_SECONDS = 1.9, GUARD_SECONDS = 1.0;
@@ -156,7 +157,7 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
       helpText(ctx, '時間も玉も止まっています', 0, -38, 46, { fill: WHITE, silver: false });
       helpText(ctx, `受け取り後に +${r.ExtraSeconds ?? 20}秒${(g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10) > 0 ? `  +${g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10}玉` : ''} で再開！`, 0, 20, 46, { fill: GOLD, silver: false });
       const l = g().lampCount ?? 0;
-      richLine(ctx, [[l > 0 ? `${l}灯のまま 続きから。 ` : 'いまの玉のまま 続きから。 ', HWHITE], ['やめるなら 左ボタン', HGOLD]], 0, 76, 36);
+      richLine(ctx, [[l > 0 ? `${l}灯のまま 続きから。 ` : 'いまの玉のまま 続きから。 ', HWHITE], ['やめるなら 左ボタン', btnColorOn() ? HCYAN : HGOLD]], 0, 76, 36);
     } else {
     textPath(ctx, '時間も玉も止まっています', 0, -14, 54, { fill: WHITE, silver: false });
     textPath(ctx, `受け取り後に +${r.ExtraSeconds ?? 20}秒${(g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10) > 0 ? `  +${g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10}玉` : ''} で再開`, 0, 62, 54, { fill: GOLD, silver: false });
@@ -199,7 +200,7 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
       helpText(x, '時間も玉も止まっています', 0, -38, 46, { fill: WHITE, silver: false });
       helpText(x, `受け取り後に +${r.ExtraSeconds ?? 20}秒${(g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10) > 0 ? `  +${g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10}玉` : ''} で再開！`, 0, 20, 46, { fill: GOLD, silver: false });
       const l = g().lampCount ?? 0;
-      richLine(x, [[l > 0 ? `${l}灯のまま 続きから。 ` : 'いまの玉のまま 続きから。 ', HWHITE], ['やめるなら 左ボタン', HGOLD]], 0, 76, 36);
+      richLine(x, [[l > 0 ? `${l}灯のまま 続きから。 ` : 'いまの玉のまま 続きから。 ', HWHITE], ['やめるなら 左ボタン', btnColorOn() ? HCYAN : HGOLD]], 0, 76, 36);
     } else {
       textPath(x, '時間も玉も止まっています', 0, -14, 54, { fill: WHITE, silver: false });
       textPath(x, `受け取り後に +${r.ExtraSeconds ?? 20}秒${(g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10) > 0 ? `  +${g().extraLoanBallsNow ?? r.ExtraLoanBalls ?? 10}玉` : ''} で再開`, 0, 62, 54, { fill: GOLD, silver: false });

@@ -50,6 +50,7 @@ const rlEntry = (sc, t, look) => {          // 押した時の映像のコマ t�
 };
 // 選択画面の「継続」の札（右の札）の位置。字の幅は札の幅(枠いっぱい)の 90%。札の上半分（「続」の絵の上）に置く。
 //   cx,cy = 字の中心、w = 字の幅（枠の幅 × BADGE_RATIO）。3 状態の実測（1152x1268 の面）。切り替え中は choiceV20.transition の重みで補間する。
+const SHOW23 = new URLSearchParams(globalThis.location?.search ?? '').get('choice23') === '1';   // 11/01 監督：選択画面の「2/3」の表示は無し（?choice23=1 で戻す。他の場面の2/3と確率は変えない）。空いた所はボタン案内(choice_btn_1101)が使う
 const BADGE_RATIO = 0.9, BADGE_GLYPH = 625;   // BADGE_GLYPH = odds_badge_card.png の字の見える幅(px)
 // 10/31：説明の札(choice_help、液晶 y372〜510)と重ならないよう、大きい側の札では説明の札の下〜「継続」の字の上(y〜790)に置く（旧 cy 445/420）。
 //   100円の追加が要るときは下に「100円で継続」が出るので、一回り小さくして上へ寄せる（ADD_*）。?badgepos=old で旧の位置
@@ -334,7 +335,7 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
       const t = S.choiceT - BADGE_DELAY, u = t - 0.14;
       // 選択画面が GPU 合成のときは、2D の液晶へ描いても見えない。液晶の見える範囲と同じ大きさの専用 canvas に描き、GPU 側の層(setBadgeCanvas)へ渡す
       const be = lcd.gpuPanelSource?.backend, gpuBadge = typeof be?.setBadgeCanvas === 'function';
-      if (t >= 0) {
+      if (t >= 0 && SHOW23) {
         const m = u < 0 ? 3.0 - 2.0 * (t / 0.14) ** 2 : 1 + 0.10 * Math.exp(-9 * u) * Math.cos(u * 38), sh = u >= 0 ? Math.sin(u * 100) * 14 * Math.exp(-u * 16) : 0, sv = u >= 0 ? Math.cos(u * 83) * 9 * Math.exp(-u * 16) : 0;
         const sc = (G.frame * BADGE_RATIO / BADGE_GLYPH) * m;
         let bc = ctx;
