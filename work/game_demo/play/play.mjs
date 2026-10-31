@@ -213,7 +213,7 @@ if (!q.has('nofx')) {
   // 新しいJP尺の音も起動時に作り、着地のフレームで長い音声バッファを生成しない。
   if(lcd?.jp && r2Audio){
     const {winPlan,createWinSound}=await import('../../audio/runtime/win_sound.mjs');const engine=r2Audio.engine;
-    const durations=new Set([...Object.values(app.rules.FirstJackpotEffectSeconds??{}).flat(),...(app.rules.JackpotEffectSeconds??[])]);   // 継続成功の通し尺も起動時に作る
+    const durations=new Set([...Object.values(app.rules.FirstJackpotEffectSeconds??{}).flat(),...(app.rules.JackpotEffectSeconds??[]),...(q.get('winpre4')==='0'?[]:[1])]);   // 10/31 CPU軽量化：尺が短い(4秒以下)JPの勝ち音は最短(4秒)に丸められて 'jp:4' になり、これだけ起動時に作られず最初の1回で約24ms止まっていた。1(正の最短値)を足して最短の尺も起動時に作る。?winpre4=0 で従来   // 継続成功の通し尺も起動時に作る
     for(const duration of durations){const plan=winPlan({id:'jp',data:{duration}},engine.winTiming),key='jp:'+plan.duration;if(!engine.winCache.has(key))engine.winCache.set(key,createWinSound(engine.ctx,engine.buffers,engine.winTiming,plan));}
   }
   if (lcd && M3 && !q.has('m3lcdfit')) q.set('m3lcdfit', 'panel');
