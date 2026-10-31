@@ -25,6 +25,8 @@ class OriginalJpTimeline {
     if (!this.man.scenes[name]) { this.stop('missing:'+name); return; }
     this.name=name;this.time=0;this.lastF=-1;this.serial++;this.active=true;
   }
+  // 10/31 TOTAL の桁：持ち玉で賞が決まる規則（PrizeBasis:'wallet'）では、選択画面・表示器と同じ数（持ち玉＋未確定の積み増し＝game.prizeScore）にそろえる。G は従来のまま
+  walletScore(fallback){const st=this.getState?.()??{};return st.rules?.PrizeBasis==='wallet'&&Number.isFinite(st.balls)?Math.max(0,Math.round(st.balls+(st.chain?.pendingAward??0))):fallback;}
   stop(reason='end') { this.active=false;this.name=null;this.pending=null;this.cue({kind:'end',reason}); }
   onEvent(id,p={}) {
     if (id==='lamp6') {
@@ -34,8 +36,8 @@ class OriginalJpTimeline {
       this.d=d;this.payout=0;this.heat=0;this.flight=false;this.dim=false;this.delay=1;this.start('jp_intro');return true;
     }
     if (id==='fail' && (this.active || p.chain)) {
-      this.payout=0;this.result={...p};this.d??=p.unlit?.[0]??4;this.earnings=p.jackpotEarnings??0;this.delay=0;this.flash='miss';this.flashAt=this.clock;
-      this.dim=false;this.flashAt=-Infinity;this.start(this.earnings>0?'fail_chain':'fail_first');return true;
+      this.payout=0;this.result={...p};this.d??=p.unlit?.[0]??4;this.earnings=(p.jackpotEarnings??0)>0?this.walletScore(p.jackpotEarnings):0;this.delay=0;this.flash='miss';this.flashAt=this.clock;
+      this.dim=false;this.flashAt=-Infinity;this.start((p.jackpotEarnings??0)>0?'fail_chain':'fail_first');return true;
     }
     if (!this.active) return false;
     // A choice/result from the next round can already be waiting underneath.
@@ -114,7 +116,7 @@ export class JpTimeline extends OriginalJpTimeline {
     if(id==='chain_stop'&&this.man.scenes.chain_confirm){
       this.queuedChainEvents=[];
       if(this.active&&this.payout>0){this.queuedResult={...p};return true;}
-      this.payout=0;this.result={...p};this.earnings=Math.max(0,Math.round(p.total??((p.base??0)+(p.banked??0))));
+      this.payout=0;this.result={...p};this.earnings=this.walletScore(Math.max(0,Math.round(p.total??((p.base??0)+(p.banked??0)))));
       this.resultChain=Math.max(1,Math.round(p.chain??0)+1);this.delay=0;this.dim=false;this.pending=null;this.flashAt=-Infinity;
       this.start('chain_confirm');return true;
     }
@@ -228,7 +230,20 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
       slot.v.src=new URL(man.scenes[name].file,base).href;slot.v.load();
     });return slot.promise;
   };
-  const reserve=(name)=>{let slot=slots.find(s=>s.name===name);if(!slot){slot=slots.find(s=>!s.pinned&&s!==current&&s!==visible&&s!==previous&&s.name===null)??slots.find(s=>!s.pinned&&s!==current&&s!==visible&&s!==previous);if(slot)load(slot,name);}return slot;};
+  // 10/31 CPU軽量化：初回JPの導入(雷)と「扉の寄り」の最初で映像の読み込み・復号待ち(0.5〜2.7秒、黒く見えて時計は進む)が出ていた。
+  //   雷・開き・チャンスの映像を、封印の差し替えが済んだ後の空き時間に専用スロットへ読み込んで復号しておき、同じファイルの場面名が来たら(巻き戻して)使い回す。?jppin=0 で従来
+  const filePinned=[];const PIN_ON=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jppin')==='1';
+  async function pinScenes(names){
+    if(!PIN_ON)return [];const out=[];
+    for(const n of names){const sc=man.scenes[n];if(!sc?.file||filePinned.some(x=>x.pinFile===sc.file))continue;
+      const slot={v:Object.assign(document.createElement('video'),{muted:true,playsInline:true,preload:'auto'}),name:null,ready:false,promise:null,pinned:true,pinFile:sc.file};
+      slots.push(slot);filePinned.push(slot);await load(slot,n,false);
+      if(!slot.ready){slot.pinned=false;slot.name=null;slot.promise=null;slots.splice(slots.indexOf(slot),1);filePinned.splice(filePinned.indexOf(slot),1);out.push({name:n,ok:false});}else out.push({name:n,ok:true});}
+    return out;
+  }
+  const reserve=(name)=>{let slot=slots.find(s=>s.name===name);
+    if(!slot&&filePinned.length){const f=man.scenes[name]?.file;const fp=f&&filePinned.find(x=>x.pinFile===f&&x.ready&&x!==current&&x!==visible&&x!==previous);if(fp){fp.name=name;fp.generation=(fp.generation??0)+1;slot=fp;}}
+    if(!slot){slot=slots.find(s=>!s.pinned&&s!==current&&s!==visible&&s!==previous&&s.name===null)??slots.find(s=>!s.pinned&&s!==current&&s!==visible&&s!==previous);if(slot)load(slot,name);}return slot;};
   if(pinned){await load(pinned,'chain_success',false);if(!pinned.ready){errors.push('chain_success:startup');pinned.pinned=false;pinned.name=null;pinned.promise=null;}}
   for(const slot of extraPinned){await load(slot,slot.pinName,false);if(!slot.ready){errors.push(slot.pinName+':startup');slot.pinned=false;slot.name=null;slot.promise=null;}}
   const chainTarget=()=>{const s=getState(),n=s.chain?.nextLamps??1;return targetDigit({pockets:(s.rules?.JackpotChainLaneOrder??[1,2,3,4,5,6,7]).slice(0,n)},s,1);};
@@ -268,7 +283,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     gateSince??=model.clock;if(model.clock-gateSince>12)return false;   // 万一の保険: 12秒で必ず解く(導入〜狙いの場面までは約8.3秒。10/29 30秒→12秒)
     return true;
   };
-  return {man,model,reserve,get center(){return center;},get active(){return model.active&&model.delay<=0;},get claimed(){return model.active;},get blocksChallengeLaunch(){return blocksChallengeLaunch();},
+  return {man,model,reserve,pinScenes,get center(){return center;},get active(){return model.active&&model.delay<=0;},get claimed(){return model.active;},get blocksChallengeLaunch(){return blocksChallengeLaunch();},
     warmResults:async()=>{const result=await(compositor?.warmup?.()??{skipped:true,reason:'no-result-compositor'});const boundary=compositor?.warmBoundary?.();return boundary?{...result,boundary}:result;},
     prepareResultFrame:(kind,frame)=>compositor?.prepare(kind,frame)??Promise.resolve(null),
     resultFrameReady:(kind,frame)=>!!compositor?.ready(kind,frame),
@@ -316,7 +331,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
         else if(id==='challenge_flight')center.aim(model.d);
         else if(id==='jp_heat'&&p.probs)center.probs(p.probs);
         else if(id==='jp_mouth')center.settle(p.cup??model.d,!!p.unlit);
-      }if(id==='fail')digits?.prepare(p.jackpotEarnings??0);if(id==='lamp6'&&handled&&!sustaining){reserve(`fly_in_d${model.d}`);}sync();return handled&&(id!=='lamp6'||sustaining);},
+      }if(id==='fail')digits?.prepare(model.earnings??p.jackpotEarnings??0);if(id==='lamp6'&&handled&&!sustaining){reserve(`fly_in_d${model.d}`);}sync();return handled&&(id!=='lamp6'||sustaining);},
     setManual(on){manual=!!on;palace.setManual(on);for(const s of slots)s.v.pause();},
     async prepare(dt){await palace.prepare(dt);sync();if(!manual||!current||model.delay>0||man.scenes[model.name]?.offer)return;await current.promise;if(!current.ready)return;const t=Math.min(model.time+dt,(man.scenes[model.name].frames-.1)/man.fps);if(Math.abs(current.v.currentTime-t)<1e-5)return;await new Promise(resolve=>{const done=()=>{clearTimeout(timer);current?.v.removeEventListener('seeked',done);resolve();};const timer=setTimeout(done,2000);current.v.addEventListener('seeked',done,{once:true});current.v.currentTime=t;});},
     frame(dt){palace.advance(dt);sync();if(man.scenes[model.name]?.offer){const waiting=getState().phase!=='ChainChoice';const v=offer.frame(palace.video,model.time,waiting);model.update(waiting?0:dt);sync();return v;}stuckWatch(dt);const kind=sResult();if(!kind)blockedFor=0;if(kind&&compositor){const first=kind==='confirm'?84:64;const f=Math.min(man.scenes[model.name].frames-1,Math.floor((current?.v.currentTime??model.time)*man.fps+1e-6));compositor.prefetch(kind,Math.max(first,f));if(f>=first&&!compositor.ready(kind,f)&&(blockedFor+=dt)<1.5){blockedResult=current;if(current&&!current.v.paused)current.v.pause();return visible?.ready&&Math.floor((visible.v.currentTime??0)*man.fps)<first?visible.v:compositor.canvas;}}

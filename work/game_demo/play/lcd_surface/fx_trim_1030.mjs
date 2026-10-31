@@ -12,15 +12,15 @@ export const FX_TRIM = {
   bridge: { scene: 'jp_bridge', skip: [[34, 52]] },
   // 配当の「○○ OVER FEVER」：白い閃光がいちばん白いコマ（47）から、寄りの焦らしの途中（70）へ飛ぶ。全体が出る瞬間と決めの画は残す。各配当 −22コマ（0.73秒）
   reward: { scenes: [30, 40, 100, 200, 500].map((a) => `reward_${a}`), skip: [[48, 70]] },
-  // 失敗（ガラスが割れて灰色＋TOTAL）：TOTAL が出たあとの灰色の静止の後半（114〜149）を省く。5.0→3.8秒
-  fail: { scenes: ['fail_first', 'fail_chain'], frames: 114 },
+  // 失敗（ガラスが割れて灰色＋TOTAL）：TOTAL が出て約0.7秒（68〜89）だけ読ませ、灰色の静止（90〜149）を省く。5.0→3.8秒(10/30)→3.0秒(10/31 監督「失敗画面が体感長い」)
+  fail: { scenes: ['fail_first', 'fail_chain'], frames: 90 },
 };
 const FPS = 30;
 export const FX_TRIM_RULES = {   // 規則（ルールH）の秒数。もとは 6.3・5.8
   JpMeterIntroSeconds: 6.3 - (13 - 1) / FPS,
   RouletteStartDelaySeconds: 5.8 - ((60 - 48) + (52 - 34)) / FPS,
 };
-export const FX_TRIM_FAIL_SECONDS = 114 / FPS;   // FailFilmSeconds（もとは manifest の 150 コマ = 5.0 秒）
+export const FX_TRIM_FAIL_SECONDS = 90 / FPS;   // FailFilmSeconds（もとは manifest の 150 コマ = 5.0 秒）
 
 // 10/31 配当まわりの短縮（監督：「配当獲得の場面（30 OVER FEVER 周り）は長すぎる。JP 成功後の流れ全体を短く」）。ルールHだけ。?payshort=0 で 10/30 の長さ（上の FX_TRIM のみ）に戻す。
 //   見せ場は残す：FEVER の字・「OVER」の叩きつけ・配当額が引いて全景に出る所（音の決め L2 も同じ所）・継続成功の「継続」→「2連目」・告知の「67%で成功」。

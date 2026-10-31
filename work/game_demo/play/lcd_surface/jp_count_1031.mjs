@@ -40,15 +40,15 @@ const glow = (src, color, blurPx) => { const c = mk(src.width, src.height), x = 
 
 export async function attachJpCount(lcd, { controller, log = () => {} } = {}) {
   const qs = new URLSearchParams(globalThis.location?.search ?? '');
-  const SEC = qs.get('jpcount') === '0' ? 0 : Math.min(6, Math.max(1.2, +(qs.get('jpcount_sec') ?? 3.0)));
+  const SEC = qs.get('jpcount') === '0' ? 0 : Math.min(6, Math.max(1.2, +(qs.get('jpcount_sec') ?? 2.0)));
   if (!controller?.rules || lcd?.jpCount) return lcd;
   const setRules = () => { for (const r of new Set([controller.rules, controller.game?.rules].filter(Boolean))) r.MeterCountdownSeconds = SEC; };
   setRules();
   const offAct = controller.onAction?.((a) => { if (a === 'reset') setRules(); });
   if (SEC <= 0) { lcd.jpCount = { off: true, dispose() { offAct?.(); } }; return lcd; }
 
-  // 4拍：3, 2, 1, 開始。割り当て（SEC=3.0 のとき 0.7/0.7/0.7/0.9）
-  const BEAT = [0, 0.7, 1.4, 2.1].map((v) => v * SEC / 3.0), BEND = SEC;
+  // 4拍：3, 2, 1, 連打。割り当て（SEC=2.0 のとき 0.45/0.45/0.45/0.65。10/31 監督「もっとテンポ良く」で 3.0→2.0。3.0 秒版は ?jpcount_sec=3）
+  const BEAT = [0, 0.45, 0.9, 1.35].map((v) => v * SEC / 2.0), BEND = SEC;
   const S = { seekPs: [], fxBeat: -1, manual: false, on: false, e: 0, beat: -1, fired: new Set(), clock: 0, frameN: 0, id: -1, events: [], spark: null, plays: 0 };
   const note = (k, d = {}) => { S.events.push({ k, at: +S.clock.toFixed(2), ...d }); if (S.events.length > 40) S.events.shift(); log('jpcount:' + k, d); };
 
@@ -106,7 +106,7 @@ export async function attachJpCount(lcd, { controller, log = () => {} } = {}) {
   const noiseBuf = (ctx) => { if (!S.nb) { const b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; S.nb = b; } return S.nb; };
   const sound = (k) => {
     try {
-      const e = eng(), ctx = e?.ctx; if (!ctx) return; const t = ctx.currentTime + 0.012, out = ctx.createGain(); out.gain.value = 10 ** ((k === 3 ? -0.5 : -3) / 20);
+      const e = eng(), ctx = e?.ctx; if (!ctx) return; const t = ctx.currentTime + 0.012, out = ctx.createGain(); out.gain.value = 10 ** ((k === 3 ? -1.8 : -3) / 20);
       // JP曲・他の音（hotBus）を拍ごとに絞り、カウントダウンの音は絞られない出口（master の入口）へ直接入れる
       const hot = hotBus(e); if (!e.__jpcDirect) { const g = ctx.createGain(); g.gain.value = hot.gain.value; g.connect(e.master); e.__jpcDirect = g; e.__jpcBase = hot.gain.value; }
       out.connect(e.__jpcDirect); setTimeout(() => { try { out.disconnect(); } catch {} }, 2500);

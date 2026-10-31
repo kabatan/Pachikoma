@@ -145,6 +145,27 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     };
     const safe = (fn) => (...a) => { try { fn(...a); } catch (e) { console.warn('[upa-host-sfx]', e); } };
     const blip = (o, at, f, g = 0.35) => { tone(o, f, f * 1.5, at, 0.1, { type: 'triangle', gain: g }); tone(o, f * 1.5, f * 2, at + 0.07, 0.14, { gain: g * 0.7 }); };
+    // 10/31 CPU軽量化：玉のじゃらじゃら(4.6秒分の合成、約60〜86ms)が最初の1回で1コマに集中していた。空き時間に小分けで作っておき、以後は同じ音を使い回す。?rattlecache=0 で従来(毎回その場で合成)
+    const RATTLE_CACHE = new URLSearchParams(globalThis.location?.search ?? '').get('rattlecache') !== '0';
+    let rattleCache = null;
+    const runAll = (g) => { let r; do r = g.next(); while (!r.done); return r.value; };
+    function* rattleGen(ctx) {   // ctx が無くても作れる(AudioBuffer は文脈なしで作れる。再生側が必要なら自動で標本化率を合わせる)
+      const sr = ctx?.sampleRate ?? 48000, dur = 4.6, n = Math.floor(sr * dur);
+      let b; try { b = new AudioBuffer({ length: n, sampleRate: sr, numberOfChannels: 1 }); } catch { b = ctx.createBuffer(1, n, sr); }
+      const d = b.getChannelData(0);
+      const click = (t, f, g) => { const i0 = Math.floor(t * sr), len = Math.floor(0.05 * sr); for (let i = 0; i < len && i0 + i < n; i++) { const x = i / sr; d[i0 + i] += ((Math.sin(2 * Math.PI * f * x) * 0.7 + Math.sin(2 * Math.PI * f * 2.31 * x) * 0.3) * Math.exp(-x / 0.011) + (Math.random() * 2 - 1) * Math.exp(-x / 0.002) * 0.3) * g; } };
+      for (let i = 0; i < 520; i++) { const t = 0.2 + Math.random() ** 0.8 * 3.1; click(t, 2600 + Math.random() * 3600, (0.05 + Math.random() * 0.11) * (0.5 + 0.9 * Math.min(1, t / 1.8))); if (i % 40 === 39) yield; }
+      for (let i = 0; i < 160; i++) { const t = 3.3 + Math.random(); click(t, 2200 + Math.random() * 3000, (0.04 + Math.random() * 0.08) * (1 - (t - 3.3))); if (i % 40 === 39) yield; }
+      yield;
+      let lp = 0; for (let i = 0; i < n; i++) { const x = i / sr, env = clamp((x - 0.1) / 1.8) * clamp((4.5 - x) / 1.0); lp += 0.35 * ((Math.random() * 2 - 1) - lp); d[i] += lp * env * 0.12; }
+      yield;
+      let mx = 0; for (let i = 0; i < n; i++) mx = Math.max(mx, Math.abs(d[i])); for (let i = 0; i < n; i++) d[i] /= Math.max(1, mx * 1.05);
+      return b;
+    }
+    if (RATTLE_CACHE && typeof setTimeout === 'function') {   // 音の経路ができたら、小分け(1手 約2〜5ms)で先に作る
+      const pre = () => { try { if (rattleCache) return; const g = rattleGen(eng()?.ctx); const step = () => { try { const r = g.next(); if (r.done) { rattleCache ??= r.value; return; } setTimeout(step, 8); } catch (e) { console.warn('[upa-host-sfx] 先行合成', e); } }; step(); } catch (e) { console.warn('[upa-host-sfx]', e); } };
+      setTimeout(pre, 4000);
+    }
     const S = {
       fall: safe(() => { const o = out(-10); if (!o) return; noise(o, 0, 0.55, { f: 400, f2: 3000, q: 0.5, gain: 0.7 }); tone(o, 300, 1400, 0, 0.5, { atk: 0.1, gain: 0.12 }); }),
       land: safe(() => { const o = out(-6); if (!o) return; tone(o, 95, 38, 0, 0.5, { gain: 1 }); noise(o, 0, 0.12, { f: 900, gain: 0.5 }); tone(o, 520, 190, 0.02, 0.7, { gain: 0.45, fm: 60, fmf: 9 }); tone(o, 400, 260, 0.35, 0.45, { gain: 0.28, fm: 40, fmf: 11 }); tone(o, 330, 240, 0.75, 0.35, { gain: 0.18, fm: 25, fmf: 12 });
@@ -163,12 +184,8 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
       launch: safe(() => { const o = out(-8); if (!o) return; tone(o, 250, 1500, 0, 0.5, { gain: 0.45, fm: 60, fmf: 9 }); noise(o, 0, 0.5, { f: 600, f2: 4000, gain: 0.5 }); for (let i = 0; i < 10; i++) tone(o, 1000 + Math.random() * 1600, 1500 + Math.random() * 1700, 0.1 + i * 0.06, 0.06, { gain: 0.1 }); }),
       // 玉のじゃらじゃら：降る（0〜3.1秒）→ 床が抜けて流れ落ちる（3.3〜4.3秒）。一度にバッファへ合成して鳴らす
       rattle: safe(() => {
-        const ctx = eng()?.ctx; if (!ctx) return; const sr = ctx.sampleRate, dur = 4.6, n = Math.floor(sr * dur), b = ctx.createBuffer(1, n, sr), d = b.getChannelData(0);
-        const click = (t, f, g) => { const i0 = Math.floor(t * sr), len = Math.floor(0.05 * sr); for (let i = 0; i < len && i0 + i < n; i++) { const x = i / sr; d[i0 + i] += ((Math.sin(2 * Math.PI * f * x) * 0.7 + Math.sin(2 * Math.PI * f * 2.31 * x) * 0.3) * Math.exp(-x / 0.011) + (Math.random() * 2 - 1) * Math.exp(-x / 0.002) * 0.3) * g; } };
-        for (let i = 0; i < 520; i++) { const t = 0.2 + Math.random() ** 0.8 * 3.1; click(t, 2600 + Math.random() * 3600, (0.05 + Math.random() * 0.11) * (0.5 + 0.9 * Math.min(1, t / 1.8))); }
-        for (let i = 0; i < 160; i++) { const t = 3.3 + Math.random(); click(t, 2200 + Math.random() * 3000, (0.04 + Math.random() * 0.08) * (1 - (t - 3.3))); }
-        let lp = 0; for (let i = 0; i < n; i++) { const x = i / sr, env = clamp((x - 0.1) / 1.8) * clamp((4.5 - x) / 1.0); lp += 0.35 * ((Math.random() * 2 - 1) - lp); d[i] += lp * env * 0.12; }
-        let mx = 0; for (let i = 0; i < n; i++) mx = Math.max(mx, Math.abs(d[i])); for (let i = 0; i < n; i++) d[i] /= Math.max(1, mx * 1.05);
+        const ctx = eng()?.ctx; if (!ctx) return;
+        const b = RATTLE_CACHE ? (rattleCache ??= runAll(rattleGen(ctx))) : runAll(rattleGen(ctx));
         const s = ctx.createBufferSource(), g = ctx.createGain(); g.gain.value = 10 ** (-8 / 20); s.buffer = b; s.connect(g).connect(hotBus(eng())); s.start(ctx.currentTime + 0.02); s.onended = () => { try { s.disconnect(); g.disconnect(); } catch { } };
       }),
       photo: safe(() => { const o = out(-9); if (!o) return; blip(o, 0, 980, 0.35); [1318, 1568, 1976, 2637].forEach((f, j) => tone(o, f, f, 0.3 + j * 0.07, 0.25, { gain: 0.25 })); }),

@@ -163,12 +163,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       case 'chain_announce':   // JP後の継続の告知（差し込み口。専用の映像ができるまでの仮カード）。first=最初の継続（選択なしで自動継続）／2回目以降は選択画面の前に出る
         if (p.first) card('継続チャンス!!!', ['2/3でJP継続', 'もう一度ルーレット'], '#ffe093');
         else card('継続チャンス!!!', ['継続で得た', `${p.atRisk ?? 0}玉を失う可能性あり`], '#ff9fb8', `${p.atRisk ?? 0}玉`); break;
-      case 'chain_choice': {
-        const pending = c.pendingAward ?? p.pending ?? 0, baseAward = c.baseAward ?? p.base ?? 0;
-        const next = c.nextLamps ?? p.lamps ?? 1;
-        card('連チャンチャンス！', [`左：つづける（次は${next}灯）`, '右：積み増しを確定'], '#ffb4dc', `＋${pending}玉`);
-        text(`最初の ${baseAward}玉 は残る`, W/2, 802, 36, '#fff2bf'); break;
-      }
+      case 'chain_choice': break;   // 10/31 旧仕様の札（連チャンチャンス！＋◯玉／左：つづける…）は廃止。選択画面（choice_surface_v20）が出るまでは直前の配当映像の終わりを保持する
       case 'chain_continue': card('もう一度！', ['光っていない穴へ！', 'ボタンで 玉をうつ'], '#ffb4dc', `${p.lamps ?? 1}灯`); break;
       case 'chain_stop': card('確定！', ['積み増しを獲得！'], '#fff2a0', `${p.banked ?? p.total ?? 0}玉`); break;
       case 'fail': card('また挑戦しよう！', [p.chain ? `最初の ${p.base ?? 0}玉 は残ります` : 'ランプを集めて もう一度！'], '#c5d9ff', p.chainLost > 0 ? `積み増し −${p.chainLost}玉` : null); break;
