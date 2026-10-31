@@ -294,5 +294,173 @@
  "lf_r_land": {
   "anchor": 0.0,
   "dur": 1.8
+ },
+ "lf_j_rush_build": {
+  "anchor": 0.0,
+  "dur": 0.367
+ },
+ "lf_j_rush_chou": {
+  "anchor": 0.0,
+  "dur": 1.9
+ },
+ "lf_j_rush_chou2": {
+  "anchor": 0.0,
+  "dur": 1.4
+ },
+ "lf_j_rush_tsuku": {
+  "anchor": 0.0,
+  "dur": 1.5
+ },
+ "lf_j_rush_rush": {
+  "anchor": 0.16,
+  "dur": 3.9
+ },
+ "lf_j_rush_glitter": {
+  "anchor": 0.0,
+  "dur": 2.0
+ },
+ "lf_j_cs_sweep1": {
+  "anchor": 0.0,
+  "dur": 0.6
+ },
+ "lf_j_cs_kei": {
+  "anchor": 0.0,
+  "dur": 2.3
+ },
+ "lf_j_cs_zoku": {
+  "anchor": 0.0,
+  "dur": 2.4
+ },
+ "lf_j_cs_ignite": {
+  "anchor": 0.0,
+  "dur": 1.05
+ },
+ "lf_j_cs_ring": {
+  "anchor": 0.0,
+  "dur": 1.5
+ },
+ "lf_j_cs_build_a": {
+  "anchor": 0.0,
+  "dur": 0.3
+ },
+ "lf_j_cs_build_b": {
+  "anchor": 0.0,
+  "dur": 0.267
+ },
+ "lf_j_cs_final": {
+  "anchor": 0.16,
+  "dur": 3.9
+ },
+ "lf_j_cs_nirenme": {
+  "anchor": 0.0,
+  "dur": 2.5
+ },
+ "lf_j_ci_title": {
+  "anchor": 0.0,
+  "dur": 2.1
+ },
+ "lf_j_ci_burst": {
+  "anchor": 0.0,
+  "dur": 1.9
+ },
+ "lf_j_ci_zap": {
+  "anchor": 0.0,
+  "dur": 1.0
+ },
+ "lf_j_ci_sweep": {
+  "anchor": 0.0,
+  "dur": 1.05
+ },
+ "lf_j_land": {
+  "anchor": 0.0,
+  "dur": 2.3
+ },
+ "lf_j_up1": {
+  "anchor": 0.0,
+  "dur": 1.7
+ },
+ "lf_j_up2": {
+  "anchor": 0.0,
+  "dur": 1.9
+ },
+ "lf_j_up3": {
+  "anchor": 0.0,
+  "dur": 2.1
+ },
+ "lf_j_cup1": {
+  "anchor": 0.0,
+  "dur": 1.7
+ },
+ "lf_j_cup2": {
+  "anchor": 0.0,
+  "dur": 1.9
+ },
+ "lf_j_cup3": {
+  "anchor": 0.0,
+  "dur": 2.1
+ },
+ "lf_r_pay_open": {
+  "anchor": 0.0,
+  "dur": 1.0
+ },
+ "lf_r_pay_flash": {
+  "anchor": 0.0,
+  "dur": 0.9
+ },
+ "lf_r_pay_hit0": {
+  "anchor": 0.0,
+  "dur": 1.4
+ },
+ "lf_r_pay_full0": {
+  "anchor": 0.0,
+  "dur": 2.2
+ },
+ "lf_r_pay_hit1": {
+  "anchor": 0.0,
+  "dur": 1.85
+ },
+ "lf_r_pay_full1": {
+  "anchor": 0.0,
+  "dur": 2.7
+ },
+ "lf_r_pay_hit2": {
+  "anchor": 0.0,
+  "dur": 2.3
+ },
+ "lf_r_pay_full2": {
+  "anchor": 0.0,
+  "dur": 3.2
+ },
+ "lf_r_pay_hit3": {
+  "anchor": 0.0,
+  "dur": 2.75
+ },
+ "lf_r_pay_full3": {
+  "anchor": 0.0,
+  "dur": 3.7
+ },
+ "lf_r_pay_hit4": {
+  "anchor": 0.0,
+  "dur": 3.2
+ },
+ "lf_r_pay_full4": {
+  "anchor": 0.0,
+  "dur": 4.2
+ },
+ "lf_r_up1": {
+  "anchor": 0.0,
+  "dur": 1.0
+ },
+ "lf_r_up2": {
+  "anchor": 0.0,
+  "dur": 1.3
+ },
+ "lf_r_up3": {
+  "anchor": 0.0,
+  "dur": 1.6
+ },
+ "lf_r_chance": {
+  "anchor": 0.0,
+  "dur": 1.6
  }
 }

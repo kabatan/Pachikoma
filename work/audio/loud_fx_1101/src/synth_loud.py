@@ -520,6 +520,12 @@ def main(names):
     try:
         import synth_ref; S.update(synth_ref.SPECS_R())
     except ImportError: pass
+    try:
+        import synth_pay; S.update(synth_pay.SPECS_PAY())
+    except ImportError: pass
+    try:
+        import synth_jpmix; S.update(synth_jpmix.SPECS_J())
+    except ImportError: pass
     meta_path = os.path.join(HERE, '..', 'meta.json')
     meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {}
     for nm in (names or list(S)):

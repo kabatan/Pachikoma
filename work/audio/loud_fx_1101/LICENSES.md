@@ -11,3 +11,9 @@
 |---|---|---|---|
 | 効果音(20本) | `sfx_ogg/lf_r_*.ogg` | 100%自作の合成音(`src/synth_ref.py`)。音高・リズム・音色の「数字」だけを実機から書き起こした | 録音・サンプルは使っていない |
 | 解析のみで参照した動画 | (リポジトリに含めない) | エヴァ確定音🎵 https://www.youtube.com/watch?v=F2IMn6JDnbk / エヴァ10　確定音 https://www.youtube.com/watch?v=IYX-qefiUWw / 【着信音】大当たり音 高音質 「CR戦姫絶唱シンフォギア」 https://www.youtube.com/watch?v=GF4bCyltSHw | 監督の確認用の切り出しを `scratch_1031/loud_sfx/ref_private/` にだけ置く。配布物に入れない |
+
+## 第4版 jpmix(2026-11-01 夜)
+| 区分 | ファイル | 由来 | 扱い |
+|---|---|---|---|
+| 効果音 | `sfx_ogg/lf_r_pay_*`・`lf_r_up*`・`lf_r_chance`(`src/synth_pay.py`)、`lf_j_*`(`src/synth_jpmix.py`) | 100%自作の合成音(numpy/scipy)。音高・リズム・構成の「数字」だけ実機から書き起こした | 録音・サンプル未使用 |
+| 解析のみで参照した動画(リポジトリに含めない。`scratch_1031/jp_mix/ref_private/` にだけ置く) | | プレミアム海物語 大当たり https://www.youtube.com/watch?v=LGvui_n0Hz0 、https://www.youtube.com/watch?v=pc6SFDJ8RV8 / 海物語 大当り集 https://www.youtube.com/watch?v=ZpcOrBIlXC8 / 北斗の拳5 覇者 虹色CHANCE https://www.youtube.com/watch?v=DYcMdc_Tuac / ガンダム リーチ集 https://www.youtube.com/watch?v=hpDjkStR5F8 / ユニコーン 3000発Fever https://www.youtube.com/watch?v=76vLrRMJb90 / 北斗の拳6 拳王 https://www.youtube.com/watch?v=2FgoZcdq3tU(取得したが解析に使っていない: Fever Neptune hzMftU7atOA、ガンダムユニコーン大当たり紹介 lmY2yNz9Uso、エヴァ7 大当たりラウンド eslhnHIku6Y は動画側で音量が潰れていて不使用) | 数字(音量・帯域・時間・音高)を読んだだけ。配布物に入れない |

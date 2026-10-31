@@ -6,14 +6,24 @@
 // 場面は lcd.jp.where()(name・serial・f=元の映像のコマ)を読むだけ。fx_trim の skip(飛ばすコマ)は場面の manifest から読んで差し引く。規則・液晶は変更しない。
 // 無効化: ?fxloud=0(読み込まない=従来の音)。音量の目安は work/audio/loud_fx_1101/NOTES.md。
 const dB = x => 10 ** (x / 20);
+const JPMIX = new URLSearchParams(globalThis.location?.search ?? '').get('jpmix') !== '0';
 const FPS = 30, AHEAD = 0.14;            // 4コマ先まで予約(決めの手前から絞るため)
-const sceneKey = n => n === 'jp_rush' ? 'jp_rush' : n === 'chain_announce_cutin' ? 'chain_announce_cutin' : n === 'chain_success' ? 'chain_success' : /^chain_jp_land_d\d$/.test(n) ? 'chain_jp_land' : null;
+// seal: メーターの進み(jp_aim_seal_dN_bK / _open)。jpmix のときだけ(cues に無い key は何もしない)。K=1→b1、K>=2→b2、open→open。継続(chainMode)は cseal_*
+const sceneKey = (n, chain = false) => { let m;
+  if (n === 'jp_rush') return 'jp_rush'; if (n === 'chain_announce_cutin') return 'chain_announce_cutin'; if (n === 'chain_success') return 'chain_success'; if (/^chain_jp_land_d\d$/.test(n)) return 'chain_jp_land';
+  if (JPMIX && (m = /^jp_aim_seal_d\d_(?:b(\d)|(open))$/.exec(n))) return (chain ? 'cseal_' : 'seal_') + (m[2] ? 'open' : 'b' + Math.min(+m[1], 2));
+  if (/^jp_chance_d\d$/.test(n)) return JPMIX ? 'jp_chance' : null; if (/^reward_(30|40|100|200|500)$/.test(n)) return JPMIX ? n : null;
+  return null; };
 
-export async function installLoudFx(engine, { lcd, controller, cuesUrl = new URL('../loud_fx_1101/cues.json', import.meta.url) } = {}) {
-  const q = new URLSearchParams(globalThis.location?.search ?? '');
+export async function installLoudFx(engine, { lcd, controller, cuesUrl: cuesUrl0 = new URL('../loud_fx_1101/cues.json', import.meta.url) } = {}) {
+  const q = new URLSearchParams(globalThis.location?.search ?? ''); let cuesUrl = cuesUrl0;
   // ?loudkind=a|b|m: a=キュイン+高速アルペジオ(既定) b=サイレン+高音の持続キメ m=金属の打撃+ブラス(11/1 昼の版)。素材名 lf_x → lf_<kind>_x(m は lf_x のまま)
-  const KIND = ['a', 'b', 'm', 'r'].includes(q.get('loudkind')) ? q.get('loudkind') : 'r', fileOf = n => KIND === 'm' ? n : n.replace(/^lf_/, `lf_${KIND}_`);
+  // 11/1 ?jpmix=0 で今の音(kind r・cues.json)へ戻す。既定(jpmix)は kind j(JP曲の調=D/A長調に合わせた和音+共通の残響+絞りの型を実機に寄せた版・cues_j.json)
+  // 既定=RUSHは今のまま(kind r)+JPチャンス・継続の封印・配当獲得の音を足す(cues_mix.json)。kind j は ?loudkind=j の試作(調に合わせた版)
+  const KIND = ['a', 'b', 'm', 'r', 'j'].includes(q.get('loudkind')) ? q.get('loudkind') : 'r', fileOf = n => KIND === 'm' ? n : n.replace(/^lf_/, `lf_${KIND}_`);
+  if (KIND === 'j') cuesUrl = new URL('cues_j.json', cuesUrl);
   const cues = await (await fetch(cuesUrl)).json();
+  if (JPMIX && KIND === 'r') { try { const mix = await (await fetch(new URL('cues_mix.json', cuesUrl))).json(); Object.assign(cues.scenes, mix.scenes); cues.mix = mix.version; } catch (e) { console.warn('[loud-fx] cues_mix', e.message); } }
   const meta = await (await fetch(new URL('meta.json', cuesUrl))).json();
   const ctx = engine.ctx, now = () => ctx.currentTime;
   const used = new Set(); for (const list of Object.values(cues.scenes)) for (const c of list) if (c.s) used.add(c.s);
@@ -24,7 +34,7 @@ export async function installLoudFx(engine, { lcd, controller, cuesUrl = new URL
   const out = ctx.createGain(); out.gain.value = dB(6.3 + (cues.out_db ?? 0)); out.connect(engine.master);
   const mixP = engine.mix?.gain, hotP = engine.hot?.gain;
   const base = new Map([[mixP, mixP?.value ?? 1], [hotP, hotP?.value ?? dB(6.3)]]);
-  const api = { enabled: true, version: '1101.2', kind: KIND, log: [], missing, played: 0, ducks: 0, buffers, cues, base, nodes: { out } };
+  const api = { enabled: true, version: '1101.3', kind: KIND, jpmix: JPMIX, log: [], missing, played: 0, ducks: 0, buffers, cues, base, nodes: { out } };
   const sources = new Set();
 
   // ---- 絞り: 区間の重なりは深い方。区分線形で予約し直す(jp_audio_v5 と同じ方式。曲線イベントは重なると例外になるので使わない) ----
@@ -67,7 +77,7 @@ export async function installLoudFx(engine, { lcd, controller, cuesUrl = new URL
   function tick() {
     const jp = lcd?.jp; const w = jp?.active ? jp.where() : null;
     if (!w || w.delay > 0) { if (!w) cur = { key: null, id: null, fired: new Set(), name: null }; return; }
-    const key = sceneKey(w.name); const id = w.name + '#' + w.serial;
+    const key = sceneKey(w.name, !!jp.model?.chainMode); const id = w.name + '#' + w.serial;
     if (cur.id !== id) { cur = { key, id, fired: new Set(), name: w.name, lastF: -1 }; }
     if (!key) return;
     const list = cues.scenes[key], skips = skipsOf(w.name), t = now();

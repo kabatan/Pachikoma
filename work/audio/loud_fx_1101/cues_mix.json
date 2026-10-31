@@ -1,0 +1,325 @@
+{
+ "version": 20261101.4,
+ "note": "?jpmix(既定)で cues.json に足す出来事(RUSH・継続の既存の項目は変えない)。seal_*/cseal_*=封印が1枚切れる(1kHz→2kHz→4kHzへ上がる)、jp_chance=題字、reward_N=配当獲得(tier=0..4 の素材 lf_pay_hit/full)。音は RUSH と同じ系統。 reward_30/40 は短縮(skip [[3,27],[47,109]])で f46 と f109 が重なるため、一撃を f109・全景を f119 に置く。",
+ "scenes": {
+  "seal_b1": [
+   {
+    "f": 0,
+    "s": "lf_up1",
+    "db": -2,
+    "duck": {
+     "d": 8,
+     "pre": 0.02,
+     "hold": 0.12,
+     "rel": 0.3
+    }
+   }
+  ],
+  "seal_b2": [
+   {
+    "f": 0,
+    "s": "lf_up2",
+    "db": -1,
+    "duck": {
+     "d": 10,
+     "pre": 0.02,
+     "hold": 0.15,
+     "rel": 0.3
+    }
+   }
+  ],
+  "seal_open": [
+   {
+    "f": 0,
+    "s": "lf_up3",
+    "db": 0,
+    "duck": {
+     "d": 14,
+     "pre": 0.03,
+     "hold": 0.25,
+     "rel": 0.4
+    }
+   }
+  ],
+  "cseal_b1": [
+   {
+    "f": 0,
+    "s": "lf_up1",
+    "db": -3,
+    "duck": {
+     "d": 8,
+     "pre": 0.02,
+     "hold": 0.12,
+     "rel": 0.3
+    }
+   }
+  ],
+  "cseal_b2": [
+   {
+    "f": 0,
+    "s": "lf_up2",
+    "db": -2,
+    "duck": {
+     "d": 10,
+     "pre": 0.02,
+     "hold": 0.15,
+     "rel": 0.3
+    }
+   }
+  ],
+  "cseal_open": [
+   {
+    "f": 0,
+    "s": "lf_up3",
+    "db": -1,
+    "duck": {
+     "d": 14,
+     "pre": 0.03,
+     "hold": 0.25,
+     "rel": 0.4
+    }
+   }
+  ],
+  "jp_chance": [
+   {
+    "f": 0,
+    "s": "lf_chance",
+    "db": -3,
+    "duck": {
+     "d": 12,
+     "pre": 0.03,
+     "hold": 0.3,
+     "rel": 0.5
+    }
+   }
+  ],
+  "reward_30": [
+   {
+    "f": 109,
+    "s": "lf_pay_hit0",
+    "db": -1,
+    "duck": {
+     "d": 14,
+     "pre": 0.04,
+     "hold": 0.3,
+     "rel": 0.5
+    }
+   },
+   {
+    "f": 119,
+    "s": "lf_pay_full0",
+    "db": -1,
+    "duck": {
+     "d": 12,
+     "pre": 0.03,
+     "hold": 0.5,
+     "rel": 0.6
+    }
+   },
+   {
+    "f": 139,
+    "s": "lf_pay_flash",
+    "db": -4
+   },
+   {
+    "f": 163,
+    "s": "lf_pay_flash",
+    "db": -4
+   },
+   {
+    "f": 187,
+    "s": "lf_pay_flash",
+    "db": -3
+   }
+  ],
+  "reward_40": [
+   {
+    "f": 109,
+    "s": "lf_pay_hit1",
+    "db": -1,
+    "duck": {
+     "d": 15,
+     "pre": 0.04,
+     "hold": 0.3,
+     "rel": 0.5
+    }
+   },
+   {
+    "f": 119,
+    "s": "lf_pay_full1",
+    "db": -1,
+    "duck": {
+     "d": 13,
+     "pre": 0.03,
+     "hold": 0.65,
+     "rel": 0.6
+    }
+   },
+   {
+    "f": 139,
+    "s": "lf_pay_flash",
+    "db": -4
+   },
+   {
+    "f": 163,
+    "s": "lf_pay_flash",
+    "db": -4
+   },
+   {
+    "f": 187,
+    "s": "lf_pay_flash",
+    "db": -3
+   }
+  ],
+  "reward_100": [
+   {
+    "f": 3,
+    "s": "lf_pay_open",
+    "db": -3,
+    "duck": {
+     "d": 8,
+     "pre": 0.02,
+     "hold": 0.1,
+     "rel": 0.3
+    }
+   },
+   {
+    "f": 46,
+    "s": "lf_pay_hit2",
+    "db": -1,
+    "duck": {
+     "d": 16,
+     "pre": 0.04,
+     "hold": 0.3,
+     "rel": 0.5
+    }
+   },
+   {
+    "f": 109,
+    "s": "lf_pay_full2",
+    "db": -1,
+    "duck": {
+     "d": 14,
+     "pre": 0.03,
+     "hold": 0.8,
+     "rel": 0.6
+    }
+   },
+   {
+    "f": 139,
+    "s": "lf_pay_flash",
+    "db": -4
+   },
+   {
+    "f": 163,
+    "s": "lf_pay_flash",
+    "db": -4
+   },
+   {
+    "f": 187,
+    "s": "lf_pay_flash",
+    "db": -3
+   }
+  ],
+  "reward_200": [
+   {
+    "f": 3,
+    "s": "lf_pay_open",
+    "db": -3,
+    "duck": {
+     "d": 8,
+     "pre": 0.02,
+     "hold": 0.1,
+     "rel": 0.3
+    }
+   },
+   {
+    "f": 46,
+    "s": "lf_pay_hit3",
+    "db": -0.5,
+    "duck": {
+     "d": 17,
+     "pre": 0.04,
+     "hold": 0.3,
+     "rel": 0.5
+    }
+   },
+   {
+    "f": 109,
+    "s": "lf_pay_full3",
+    "db": -0.5,
+    "duck": {
+     "d": 15,
+     "pre": 0.03,
+     "hold": 0.95,
+     "rel": 0.6
+    }
+   },
+   {
+    "f": 139,
+    "s": "lf_pay_flash",
+    "db": -3
+   },
+   {
+    "f": 163,
+    "s": "lf_pay_flash",
+    "db": -3
+   },
+   {
+    "f": 187,
+    "s": "lf_pay_flash",
+    "db": -2
+   }
+  ],
+  "reward_500": [
+   {
+    "f": 3,
+    "s": "lf_pay_open",
+    "db": -3,
+    "duck": {
+     "d": 8,
+     "pre": 0.02,
+     "hold": 0.1,
+     "rel": 0.3
+    }
+   },
+   {
+    "f": 46,
+    "s": "lf_pay_hit4",
+    "db": -1.5,
+    "duck": {
+     "d": 18,
+     "pre": 0.04,
+     "hold": 0.3,
+     "rel": 0.5
+    }
+   },
+   {
+    "f": 109,
+    "s": "lf_pay_full4",
+    "db": -1.5,
+    "duck": {
+     "d": 16,
+     "pre": 0.03,
+     "hold": 1.1,
+     "rel": 0.6
+    }
+   },
+   {
+    "f": 139,
+    "s": "lf_pay_flash",
+    "db": -3
+   },
+   {
+    "f": 163,
+    "s": "lf_pay_flash",
+    "db": -3
+   },
+   {
+    "f": 187,
+    "s": "lf_pay_flash",
+    "db": -2
+   }
+  ]
+ }
+}
