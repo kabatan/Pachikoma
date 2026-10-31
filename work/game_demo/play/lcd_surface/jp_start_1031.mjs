@@ -41,8 +41,13 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
   //   さらに題字直前の暗転は時計でなく映像の時刻で出す（映像の遅れ分だけ暗転が伸びていた：約0.17→0.5秒）。?jpdark=1 で旧（seek で飛ばす・時計の暗転）に戻す
   const DARK_OLD = qs.get('jpdark') === '1';
   const TRIM_FILE = 'seal_jp/jp_open_a_s29.mp4', TRIM_AT = 29;
+  // 11/1 監督「雷→題字がまだ黒い・長い」→ 暗転をなくして短く。?jpopenmode=a（既定）雷が白く飛んだ所から扉なしで直接題字（雷→題字 約1.0秒）、b 扉の寄りを約0.43秒だけ見せて題字へ、
+  //   c 前の版（扉1.0秒＋題字直前の暗転0.2秒）。?jpdark=1 は更にその前（扉の頭30コマをシークで飛ばす）。a/b は題字直前の暗転（映像の落ち・囲いを落とす）を出さない
+  const OPENMODE = DARK_OLD ? 'old' : ['a', 'b', 'c'].includes(qs.get('jpopenmode')) ? qs.get('jpopenmode') : 'a';
+  const NODIP = OPENMODE === 'a' || OPENMODE === 'b';
   const useTrim = !DARK_OLD && !black && man.scenes.jp_chance_open_d4?.file === 'seal_jp/jp_open_a.mp4';
-  const SKIP = useTrim ? TRIM_AT : Math.round(clamp(+(qs.get('jpstart_open') ?? 30), 0, 50));
+  const TRIM_B = 'seal_jp/jp_open_a_s44.mp4', B_AT = 44, B_FR = Math.round(clamp(+(qs.get('jpopen_fr') ?? 13), 1, 16));   // b：扉の最後の 44〜56 コマ（0.43秒。光の筋が出る所）
+  const SKIP = useTrim ? (OPENMODE === 'b' ? B_AT : TRIM_AT) : Math.round(clamp(+(qs.get('jpstart_open') ?? 30), 0, 50));
   const OLDTEXT = qs.get('jpstart_oldtext') === '1';   // 10/31 導入の「PUSH 連打」「封印解除!!」「押せ！」の字。既定は出さず、題字のあと直接メーターへ。?jpstart_oldtext=1 で戻す
   const SND = qs.get('jpstart_snd') !== '0', SHAKE = qs.get('jpstart_shake') !== '0', CUTL = qs.get('jpstart_cut') === '1' || (OLDTEXT && qs.get('jpstart_cut') !== '0');   // 押せ・連打のカットイン（層）。既定は出さない
   const S = { clock: 0, hold: HOLD, black, skip: SKIP, ph: null, name: '', serial: -1, t0: 0, audioKicked: -1, thumps: 0, frameN: 0, cutOn: false, cutFrames: 0, events: [], manual: false };
@@ -50,15 +55,16 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
 
   // ---- manifest ----
   const orig = { lNext: L.next, dFrames: man.scenes.jp_intro_dopamine?.frames, openSkip: {} };
-  const openFrames = OPEN.frames - SKIP, openPlayed = openFrames / fps;
+  const openFrames = OPENMODE === 'a' && useTrim ? 0 : OPENMODE === 'b' && useTrim ? B_FR : OPEN.frames - SKIP, openPlayed = openFrames / fps;
   for (let d = 1; d <= 7; d++) {
     const s = man.scenes[`jp_chance_open_d${d}`]; if (!s) continue;
     orig.openSkip[d] = s.skip;
-    if (useTrim && s.file === 'seal_jp/jp_open_a.mp4') { s.file = TRIM_FILE; s.frames -= TRIM_AT; s.lights_from = (+s.lights_from || 0) + TRIM_AT; s.skip = undefined; }   // コマ番号は頭を切った分ずれる（照明の表は lights_from で合わせる）
+    if (useTrim && OPENMODE === 'b' && s.file === 'seal_jp/jp_open_a.mp4') { s.file = TRIM_B; s.frames = B_FR; s.lights_from = (+s.lights_from || 0) + B_AT; s.skip = undefined; }
+    else if (useTrim && s.file === 'seal_jp/jp_open_a.mp4') { s.file = TRIM_FILE; s.frames -= TRIM_AT; s.lights_from = (+s.lights_from || 0) + TRIM_AT; s.skip = undefined; }   // コマ番号は頭を切った分ずれる（照明の表は lights_from で合わせる）
     else if (SKIP > 0) s.skip = [[0, SKIP]];
   }
   if (!black) {
-    L.next = 'jp_chance_open_d4';                                  // 雷の次を扉の寄りへ（実行時に _d{d} へ置き換わる）
+    L.next = OPENMODE === 'a' && useTrim ? 'jp_chance_d4' : 'jp_chance_open_d4';                                  // 雷の次を扉の寄りへ（実行時に _d{d} へ置き換わる）
     if (man.scenes.jp_intro_dopamine) man.scenes.jp_intro_dopamine.frames = openFrames;   // jp_audio_v5 の「導入の長さ」（JP曲の入りから題字までのコマ数）を、扉の寄りの長さに
   }
   const skipSec = (n) => (man.scenes[n]?.skip ?? []).reduce((a, [x, y]) => a + (y - x), 0) / fps;
@@ -199,8 +205,10 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
   const driveVideo = (ph) => {
     if (!vidOk) return;
     const on = ph?.k === 'hold';
-    if (!on) { if (S.vidOn) { try { vid.pause(); } catch {} S.vidOn = false; } return; }
-    if (!S.vidOn) { S.vidOn = true; S.vidPlay = false; try { vid.currentTime = 0; } catch {} }
+    // 11/1 最適化：使い終わった揃いの映像は、次の 6灯目が来る前に先頭へ巻き戻しておく（来た時の seek で再生が約0.2秒遅れていた）。先頭にある映像は seek し直さない。?jpprime=0 で従来
+    const PRIME6 = qs.get('jpprime') !== '0';
+    if (!on) { if (S.vidOn) { try { vid.pause(); } catch {} S.vidOn = false; } if (PRIME6 && !S.manual && !vid.seeking && vid.currentTime > 0.001) { try { vid.currentTime = 0; } catch {} } return; }
+    if (!S.vidOn) { S.vidOn = true; S.vidPlay = false; if (!(PRIME6 && vid.currentTime <= 0.001 && !vid.seeking)) { try { vid.currentTime = 0; } catch {} } }
     if (S.manual) { const tv = vt(ph.t); if (Math.abs(vid.currentTime - tv) > 1e-4) { try { vid.currentTime = tv; } catch {} S.seekP = new Promise((res) => { vid.addEventListener('seeked', res, { once: true }); setTimeout(res, 400); }); } }
     else { const playing = ph.t < 0.1 || ph.t >= 0.2; if (playing && !S.vidPlay) { vid.play().catch(() => {}); S.vidPlay = true; } else if (!playing && S.vidPlay) { try { vid.pause(); } catch {} S.vidPlay = false; } }
   };
@@ -210,7 +218,7 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
     const prev = S.name;
     if (ser !== S.serial || n !== S.name) {
       S.serial = ser; S.name = n; S.t0 = S.clock;
-      if (/^jp_chance_open_d\d$/.test(n) && !black && S.audioKicked !== ser) {   // 雷のあと：JP曲を入れる（旧は黒背景＋文字の頭で startJp）
+      if ((OPENMODE === 'a' && useTrim ? /^jp_chance_d\d$/ : /^jp_chance_open_d\d$/).test(n) && !black && S.audioKicked !== ser) {   // 雷のあと：JP曲を入れる（旧は黒背景＋文字の頭で startJp）
         S.audioKicked = ser;
         try { window.__jpAudio?.trigger?.('jp_intro_dopamine'); note('audio:startJp'); } catch (e) { console.warn('[jpstart-audio]', e); }
       }
@@ -271,7 +279,7 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
       F.m3 = { K: dim8(k), Kc: dim8(0).map(() => col), wash: dim8(0).map(() => [0, 0, 0]), ring: [0, 1, 2, 3].map(() => [0, 0, 0]), zone: dim8(0).map(() => [0.002, 0.004, 0.02]), hole: { cup: model.d }, jp1029: true };
       return true;
     }
-    if (((ph.k === 'open' && ph.left < DIP) || (ph.k === 'title' && ph.t < DIP_T)) && F.m3?.K) { F.m3 = { ...F.m3, K: F.m3.K.map((k) => k * 0.1) }; return r; }   // 題字の直前：囲いも一瞬落とす
+    if (!NODIP && ((ph.k === 'open' && ph.left < DIP) || (ph.k === 'title' && ph.t < DIP_T)) && F.m3?.K) { F.m3 = { ...F.m3, K: F.m3.K.map((k) => k * 0.1) }; return r; }   // 題字の直前：囲いも一瞬落とす
     const burst = ph.k === 'title' ? Math.exp(-ph.t / 0.14) * (ph.t >= DIP_T && ph.t < 0.5 ? 1 : 0) : ph.k === 'in' ? Math.exp(-ph.t / 0.12) * (ph.t < 0.4 ? 1 : 0) : ph.k === 'open' ? Math.exp(-ph.t / 0.1) * (ph.t < 0.4 ? 0.7 : 0) : 0;
     if (burst > 0.01 && F.m3?.K) {
       const col = ph.k === 'title' ? [1, 0.82, 0.4] : [0.8, 0.5, 1];
@@ -343,9 +351,10 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
       const u = clamp((0.4 - ph.left) / 0.3);
       if (u > 0 && ph.left > 0.02) { out.push(win(T.seam, 64, 192, DOOR.x, DOOR.y, 1 + 0.5 * u, easeOut(u) * 0.95, true)); out.push(win(T.beam, W4, H4, DOOR.x, DOOR.y, 0.55 + 1.1 * easeOut(u), u * u * 0.9, true)); }
       // 手本：題字の直前に一瞬だけ暗く落ちて（約0.17秒）、白い爆発で題字が出る。扉の寄りの最後の0.10秒＋題字の頭（まだ扉のコマ）を暗く
-      if (ph.left < DIP) out.push(win(T.dark, W4, H4, 576, 634, 1, 0.92 * clamp((DIP - ph.left) / 0.04), false));
+      if (!NODIP && ph.left < DIP) out.push(win(T.dark, W4, H4, 576, 634, 1, 0.92 * clamp((DIP - ph.left) / 0.04), false));
     } else if (ph?.k === 'title') {
-      if (ph.t < DIP_T) out.push(win(T.dark, W4, H4, 576, 634, 1, 0.92, false));
+      if (OPENMODE === 'a' && useTrim && ph.t < 0.2) out.push(win(T.flash, W4, H4, 576, 634, 1, 0.97 * (1 - ph.t / 0.2) ** 1.3, true, dx, dy));   // 雷（layered）→題字（plain）の乗り換えで、竜宮の暗い下地が一瞬透ける（約0.1秒）のを、雷の白飛びの余韻で隠す
+      if (ph.t < DIP_T) { if (!NODIP) out.push(win(T.dark, W4, H4, 576, 634, 1, 0.92, false)); }
       else if (ph.t < 0.65) {   // 叩きつけの破片
         if (!S.spark) initSparks();
         const tt = ph.t - DIP_T; if (S.sparkT !== S.frameN) { S.sparkT = S.frameN; drawSparks(tt); }
