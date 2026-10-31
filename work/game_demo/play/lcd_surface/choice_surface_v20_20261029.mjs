@@ -74,7 +74,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
   countdown=await createChoiceCountdown(lcd.canvas,()=>controller?.game.choiceLeft);
   // 左の札(確定)の TOTAL と連×N: いま確定した場合の額(確定済みの JP 合計＋積み増し)を実行時に重ねる。映像は桁なしの版。
   total=await createChoiceTotal({ctx,PX,PY,getAddLabel:()=>!!controller?.game?.chainNeedsAdd,getValues:()=>{const g=controller?.game,c=g?.chainStatus;return g?{total:g.rules?.PrizeBasis==='wallet'?g.prizeScore:(g.jackpotEarnings??0)+(c?.pendingAward??0),chain:(c?.successes??0)+1}:null;}});
-  const choose=state=>{
+  const chooseNow=state=>{
     if(selected===state)return;
     let from=selected,alpha=0;
     if(active&&hasChoiceFrame){
@@ -89,6 +89,45 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
     }else blend=null;
     selected=state;record('select',{state,from:from??'snapshot',alpha});
   };
+  // 11/1 最適化（?choicepark=0 で従来＝3本とも常時デコード）：見えていない札（left/right）の動画は止めておき、選ぶ直前に動かす。
+  //  neutral は常に再生。left/right を選ぶときは、neutral の再生位置の少し先（LEAD）へ止めたまま seek して、そこに neutral が着いた時点で play し、
+  //  そこで初めて切替（クロスフェード）を始める。seek の間も表示中の動画は止まらないので、画が固まらない。切替の始まりが LEAD 分（約0.1秒）遅れるだけ。
+  const PARK=new URLSearchParams(globalThis.location?.search??'').get('choicepark')!=='0';
+  let wake=null,seekEma=.08;const parkStats={wakes:0,retries:0,cancels:0,seekMs:[],lateMs:[]};
+  const refVideo=()=>videos[selected];
+  const wrapDelta=(a,b,dur)=>{let d=a-b;if(d>dur/2)d-=dur;else if(d<-dur/2)d+=dur;return d;};
+  const startWake=(state,tries=0)=>{
+    const v=videos[state],ref=refVideo(),dur=ref.duration||176/30;
+    const lead=Math.min(.3,Math.max(.06,seekEma*1.2+.02+tries*.1));
+    const tt=((ref.currentTime+lead)%dur+dur)%dur;
+    wake={state,tt,t0:performance.now(),seeked:false,tries};
+    const w=wake;
+    const done=()=>{if(wake===w){w.seeked=true;w.seekMs=performance.now()-w.t0;}};
+    v.addEventListener('seeked',done,{once:true});
+    try{v.currentTime=tt;}catch{done();}
+  };
+  const cancelWake=()=>{if(wake){const v=videos[wake.state];if(v&&!v.paused)v.pause();wake=null;parkStats.cancels++;}};
+  const choose=state=>{
+    if(!PARK||!active||manual||!hasChoiceFrame){cancelWake();return chooseNow(state);}
+    if(wake){if(wake.state===state)return;cancelWake();}
+    if(selected===state)return;
+    if(!videos[state].paused||state==='neutral')return chooseNow(state);
+    parkStats.wakes++;startWake(state);
+  };
+  // 毎フレーム：待っている切替が整ったら実行、使っていない動画を止める
+  const parkTick=()=>{
+    if(!PARK||!active||manual)return;
+    if(wake&&wake.seeked){
+      const v=videos[wake.state],ref=refVideo(),dur=ref.duration||176/30;
+      const ahead=wrapDelta(wake.tt,ref.currentTime,dur);   // neutral があと何秒で tt に着くか
+      if(v.readyState<2||v.seeking){}
+      else if(ahead<-.25&&wake.tries<1){parkStats.retries++;const st=wake.state,tr=wake.tries+1;seekEma=Math.max(seekEma,(wake.seekMs||0)/1000);startWake(st,tr);}   // 大きく間に合わなかった：一度だけ先へ取り直す（0.25秒までの遅れはそのまま始める）
+      else if(ahead<=.035){seekEma=seekEma*.7+(wake.seekMs||0)/1000*.3;parkStats.seekMs.push(+(wake.seekMs||0).toFixed(1));if(parkStats.seekMs.length>40)parkStats.seekMs.shift();const st=wake.state;wake=null;v.play().catch(()=>{});chooseNow(st);}
+    }
+    if(wake&&performance.now()-wake.t0>600){const st=wake.state,v=videos[st];parkStats.timeouts=(parkStats.timeouts??0)+1;wake=null;v.play().catch(()=>{});chooseNow(st);}   // seek が終わらない：従来どおり即切替
+    const need=new Set([selected,blend?.from,wake?.state,'neutral']);
+    for(const st of FILES){const v=videos[st];if(!need.has(st)&&!v.paused)v.pause();}
+  };
   const setActive=on=>{
     if(active===on)return;
     if(on){dropHeld();entryGpu=choiceBackend&&choiceBackend.diagnostics().enabled?baseGpu?.call(lcd):null;if(entryGpu)choiceGpu={...entryGpu,owner:'choice'};else baseMaterialize?.('choice-enter',true);choiceGeneration++;}else {choiceGpu=null;entryGpu=null;if(!handoff)dropHeld();}
@@ -96,7 +135,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
     if(on){hasChoiceFrame=false;countdown.reset();}
     record(on?'enter':'exit');
     if(canvas)canvas.style.cursor=on?'pointer':originalCursor;
-    for(const v of Object.values(videos)){v.pause();if(on){v.currentTime=0;if(!manual)v.play().catch(e=>errors.push(e.message));}}
+    wake=null;for(const [st,v] of Object.entries(videos)){v.pause();if(on){v.currentTime=0;if(!manual&&(!PARK||st==='neutral'))v.play().catch(e=>errors.push(e.message));}}
   };
   const hit=e=>{
     if(!canvas)return null;
@@ -119,7 +158,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
   const key=e=>{
     if(!active||e.repeat||e.isComposing||e.target?.closest?.('input,textarea,select,[contenteditable]'))return;
     if(e.code==='ArrowLeft'||e.code==='ArrowRight'){choose(e.code==='ArrowLeft'?'left':'right');e.preventDefault();e.stopImmediatePropagation();}
-    else if((e.code==='Enter'||e.code==='Space')&&selected!=='neutral'&&commit(selected,'keyboard')){e.preventDefault();e.stopImmediatePropagation();}
+    else if((e.code==='Enter'||e.code==='Space')&&(wake?.state??selected)!=='neutral'&&commit(wake?.state??selected,'keyboard')){e.preventDefault();e.stopImmediatePropagation();}
   };
   const blur=()=>{if(active)choose('neutral');};
   window.addEventListener('pointermove',move);window.addEventListener('pointerdown',down,true);
@@ -157,6 +196,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
     // While choice owns the surface, don't render the hidden normal scene too.
     if(!(phase==='ChainChoice'||pending)||jp?.claimed)base.frame(dt,F);
     setActive((phase==='ChainChoice'||pending)&&!lcd.jp?.claimed);
+    parkTick();
     if(!active){
       choiceGpu=null;
       if(handoff){
@@ -177,6 +217,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
     // A decode/loop seek retains the last surface and pauses the fade clock.
     const from=blend&&(blend.from?videos[blend.from]:heldChoice);
     if(!drawable(v)||(blend&&blend.from&&!drawable(from))){
+      parkStats.stalls=(parkStats.stalls??0)+1;
       if(hasChoiceFrame){if(choiceGpu&&choiceBackend.diagnostics().enabled){gpuOverlays(dt);}else{materializeChoice('interrupt-clean');if(blend?.from===null)materializeHeld('wait-legacy-mask',true);countdown.clearDigit();countdown.draw(selected,blend,dt);total.clear();total.draw(selected,blend,clock*30);}}
       return;
     }
@@ -199,7 +240,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
     countdown.draw(selected,blend,dt);
     total.draw(selected,blend,clock*30);
   };
-  lcd.setManual=on=>{manual=!!on;base.setManual(on);for(const v of Object.values(videos)){v.pause();if(active&&!manual)v.play().catch(()=>{});}};
+  lcd.setManual=on=>{manual=!!on;wake=null;base.setManual(on);for(const v of Object.values(videos)){v.pause();if(active&&!manual)v.play().catch(()=>{});}};
   lcd.prepare=async dt=>{
     await base.prepare?.(dt);
     if(!manual||!active)return;
@@ -219,7 +260,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
         return result;
       });
     },
-    diagnostics:()=>Object.fromEntries(Object.entries(videos).map(([s,v])=>[s,{width:v.videoWidth,height:v.videoHeight,time:v.currentTime,paused:v.paused,frames:v.getVideoPlaybackQuality?.()}]))};
+    parkStats,diagnostics:()=>Object.fromEntries(Object.entries(videos).map(([s,v])=>[s,{width:v.videoWidth,height:v.videoHeight,time:v.currentTime,paused:v.paused,frames:v.getVideoPlaybackQuality?.()}]))};
   lcd.dispose=()=>{dropHeld();leaseStore?.dispose();choiceBackend?.dispose();choiceGpu=null;disposed=true;setActive(false);countdown.dispose();total.invalidate();if(jpFrame)jp.frame=jpFrame;window.removeEventListener('pointermove',move);window.removeEventListener('pointerdown',down,true);window.removeEventListener('keydown',key,true);window.removeEventListener('blur',blur);for(const v of Object.values(videos)){v.pause();v.removeAttribute('src');v.load();}base.dispose();};
   return lcd;
 }
