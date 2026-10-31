@@ -3,61 +3,61 @@
   "files": [
     {
       "path": "work/effects/attract/prod_v4b/attract_wait_v4b_prod.mp4",
-      "bytes": 183324412,
-      "sha256": "187e42cd51402462275fac06647116d61ebc85411e98c5e4ae42e27466cc5cc6",
+      "bytes": 76145704,
+      "sha256": "2c08379d92facd945eae49b77869fdd90e79130071f65d1d5ec23c3a27828e1a",
       "parts": [
         {
           "path": "work/effects/attract/prod_v4b/attract_wait_v4b_prod.mp4.part00",
-          "bytes": 95000000
+          "bytes": 38072852
         },
         {
           "path": "work/effects/attract/prod_v4b/attract_wait_v4b_prod.mp4.part01",
-          "bytes": 88324412
+          "bytes": 38072852
         }
       ]
     },
     {
       "path": "work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4",
-      "bytes": 178715424,
-      "sha256": "52bb9387c2f6548a0eb4d3cff9240320631e17d22cd83c76494f675a7d8201e0",
+      "bytes": 72748119,
+      "sha256": "b79a8fdea8215aeec475fe25b14a017c50c73117049b5db266461be113482ea1",
       "parts": [
         {
           "path": "work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4.part00",
-          "bytes": 95000000
+          "bytes": 36374059
         },
         {
           "path": "work/effects/attract/prod_v5c/attract_wait_v5c_prod.mp4.part01",
-          "bytes": 83715424
+          "bytes": 36374060
         }
       ]
     },
     {
       "path": "work/effects/jp_teacher/09_timeup/prod/final/timeup_prod.mp4",
-      "bytes": 107049027,
-      "sha256": "2d11ad4efd12596e2b48e601a70beb357c233eca974e9acb8103f24db93ee75e",
+      "bytes": 54623817,
+      "sha256": "91ca9c8c18cbf3d4393bba4eb41cd42f67d397a1bcf54d2b06ae759842ddcaaa",
       "parts": [
         {
           "path": "work/effects/jp_teacher/09_timeup/prod/final/timeup_prod.mp4.part00",
-          "bytes": 95000000
+          "bytes": 27311908
         },
         {
           "path": "work/effects/jp_teacher/09_timeup/prod/final/timeup_prod.mp4.part01",
-          "bytes": 12049027
+          "bytes": 27311909
         }
       ]
     },
     {
       "path": "work/game_demo/play/lcd_surface/jp1029/production_20261028/ryugu_continuous_approved_color.mp4",
-      "bytes": 189968970,
-      "sha256": "871760c669408e69fd98e013f5e614f1cfa6d85dd483e56868eec2e863dcd522",
+      "bytes": 48554960,
+      "sha256": "9d773a464ce8a728ae346dbdd43105ada1f467e0b302b26869b6509f5e3c397c",
       "parts": [
         {
           "path": "work/game_demo/play/lcd_surface/jp1029/production_20261028/ryugu_continuous_approved_color.mp4.part00",
-          "bytes": 95000000
+          "bytes": 24277480
         },
         {
           "path": "work/game_demo/play/lcd_surface/jp1029/production_20261028/ryugu_continuous_approved_color.mp4.part01",
-          "bytes": 94968970
+          "bytes": 24277480
         }
       ]
     }
