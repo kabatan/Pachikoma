@@ -14,6 +14,10 @@ function withRendererState(T,r,fn){
  const state={target:r.getRenderTarget(),face:r.getActiveCubeFace(),level:r.getActiveMipmapLevel(),viewport:r.getViewport(new T.Vector4()),scissor:r.getScissor(new T.Vector4()),test:r.getScissorTest(),color:r.getClearColor(new T.Color()),alpha:r.getClearAlpha(),auto:r.autoClear};
  try{return fn();}finally{r.setRenderTarget(state.target,state.face,state.level);r.setViewport(state.viewport);r.setScissor(state.scissor);r.setScissorTest(state.test);r.setClearColor(state.color,state.alpha);r.autoClear=state.auto;}
 }
+// 10/31 パネルの合成を重ね合わせ（lcd_split_1030）の最下層へ取り込む（?lcdfuse=0 で従来）。splitBase() は、panel を描かずに「raw とパネルの材料」を返す。
+const FUSE=(()=>{try{return new URLSearchParams(globalThis.location?.search??'').get('lcdfuse')!=='0';}catch{return true;}})();
+// 次の映像が無い（mixNext=0）ときの body は、1 回だけ読む版（mix(a,b,0)=a で結果は同じ。texture の読みが画素あたり 2→1）。?lcdfuse=0 で従来。
+export const VIDEO_BODY1_FRAGMENT='varying vec2 q;uniform sampler2D current;void main(){gl_FragColor=vec4(texture2D(current,q).rgb,1.);}';
 export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visible={x:PX,y:PY,w:W,h:H}}){
  if(!r?.isWebGLRenderer)throw Error('Existing main THREE.WebGLRenderer required');
  if(width!==PW||height!==PH||visible.x!==PX||visible.y!==PY||visible.w!==W||visible.h!==H)throw Error('Video candidate requires original native panel/visible dimensions');
@@ -33,7 +37,7 @@ export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visib
  const geometry=own(new T.PlaneGeometry(2,2)),camera=new T.Camera();
  const bodyUniforms={current:{value:dummy},next:{value:dummy},mixNext:{value:0}},panelUniforms={raw:{value:raw.texture},overlay:{value:dummy},hud:{value:dummy},overlayOn:{value:0},hudOn:{value:0},flashA:{value:0},flashRGB:{value:new T.Vector3(1,1,1)},overlayRect:{value:new T.Vector4(0,0,1,1)}};
  const scene=(fragment,uniforms)=>{const material=own(new T.ShaderMaterial({uniforms,vertexShader:VIDEO_BODY_VERTEX,fragmentShader:fragment,depthTest:false,depthWrite:false,blending:T.NoBlending,toneMapped:false,dithering:false})),scene=new T.Scene(),mesh=new T.Mesh(geometry,material);mesh.frustumCulled=false;scene.add(mesh);return scene;};
- const bodyScene=scene(VIDEO_BODY_FRAGMENT,bodyUniforms),panelScene=scene(VIDEO_PANEL_FRAGMENT,panelUniforms);
+ const bodyScene=scene(VIDEO_BODY_FRAGMENT,bodyUniforms),panelScene=scene(VIDEO_PANEL_FRAGMENT,panelUniforms),bodyScene1=FUSE?scene(VIDEO_BODY1_FRAGMENT,{current:bodyUniforms.current}):bodyScene;
  const surface=Object.freeze({type:'lcd-gpu-surface',texture:output.texture,target:output,width:PW,height:PH,visible:Object.freeze({...visible}),encoding:'srgb-encoded',alphaMode:'opaque',origin:'bottom-left',context,get revision(){return compositeRevision;},get bodyRevision(){return bodyRevision;},get compositeRevision(){return compositeRevision;}});
  function identity(video){if(!identities.has(video))identities.set(video,++identitySequence);return identities.get(video);}
  const copyStamp=s=>s?{...s,layers:s.layers.map(l=>({...l})),overlay:s.overlay?{...s.overlay}:null}:null;
@@ -91,10 +95,10 @@ export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visib
    warmHud=own(new T.CanvasTexture(scratch));configure(warmHud,true);
    withRendererState(T,r,()=>{
     for(const t of [raw,historySpare,output])r.initRenderTarget(t);r.initTexture(dummy);r.initTexture(warmHud);
-    for(const s of [copyScene,stepScene,bodyScene,historyPanelScene,panelScene])r.compile(s,camera);
+    for(const s of [copyScene,stepScene,bodyScene,bodyScene1,historyPanelScene,panelScene])r.compile(s,camera);
     copyU.sourceTex.value=dummy;copyU.sourceUv.value=new T.Vector4(0,0,1,1);draw(copyScene,raw);kinds.push('copy');
     stepU.historyTex.value=raw.texture;stepU.sourceTex.value=dummy;stepU.opAlpha.value=.5;draw(stepScene,historySpare);kinds.push('step');
-    bodyUniforms.current.value=bodyUniforms.next.value=dummy;bodyUniforms.mixNext.value=.25;draw(bodyScene,raw);kinds.push('body');
+    bodyUniforms.current.value=bodyUniforms.next.value=dummy;bodyUniforms.mixNext.value=.25;draw(bodyScene,raw);kinds.push('body');if(bodyScene1!==bodyScene){draw(bodyScene1,raw);kinds.push('body1');}
     panelUniforms.raw.value=historySpare.texture;panelUniforms.overlay.value=warmHud;panelUniforms.overlayOn.value=1;panelUniforms.overlayRect.value=new T.Vector4(120,24,304,308);panelUniforms.flashA.value=.25;panelUniforms.flashRGB.value=new T.Vector3(115/255,96/255,153/255);panelUniforms.hud.value=warmHud;panelUniforms.hudOn.value=1;
     historyU.bridgeTex.value=dummy;historyU.bridgeAlpha.value=.5;draw(historyPanelScene,output);kinds.push('historyPanel');
     draw(panelScene,output);kinds.push('ordinaryPanel');
@@ -131,13 +135,14 @@ export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visib
      const required=new Set(layers.map(l=>l.video));for(const [video,entry]of videos)if(!required.has(video)){release(entry.texture);videos.delete(video);stats.videoTexturesDisposed++;}
      bodyUniforms.current.value=renderTextures[0];bodyUniforms.next.value=renderTextures[1]??renderTextures[0];bodyUniforms.mixNext.value=layers[1]?.alpha??0;
      // A thrown GL operation invalidates, rather than relabels, a possibly partial target.
-     rawValid=false;draw(bodyScene,raw);commitOverlay(overlay);
+     rawValid=false;draw(FUSE&&!(layers[1]?.alpha>0)?bodyScene1:bodyScene,raw);commitOverlay(overlay);
     });
     pendingReplay.commit();pendingReplay=null;rawValid=true;bodyRevision++;drawCache.commitBody(snapshot,layers,renderTextures,bodyRevision);stats.bodyDraws++;stats.videoTexturesMax=Math.max(stats.videoTexturesMax,videos.size);completed=copyStamp(lastRequest);if(wasWaiting)stats.recoveries++;status='ready';reason=null;return surface;
    }catch(error){pendingReplay?.discard();return fail(error,'render');}
   },
   setFlash(alpha=0,color='miss'){assertLive();const next={alpha:Math.max(0,Math.min(1,alpha||0)),color:color==='hit'?'hit':'miss'};if(next.alpha!==flash.alpha||next.color!==flash.color)flashRevision++;flash=next;},
   setHudCanvas(canvas,revision){assertLive();hud=canvas;if(canvas){if(hudSource!==canvas){release(hudTexture);hudTexture=configure(own(new T.CanvasTexture(canvas)),true);hudSource=canvas;hudCanvasRevision=undefined;}if(!Number.isSafeInteger(revision)||revision<0||hudCanvasRevision!==revision){hudTexture.needsUpdate=true;hudRevision++;stats.hudUpdates++;}hudCanvasRevision=revision;}},
+  splitBase(){if(!FUSE||disposed||history.owned||!enabled||failed||!rawValid)return null;try{assertBoundary();}catch{return null;}if(outputValid&&drawCache.samePanel([bodyRevision,overlayRevision,hudRevision,hud,flashRevision,compositeRevision]))return null;panelValues(true);stats.fusedBase=(stats.fusedBase??0)+1;return {tex:raw.texture,overlayOn:panelUniforms.overlayOn.value===1,overlay:panelUniforms.overlay.value,rect:panelUniforms.overlayRect.value,hudOn:panelUniforms.hudOn.value===1,hud:panelUniforms.hud.value,flashA:panelUniforms.flashA.value,flashRGB:panelUniforms.flashRGB.value};},
   compose(){if(history.owned)return composeHistory();assertLive();if(!rawValid||failed)return null;try{assertBoundary();const panelKey=()=>[bodyRevision,overlayRevision,hudRevision,hud,flashRevision,compositeRevision];if(outputValid&&drawCache.samePanel(panelKey())){panelReuses++;return output.texture;}withRendererState(T,r,()=>{panelValues(true);outputValid=false;draw(panelScene,output);});outputValid=true;compositeRevision++;drawCache.commitPanel(panelKey());stats.composites++;return output.texture;}catch(error){return fail(error,'compose');}},
   rawCanvas(reasonValue='raw-capture'){assertLive();return history.owned?historyRawCanvas():rawCanvas(reasonValue);},
   materializeTo({panelCtx=null,heldCtx=null,reason:reasonValue='boundary'}={}){assertLive();if(history.owned)return materializeHistoryTo({panelCtx,heldCtx,includeBridge:true,reason:reasonValue});return replay.materializeTo({panelCtx,heldCtx,flash});

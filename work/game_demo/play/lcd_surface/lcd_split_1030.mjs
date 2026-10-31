@@ -13,15 +13,34 @@ function splitUniforms(T) {
   const u = { uSplit: { value: 0 }, uCv: { value: new T.Vector2(CANVAS_W, CANVAS_H) }, uLM: { value: Array.from({ length: SPLIT_N }, () => new T.Matrix3()) }, uLP: { value: Array.from({ length: SPLIT_N }, () => new T.Vector4()) } };
   for (let i = 0; i < SPLIT_N; i++) u['uLt' + i] = { value: dummy };
   u.__dummy = dummy;
+  // 10/31 パネルの合成を重ね合わせの最下層に取り込む（?lcdfuse=0 で従来）。層 0 の texture を映像の生の絵(raw)として読み、窓の位置への配置・overlay・HUD・フラッシュを式で足す。
+  u.uFuse = { value: 0 }; u.uFOv = { value: new T.Vector4() }; u.uFRect = { value: new T.Vector4() }; u.uFFlash = { value: new T.Vector3() }; u.uFOverlay = { value: dummy }; u.uFHud = { value: dummy };
   return u;
 }
 
+// video_gpu_history の VIDEO_PANEL_FRAGMENT と同じ式（窓 (34,28) 1152x1268 に raw、overlay は screen 合成、フラッシュ、HUD (690,130) 496x410）。
+// 従来は 1240x1510 の 8bit の面に書いてから層 0 として読んでいたので、書いたときの 8bit への丸めを floor(c*255+.5)/255 で同じにする。
+const FUSE_FN = `
+vec3 fusedBase(vec2 p) {
+  vec2 s = (p - vec2(34., 28.)) / vec2(1152., 1268.);
+  vec3 c = vec3(0.);
+  if (all(greaterThanEqual(s, vec2(0.))) && all(lessThan(s, vec2(1.)))) {
+    c = texture2D(uLt0, vec2(s.x, 1. - s.y)).rgb;
+    vec2 u = (p - vec2(34., 28.) - uFRect.xy) / uFRect.zw;
+    if (uFOv.x > .5 && all(greaterThanEqual(u, vec2(0.))) && all(lessThan(u, vec2(1.)))) { vec4 o = texture2D(uFOverlay, vec2(u.x, 1. - u.y)); c += o.rgb * o.a * (vec3(1.) - c); }
+    c = mix(c, uFFlash, uFOv.z);
+  }
+  vec2 h = (p - vec2(690., 130.)) / vec2(496., 410.);
+  if (uFOv.y > .5 && all(greaterThanEqual(h, vec2(0.))) && all(lessThan(h, vec2(1.)))) { vec4 t = texture2D(uFHud, vec2(h.x, 1. - h.y)); c = mix(c, t.rgb, t.a); }
+  return floor(clamp(c, 0., 1.) * 255. + .5) / 255.;
+}`;
 function splitShaderChunks(front = false) {
-  const decl = 'uniform float uSplit; uniform vec2 uCv; uniform mat3 uLM[' + SPLIT_N + ']; uniform vec4 uLP[' + SPLIT_N + ']; ' + Array.from({ length: SPLIT_N }, (_, i) => 'uniform sampler2D uLt' + i + ';').join(' ');
+  const decl = 'uniform float uSplit; uniform vec2 uCv; uniform mat3 uLM[' + SPLIT_N + ']; uniform vec4 uLP[' + SPLIT_N + ']; uniform float uFuse; uniform vec4 uFOv, uFRect; uniform vec3 uFFlash; uniform sampler2D uFOverlay, uFHud; ' + Array.from({ length: SPLIT_N }, (_, i) => 'uniform sampler2D uLt' + i + ';').join(' ') + FUSE_FN;
+  const SAMPLE = (i) => i === 0 ? `uFuse > .5 ? vec4(fusedBase(q.xy), 1.) : texture2D(uLt0, vec2(q.x / uLP[0].z, 1.0 - q.y / uLP[0].w))` : `texture2D(uLt${i}, vec2(q.x / uLP[${i}].z, 1.0 - q.y / uLP[${i}].w))`;
   const body = Array.from({ length: SPLIT_N }, (_, i) => `
         { vec3 q = uLM[${i}] * vec3(p, 1.0);
           if (uLP[${i}].x > 0.0 && q.x >= 0.0 && q.y >= 0.0 && q.x <= uLP[${i}].z && q.y <= uLP[${i}].w) {
-            vec4 s = texture2D(uLt${i}, vec2(q.x / uLP[${i}].z, 1.0 - q.y / uLP[${i}].w));
+            vec4 s = ${SAMPLE(i)};
             if (uLP[${i}].y > 0.5) col += s.rgb * uLP[${i}].x; else col = col * (1.0 - s.a * uLP[${i}].x) + s.rgb * uLP[${i}].x;
           } }`).join('\n');
   // 10/31 上の層から順に重ねる版（?splitfront=0 で従来）：下の層から重ねる式 col = col*(1-a)+c は、上から見ると
@@ -31,7 +50,7 @@ function splitShaderChunks(front = false) {
     const blocks = Array.from({ length: SPLIT_N }, (_, k) => { const i = SPLIT_N - 1 - k; return `
         { vec3 q = uLM[${i}] * vec3(p, 1.0);
           if (uLP[${i}].x > 0.0 && q.x >= 0.0 && q.y >= 0.0 && q.x <= uLP[${i}].z && q.y <= uLP[${i}].w) {
-            vec4 s = texture2D(uLt${i}, vec2(q.x / uLP[${i}].z, 1.0 - q.y / uLP[${i}].w));
+            vec4 s = ${SAMPLE(i)};
             col += s.rgb * uLP[${i}].x * T;
             if (uLP[${i}].y <= 0.5) { T *= 1.0 - s.a * uLP[${i}].x; if (T <= 0.0) return min(col, vec3(1.0)); }
           } }`; }).join('\n');
@@ -46,6 +65,11 @@ function splitShaderChunks(front = false) {
 function setSplitLayers(u, layers) {
   if (!layers) { u.uSplit.value = 0; for (let i = 0; i < SPLIT_N; i++) { u.uLP.value[i].set(0, 0, 1, 1); u['uLt' + i].value = u.__dummy; } return; }
   u.uSplit.value = 1;
+  const fz = layers[0]?.fuse;
+  if (fz) {
+    u.uFuse.value = 1; u.uFOv.value.set(fz.overlayOn ? 1 : 0, fz.hudOn ? 1 : 0, fz.flashA ?? 0, 0); u.uFRect.value.copy(fz.rect); u.uFFlash.value.copy(fz.flashRGB);
+    u.uFOverlay.value = fz.overlay ?? u.__dummy; u.uFHud.value = fz.hud ?? u.__dummy;
+  } else u.uFuse.value = 0;
   for (let i = 0; i < SPLIT_N; i++) {
     const L = layers[i];
     if (!L) { u.uLP.value[i].set(0, 0, 1, 1); u['uLt' + i].value = u.__dummy; continue; }
@@ -80,10 +104,12 @@ const SPLIT_SKIP = splitParam('splitskip');
 // 10/31 試験：?splitalt=1 は低性能時（照明の半頻度に入った／画質の段が low 以下）だけ、液晶の層の合成を 2 フレームに 1 回にする（動く層は 30Hz 更新）。
 //  ?splitalt=2 は性能に関係なく常にそうする（確認用）。既定は無効。層の数・texture の id が変わったとき（画面の切り替わり）は省かず描く。
 const SPLIT_ALT = splitParam('splitalt'), SPLIT_FRONT = splitParam('splitfront') !== '0';
+const SPLIT_FUSE = splitParam('lcdfuse');   // '0' で従来、'check' は新旧を両方描いて読み比べる（検証用）
 const lowPerf = () => { const q = globalThis.window?.__prebakeRelight?.quality; return !!q && (q.lightHalf || q.index >= 2); };
 export function createSplitCompositor(T, renderer, opts = {}) {
   const front = opts.front ?? SPLIT_FRONT, altMode = opts.alt ?? SPLIT_ALT;
   const u = splitUniforms(T), chunks = splitShaderChunks(front);
+  const fuseOK = SPLIT_FUSE !== '0' && (renderer.capabilities?.maxTextures ?? 16) >= 15;   // 層 12 + overlay + HUD = 14 枚（WebGL の最小は 16）
   const skipMode = SPLIT_SKIP === '0' ? 'off' : SPLIT_SKIP === 'check' ? 'check' : 'on';
   const stats = { composed: 0, skipped: 0, checked: 0, mismatch: 0, mode: skipMode, front, alt: altMode ?? 'off', altSkipped: 0, stepN: 0, stepSum: 0, stepMax: 0, diffAt: {} };   // diffAt: 変化した項目の番号（1 + 13*層 + 0:id 1:version 2:source.version 3:alpha 4:add 5:w 6:h 7:rot 8:sc 9:ax 10:ay 11:x 12:y）の回数
   if (typeof window !== 'undefined') window.__splitSkipStats = stats;
@@ -127,7 +153,8 @@ export function createSplitCompositor(T, renderer, opts = {}) {
     } catch (e) { stats.checkError = String(e?.message ?? e); }
   };
   return {
-    stats,
+    stats, fuseOK, fuseMode: SPLIT_FUSE ?? 'on',
+    readBack: () => readTarget(),
     texture: target.texture,
     compose(layers) {
       if (disposed || !layers) return null;

@@ -193,7 +193,7 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
   };
   // LCD板: 最初のフレームで中身ができてから作る
   lcd?.attractSurface?.connectGpu({THREE,renderer:hr.renderer});
-  let plate = null, splitComp = null, warmFrames = 0, last = null,uploadCanvas=null,uploadTexture=null,uploadRevision;
+  let plate = null, splitComp = null, splitRef = null, warmFrames = 0, last = null,uploadCanvas=null,uploadTexture=null,uploadRevision;
   const api = {
     get BL() { return BL; },
     get digitsShown() { return digitsShown; },
@@ -232,12 +232,33 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
         }
         const gpu=lcd?.gpuPanelSource,covered=((choice?.active||choice?.holding)&&gpu?.owner!=='choice')||lcd?.attractSurface?.active||(lcd?.finalResultSurface?.active&&gpu?.owner!=='final-result')||lcd?.timeupSurface?.active;
         if(gpu&&!covered){
+          const fl=!lcd?.displayRecoveryActive&&!lcd?.splitBroken?((h,f)=>h||f?[...(h??[]),...(f??[])]:null)(lcd?.jpHud?.splitLayers?.(),lcd?.firstTimer?.splitLayers?.()):null;   // JPチャンスの札・焦り(jp_hud_1031)＋初見向けの重ね描き
+          let fusedRef=null;
+          // 10/31 パネル（raw＋overlay＋HUD＋フラッシュ）の面を描かず、重ね合わせの最下層の式として取り込む（描く面が 1 枚減る）。?lcdfuse=0 で従来、?lcdfuse=check は新旧を両方描いて読み比べる。
+          //  位置が整数の平行移動だけ（小数だと 1 画素の補間の縁が変わるので従来の経路）、変わっていないパネルは出力をそのまま使う（splitBase が null）。
+          if(fl&&typeof gpu.backend.splitBase==='function'){
+            try{
+              const sc=(splitComp??=createSplitCompositor(THREE,hr.renderer));
+              if(sc.fuseOK){
+                const xf={...(lcd?.jpStart?.baseXform?.()??null),...(lcd?.jpHud?.baseXform?.()??null)};
+                if(Number.isInteger(xf.x??0)&&Number.isInteger(xf.y??0)&&!xf.rot&&(xf.sc??1)===1){
+                  const base=gpu.backend.splitBase();
+                  if(base){
+                    const t2=sc.compose([{tex:base.tex,fuse:base,w:1240,h:1510,ax:0,ay:0,x:0,y:0,rot:0,sc:1,alpha:1,add:false,...xf},...fl]);
+                    if(t2){
+                      if(sc.fuseMode!=='check'){window.__ftSplitTexture=t2;plate.mat.uniforms.uT.value=t2;gpu.published=true;uploadRevision=undefined;return last;}
+                      fusedRef={a:sc.readBack(),xf};
+                    }
+                  }
+                }
+              }
+            }catch(e){lcd.splitBroken=true;console.warn('[lcdsplit] パネルの取り込みに失敗。従来へ戻します',e);}
+          }
           const texture=gpu.backend.compose();
           if(texture){
             let outTex=texture;
             {   // 初見向けの重ね描き(ナイス！等)は、GPU の映像の上に小さい層で重ねる(液晶 canvas へ落とさない)。?ftsplit=0 で従来
-              const fl=!lcd?.displayRecoveryActive&&!lcd?.splitBroken?((h,f)=>h||f?[...(h??[]),...(f??[])]:null)(lcd?.jpHud?.splitLayers?.(),lcd?.firstTimer?.splitLayers?.()):null;   // JPチャンスの札・焦り(jp_hud_1031)＋初見向けの重ね描き
-              if(fl){try{const t2=(splitComp??=createSplitCompositor(THREE,hr.renderer)).compose([{tex:texture,w:1240,h:1510,ax:0,ay:0,x:0,y:0,rot:0,sc:1,alpha:1,add:false,...(lcd?.jpStart?.baseXform?.()??null),...(lcd?.jpHud?.baseXform?.()??null)},...fl]);if(t2){outTex=t2;window.__ftSplitTexture=t2;}}catch(e){lcd.splitBroken=true;console.warn('[lcdsplit] 重ね描きの合成に失敗。従来へ戻します',e);}}
+              if(fl){try{const t2=(splitComp??=createSplitCompositor(THREE,hr.renderer)).compose([{tex:texture,w:1240,h:1510,ax:0,ay:0,x:0,y:0,rot:0,sc:1,alpha:1,add:false,...(lcd?.jpStart?.baseXform?.()??null),...(lcd?.jpHud?.baseXform?.()??null)},...fl]);if(t2){outTex=t2;window.__ftSplitTexture=t2;if(fusedRef){const b=splitComp.readBack(),a=fusedRef.a,S=(window.__lcdFuseStats??={n:0,bad:0,gt1:0,maxd:0,px:0});S.n++;for(let i=0;i<a.length;i++){const d=Math.abs(a[i]-b[i]);if(d){S.bad++;if(d>1)S.gt1++;if(d>S.maxd)S.maxd=d;}}S.px+=a.length;}}}catch(e){lcd.splitBroken=true;console.warn('[lcdsplit] 重ね描きの合成に失敗。従来へ戻します',e);}}
             }
             plate.mat.uniforms.uT.value=outTex;gpu.published=true;uploadRevision=undefined;return last;
           }
