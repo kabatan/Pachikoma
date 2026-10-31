@@ -243,17 +243,22 @@ void main(){
     if(count){selPI.clearUpdateRanges();selPW.clearUpdateRanges();selPI.addUpdateRange(0,count*3);selPW.addUpdateRange(0,count*3);selPI.needsUpdate=selPW.needsUpdate=true;}
   }
   if(renderLite||dispFit){ballMaterial.fragmentShader='uniform vec2 uPBK;\n'+ballMaterial.fragmentShader.replaceAll('gl_FragCoord','vec4(gl_FragCoord.xy*uPBK,gl_FragCoord.zw)');ballMaterial.uniforms.uPBK=uPBK;}
+  // 11/1 最適化(内蔵GPU向け)：液晶パネルの画素ごとの s2l(pow 3回＝超越関数 6 個)を、256 点の表の読み(線形補間つき 3 回)に。表は s2l をそのまま 8 ビットの値で並べたもので、補間の誤差は 1e-5 台。
+  //  既定は従来の pow（5090 では差が出ず、サンプラーが 15→16 個で下限ぎりぎりになるため）。?s2llut=1 で表を使う
+  const S2LLUT=pq.get('s2llut')==='1'&&(r.capabilities?.maxTextures??16)>=16;let s2lTex=null;
+  if(S2LLUT){const a=new Uint16Array(256);for(let i=0;i<256;i++){const c=i/255,l=c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);a[i]=THREE.DataUtils.toHalfFloat(l);}
+    s2lTex=new THREE.DataTexture(a,256,1,THREE.RedFormat,THREE.HalfFloatType);s2lTex.minFilter=s2lTex.magFilter=THREE.LinearFilter;s2lTex.wrapS=s2lTex.wrapT=THREE.ClampToEdgeWrapping;s2lTex.generateMipmaps=false;s2lTex.needsUpdate=true;}
   const extra={uPBBack:{value:back.texture},uPBFront:{value:front.texture},uPBFields:{value:fields.texture},uPBFrame:{value:linear},uPBFrameL:{value:frameF?.texture??null},uPBTau:hr.composeMat.uniforms.uTau,
-    uPBLCD:{value:null},uPBRect:{value:new THREE.Vector4()},uPBPanel:{value:new THREE.Vector4()},uPBGain:{value:1},uPBLCDOn:{value:0}};
+    uPBLCD:{value:null},...(S2LLUT?{uPBS2L:{value:s2lTex}}:{}),uPBRect:{value:new THREE.Vector4()},uPBPanel:{value:new THREE.Vector4()},uPBGain:{value:1},uPBLCDOn:{value:0}};
   const load=`
 uniform sampler2D uPBBack,uPBFront,uPBTau,uPBLCD;
 uniform highp sampler2DArray uPBFields,uPBFrame;uniform sampler2D uPBFrameL;
 uniform vec4 uPBRect,uPBPanel;uniform float uPBGain;uniform int uPBLCDOn;
-vec4 prebakeC(ivec2 p){
+${S2LLUT?'uniform sampler2D uPBS2L;\nvec3 s2lT(vec3 c){c=clamp(c,0.,1.)*(255./256.)+.5/256.;return vec3(texture(uPBS2L,vec2(c.x,.5)).r,texture(uPBS2L,vec2(c.y,.5)).r,texture(uPBS2L,vec2(c.z,.5)).r);}\n':''}vec4 prebakeC(ivec2 p){
  vec2 uv=(vec2(p)+.5)/vec2(1440.,2560.),px=vec2(gl_FragCoord.x,2560.-gl_FragCoord.y);
  vec4 d=texelFetch(uD,p,0);vec3 bg=texture(uPBBack,uv).rgb;
  if(uPBLCDOn==1&&all(greaterThanEqual(px,uPBPanel.xy))&&all(lessThan(px,uPBPanel.zw))){
-  vec2 q=clamp((px-uPBRect.xy)/uPBRect.zw,0.,1.);bg+=s2l(texture(uPBLCD,vec2(q.x,1.-q.y)).rgb)*uPBGain;
+  vec2 q=clamp((px-uPBRect.xy)/uPBRect.zw,0.,1.);bg+=${S2LLUT?'s2lT':'s2l'}(texture(uPBLCD,vec2(q.x,1.-q.y)).rgb)*uPBGain;
  }
  vec3 tau=texelFetch(uPBTau,ivec2(p.x,2559-p.y),0).rgb;
  float a=1.-d.a;
@@ -411,21 +416,45 @@ vec4 prebakeC(ivec2 p){`);
   //  （一時的な重さ＝映像の読み込み・演出の切替・連打の山では下げない）。下げた直後の見直しまでの待ちも 0.7 秒から 1.5 秒に延ばし、
   //  下げた直後の揺れた区間で戻し・次の段を決めない。起動直後（8 秒まで）は従来どおり 1 区間で下げる。
   const qHold=pq.get('qualityhold')!=='0';
+  // 11/1 4fps 未満の機械でも降りる(?qualityslow=0 で従来)：従来は 1 コマが 250ms を超えると「一時的な止まり」として丸ごと無視していたので、
+  //  ずっと 250ms を超える機械（4fps 未満）では判定が一度も進まず、降りなかった。①250ms を超えるコマが 5 コマ続き、かつ合わせて 2 秒以上たち、
+  //  起動が終わっている（__ready）ときだけ「極端に遅い」と見て 1 段降りる（読み込みの一時的な止まり＝1〜数コマでは降りない。間に 250ms 以内のコマが
+  //  1 つでも入れば数え直し）。主スレッドの処理が主因（直前のコマの CPU 時間が間隔の 75% 超）なら降りない。降りたあと 2.5 秒は見直さない。
+  //  ②窓の長さは 3 秒だが、コマが遅いと数コマで 3 秒に届かない（上限 50ms で数える）ので、実時間が 3 秒たち 3 コマ以上あれば窓を閉じる。
+  const SLOWQ=pq.get('qualityslow')!=='0';
+  function slowFrame(now,dt){
+    if(!SLOWQ||dt>=4000||!globalThis.window?.__ready){quality.slowRun=0;quality.slowSum=0;return;}
+    quality.slowRun=(quality.slowRun||0)+1;quality.slowSum=(quality.slowSum||0)+dt;
+    if(quality.slowRun<5||quality.slowSum<2000)return;
+    quality.slowRun=0;quality.slowSum=0;
+    if(quality.guard&&quality.locked)return;
+    const cpu=globalThis.window?.__play?.lastTiming?.totalMs??0;
+    if(cpu>.75*dt){quality.cpuBound++;return;}
+    if(quality.index>=TIERS.length-1)return;
+    const wasHalf=quality.lightHalf;if(halfBake&&!halfBakeForce)quality.lightHalf=true;
+    quality.index=nextIdx(quality.index);const t=TIERS[quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
+    quality.history.push({at:Math.round(now),meanMs:Math.round(dt),cpuMs:+cpu.toFixed(2),to:t.name,slow:true,halfbake:!wasHalf&&quality.lightHalf});
+    quality.since=now+2500;quality.probe=null;quality.sum=0;quality.cpu=0;quality.n=0;quality.real=0;quality.sumR=0;
+  }
   function qualityTick(){
     if(!quality.auto)return;
     const now=performance.now();
     if(!quality.startedAt){quality.startedAt=now;quality.last=now;quality.since=now+1500;return;}
     const dt=now-quality.last;quality.last=now;
-    if(now<quality.since||dt>250)return;
-    quality.sum+=Math.min(dt,50);quality.cpu+=Math.min(globalThis.window?.__play?.lastTiming?.totalMs??0,50);quality.n++;
+    if(now<quality.since)return;
+    if(dt>250){slowFrame(now,dt);return;}
+    quality.slowRun=0;quality.slowSum=0;
+    quality.sum+=Math.min(dt,50);quality.real=(quality.real||0)+dt;quality.sumR=(quality.sumR||0)+Math.min(dt,250);quality.cpu+=Math.min(globalThis.window?.__play?.lastTiming?.totalMs??0,50);quality.n++;
     const windowMs=quality.history.length||now-quality.startedAt>6000?3000:2500;
-    if(quality.sum<windowMs)return;
-    const mean=quality.sum/quality.n,cpu=quality.cpu/quality.n;quality.sum=0;quality.cpu=0;quality.n=0;
+    if(quality.sum<windowMs&&!(SLOWQ&&quality.real>=windowMs&&quality.n>=3))return;
+    const mean=quality.sum/quality.n,cpu=quality.cpu/quality.n,meanR=(quality.sumR||0)/quality.n;quality.sum=0;quality.cpu=0;quality.n=0;quality.real=0;quality.sumR=0;
     const limit=qLimitTest||(now-quality.startedAt<8000?18.5:20);   // 起動直後は 54fps 未満、その後は 50fps 未満で一段下げる
     // 遅れの主因が主スレッドの処理（物理・液晶の CPU）なら、画質を下げても速くならないので下げない
     if(quality.guard&&quality.probe){
       const pr=quality.probe;
-      if(mean>limit&&mean>pr.meanMs*.93){
+      // 平均を 50ms で頭打ちにしているので、45ms 以上（約 20fps 未満）では頭打ちの前の平均（250ms まで）で「速くなったか」を比べる（?qualityslow=0 で従来）
+      const noGain=SLOWQ&&mean>=45&&pr.meanR>0?meanR>pr.meanR*.93:mean>pr.meanMs*.93;
+      if(mean>limit&&noGain){
         if(TIERS[quality.index].scale===TIERS[pr.from].scale&&quality.index<TIERS.length-1){   // まだ解像度が同じ：次の段も試す
           quality.index=nextIdx(quality.index);const t=TIERS[quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
           quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name,probe:true});quality.since=now+(qHold?1500:700);return;
@@ -447,7 +476,7 @@ vec4 prebakeC(ivec2 p){`);
     if(mean>limit&&quality.index<TIERS.length-1){
       const prevIdx=quality.index;quality.index=nextIdx(prevIdx);const t=TIERS[quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
       quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name});quality.since=now+(qHold?1500:700);
-      if(quality.guard)quality.probe={from:prevIdx,meanMs:mean};
+      if(quality.guard)quality.probe={from:prevIdx,meanMs:mean,meanR};
     }
   }
   // 映る大きさ：canvas の CSS の箱（回転前の大きさ）× devicePixelRatio、1440×2560 が上限。大きさが 0.2 秒落ち着いてから切り替える。
