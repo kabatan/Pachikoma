@@ -13,7 +13,7 @@ import { chainWhyFacts, chainWhyLineId, chainWhyOn } from './choice_why_1101.mjs
 const PX = 34, PY = 28, W = 1152, GROUND = 1262, CELL = 6, MG = 8 * CELL, BROWN = '#30180a', GOLD = '#f0b840', CREAM = '#fff6de';
 const TIP_Y = 1176;   // しっぽの先（穴の少し上。穴のLEDを隠さない）
 const ASK_SEC = 3, ASK_GATE = 1.5, ASK_MAX = 2, EXPRS = ['idle', 'joy', 'big_joy', 'surprise', 'oshii', 'sad', 'cheer', 'panic'];
-const LINE_EXPR = { ch16_a_rank: 'big_joy', ch16_a_gain: 'big_joy', ch16_b_rank: 'joy', ch16_b_gain: 'joy', ch16n_a_rank: 'joy', ch16n_a_gain: 'joy', ch16n_b_rank: 'joy', ch16n_b_gain: 'joy', time_start: 'surprise', jp8_wow: 'surprise', jp8_come: 'big_joy', jp8_last: 'joy', jp8_award: 'big_joy', jp8_hole: 'cheer', jp8_free: 'joy', jp8_go: 'cheer', jp8s: 'cheer', ch15_how: 'cheer', ch15s: 'cheer', jp9_go: 'cheer', jp9_good: 'big_joy', jp9_slow: 'cheer', jp9_half: 'cheer', jp9_close: 'panic', jp9_oshii: 'oshii', rl11_how: 'cheer', rl11_short: 'cheer', jp12_clock: 'cheer', jp12_noclock: 'oshii', ch13_next: 'joy', ch13_a: 'big_joy', ch13_safe: 'joy', ch13_pick: 'idle', ch13_noclock: 'surprise', ch14_rate: 'joy', ch14_again: 'panic', ch14_keep: 'joy', ask_jp: 'idle', ask_chain: 'idle', ch19_t1: 'big_joy', ch19_t2: 'joy', ch19_c1: 'big_joy', ch19_c2: 'joy', add_a1: 'joy', add_a1nb: 'joy', add_a2: 'big_joy', add_a3: 'cheer', add_a4: 'idle', add_nudge: 'oshii' };
+const LINE_EXPR = { ch16_a_rank: 'big_joy', ch16_a_gain: 'big_joy', ch16_b_rank: 'joy', ch16_b_gain: 'joy', ch16n_a_rank: 'joy', ch16n_a_gain: 'joy', ch16n_b_rank: 'joy', ch16n_b_gain: 'joy', time_start: 'surprise', jp8_wow: 'surprise', jp8_come: 'big_joy', jp8_last: 'joy', jp8_award: 'big_joy', jp8_hole: 'cheer', jp8_free: 'joy', jp8_go: 'cheer', jp8s: 'cheer', ch15_how: 'cheer', ch15s: 'cheer', jp9_go: 'cheer', jp9_good: 'big_joy', jp9_slow: 'cheer', jp9_half: 'cheer', jp9_close: 'panic', jp9_oshii: 'oshii', rl11_how: 'cheer', rl11_short: 'cheer', jp12_clock: 'cheer', jp12_noclock: 'oshii', ch13_next: 'joy', ch13_a: 'big_joy', ch13_safe: 'joy', ch13_pick: 'idle', ch13_noclock: 'surprise', ch14_rate: 'joy', ch14_again: 'panic', ch14_keep: 'joy', ask_jp: 'idle', ask_chain: 'idle', ch19_t1: 'big_joy', ch19_t1b: 'joy', ch19_t2: 'joy', ch19_c1: 'big_joy', ch19_c2: 'joy', add_a1: 'joy', add_a1nb: 'joy', add_a2: 'big_joy', add_a3: 'cheer', add_a4: 'idle', add_nudge: 'oshii' };
 const JP_SEC = 22, CH_SEC = 16, GRACE = 8, SKIP_GAP = 0.4, SKIP_AGE = 0.8;
 const JP_ASK = new URLSearchParams(globalThis.location?.search ?? '').get('jpask') === '1';
 const UPA_N = 12, UPA_FOOT = 1170, ARROW_W = 200, ARROW_H = 300, ARROW_AT = 0.35, HOLE_LINE = /^(jp8_hole|jp8s|ch15_how|ch15s)$/, CUT = 'chain_announce_cutin', CUT_SEC = 1.7;   // 説明の主役のうぱは大きく。穴を指す文は穴の横へ歩いて、大きな矢印で実際の穴を指す
@@ -166,7 +166,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
   const endSeq = (why) => { F.seq = null; F.cur = null; const g = game(); g.endJpTutorial?.(); const clockLost = F.clockAtTut === null ? null : +(F.clockAtTut - g.secondsLeft).toFixed(3); F.log.push({ t: +F.t.toFixed(2), id: `end:${why}`, sec: +(F.t - F.tutAt).toFixed(2), clockLost, meterLeft: g.meterStatus?.timeLeft }); log('upa:flow-end', { why, clockLost }); };
 
   /** 11/01 監督：継続の選択画面は1文だけ。チケットが要る：1回目「チケット1まいで もう一度 大当たりチャンス！」／2回目以降「…継続チャンス！」。チケットが要らない（時計が残る・2回目以降）：「もう一度 継続チャンス！」 */
-  const chainSeq = (stage, add) => (add ? [stage > 0 ? 'ch19_t2' : 'ch19_t1'] : [stage > 0 ? 'ch19_c2' : 'ch19_c1']);
+  const chainSeq = (stage, add) => (add ? (stage > 0 ? ['ch19_t2'] : ['ch19_t1', 'ch19_t1b']) : (stage > 0 ? ['ch19_c2'] : ['ch19_c1', 'ch19_t1b']));   // 11/01 監督：1回目は「…大当たりチャンス！」→「もっと せいこうしやすい！」を順送り。選択画面の吹き出しは選ぶまで残さず消す（約3.5秒／順送りは合計約5秒）
   const addSeq = () => {   // 時間切れの追加：いくつ増える→続きが遊べる→続ける後（スタッフにチケット）→終わる後（結果）。2回目以降は短く
     const first = !F.heard.add; F.heard.add = true; const a1 = (game().extraLoanBallsNow ?? 1) > 0 ? 'add_a1' : 'add_a1nb';
     return first ? [a1, 'add_a2', 'add_a3', 'add_a4'] : [a1, 'add_a3'];
@@ -243,7 +243,6 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
         F.chKey = key; F.ch = { t: 0 }; F.tutAt = F.t; const stage = g.jackpotChain.stage ?? 0;
         const say2 = stage > 0 ? ['ch14_again'] : ['ch13_a'], why = chainWhyOn() ? chainWhyLineId(chainWhyFacts(g), { noclock: !!g.chainNeedsAdd }) : null;   // 11/01 継続の嬉しさ（H 規則のとき。事実は choice_why_1101）
         const ex = CHAIN_EXPLAIN && R.meta.lines.ch19_t1 && !(why && R.meta.lines[why]) ? chainSeq(stage, !!g.chainNeedsAdd) : null;
-        if (ex) F.ch.hold = true;
         startSeq(ex ?? (why && R.meta.lines[why] ? [why] : g.chainNeedsAdd ? [stage > 0 ? 'ch14_noclock' : 'ch13_noclock'] : say2));
       }
     }
