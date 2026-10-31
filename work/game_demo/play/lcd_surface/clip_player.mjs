@@ -8,6 +8,8 @@ export function drawClipSnapshot(snapshot,ctx,w,h) {
 // moving until the next first frame is decoded, then both move through a fade.
 export function createClipPlayer({base, files, onError, record = () => {}}) {
   const pool = [], queue = [], fadeSeconds = .12;
+  // 11/1 最適化：使い終わって止まった映像は、次に使われる前に先頭へ巻き戻しておく（始める時の seek で再生が約0.2秒遅れ、頭で落ちていた）。?jpprime=0 で従来
+  const PRIME = new URLSearchParams(globalThis.location?.search??'').get('jpprime')!=='0';
   let current = null, incoming = null, idleName = 'idle0', fade = 0, manual = false, seq = 0, clock = 0, generation = 0;
   const emit = (kind, data) => record({kind, at: clock, wall: performance.now(), ...data});
   function make() {
@@ -33,7 +35,7 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
   }
   function run(s) {if(s && !manual && s.ready && s.v.paused && !s.v.ended)s.v.play().catch(()=>{});}
   function start(s, request) {
-    incoming=s;incoming.time=0;incoming.v.currentTime=0;fade=0;
+    incoming=s;incoming.time=0;if(!(PRIME&&incoming.v.currentTime<=.001))incoming.v.currentTime=0;fade=0;   // 11/1 先頭にある映像は seek し直さない（?jpprime=0 で従来）
     run(incoming);emit('start',{name:s.name,waitMs:request?(performance.now()-request.wall):0,queue:queue.length});
   }
   function end(s,reason) {if(!s)return;s.v.pause();emit('end',{name:s.name,time:s.time,mediaTime:s.v.currentTime,reason});}
@@ -62,6 +64,7 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
         if(target){const s=load(target,!!req);if(s?.ready && s!==current){if(req)queue.shift();start(s,req);}else if(s?.failed){if(req)queue.shift();emit('error',{name:target});}}
       }
       if(hidden&&!manual){for(const s of [current,incoming])if(s&&!s.v.paused)s.v.pause();}else{run(current);run(incoming);}
+      if(PRIME&&!manual)for(const s of pool)if(s.ready&&s.name!==null&&s!==current&&s!==incoming&&(s.v.paused||s.v.ended)&&!s.v.seeking&&s.v.currentTime>.001){try{s.v.currentTime=0;}catch{}}
       if(current?.ready && current.v.readyState>=2)draw(current,1);
       if(incoming?.ready && !incoming.v.seeking && incoming.v.readyState>=2){
         // The decoder owns realtime. Do not skip a new clip's opening on a slow frame.
