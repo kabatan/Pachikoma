@@ -17,11 +17,16 @@ export function timePlanOld(search=globalThis.location?.search??''){return (new 
 //   ルーレットの重み 200=0.03%・500=100万分の0.03、賞 C80/B120/A155/S500。?tune1031=0 で 10/30 の値（70秒・80玉・点かない・45/85/150/400・追加無制限）に全部戻す。
 export const TUNE1031_OLD=Object.freeze({"PrizeThresholds":[0,45,85,150,400],"InitialSeconds":70,"LoanBalls":80,"MaxExtraCredits":null,"JackpotWeights":[750000,241000,5500,3498.8,1.2],"DuplicateSegments":[{"Until":0.35,"ResetWeights":[100,0,0,0],"HighLampDuplicateProtectionCount":0},{"Until":0.55,"ResetWeights":[100,0,0,0],"HighLampDuplicateProtectionCount":1},{"Until":0.75,"ResetWeights":[100,0,0,0],"HighLampDuplicateProtectionCount":2},{"Until":null,"ResetWeights":[100,0,0,0],"HighLampDuplicateProtectionCount":3}],"DuplicateSixthLampTeaseUntil":0.6,"DuplicateSixthLampTeasePlateau":0.4,"ExtraLoanWalletCap":null});
 export function tune1031Old(search=globalThis.location?.search??''){return new URLSearchParams(search).get('tune1031')==='0';}
+// 11/01 時間の調整・案C（監督承認「案Cをひとまず入れていいよ。ただ、チャンスは最小でも5秒」。work/game_tuning/clock_1101）: 持ち時間46秒、JPチャンスの秒・個数を JP開始時の残り時計に合わせる、
+//   継続成功で時計が3秒以下なら0、自動継続の開始で時計を18秒までに。?clocktune=0 で全部もとに戻す（50秒・表の固定値）。H の規則だけ（G には入らない）。?tune1031=0・?timeplan=old のときも入れない。
+export const CLOCK_TUNE=Object.freeze({InitialSeconds:46,ClockTune:Object.freeze({JpMinSeconds:5,JpMaxSeconds:20,JpMarginSeconds:3,Exponent:0.8,ThresholdMin:2,ThresholdMax:7,ChainSuccessZeroBelow:3,AutoChainCapSeconds:18})});
+export function clockTuneEnabled(search=globalThis.location?.search??''){return new URLSearchParams(search).get('clocktune')!=='0';}
 export async function loadPlayRules(path,readText){
  const text=await readText(path);let raw;
  try{raw=JSON.parse(text);}catch{return loadGRules(path,async()=>text);}
  if(raw.RuleVariant!=='H_20261029')return loadGRules(path,async()=>text);
  if(tune1031Old())Object.assign(raw,TUNE1031_OLD);
  if(timePlanOld())Object.assign(raw,TIMEPLAN_OLD);
+ if(clockTuneEnabled()&&!tune1031Old()&&!timePlanOld()&&!raw.ClockTune){raw.InitialSeconds=CLOCK_TUNE.InitialSeconds;raw.ClockTune={...CLOCK_TUNE.ClockTune};}
  try{return HRules.fromJson(raw);}catch(e){throw new Error(`規則JSON ${path}: ${e.message}`,{cause:e});}
 }

@@ -82,6 +82,12 @@ export class MedalRules extends GRules {
     // --- 追加（100円）の玉（10/31 監督決定）。null: 従来どおり毎回 ExtraLoanBalls。数値: 追加の時点で持ち玉がこの数以上なら、追加は時間だけ（玉は0）。
     //     撃たずに追加をくり返して持ち玉（＝賞）を積む抜け道を塞ぐ。最初の貸玉（開始）は対象外。
     this.ExtraLoanWalletCap = o.ExtraLoanWalletCap ?? null;
+    // --- 11/01 時間の調整（案C・監督承認）。null で無し（既定。?clocktune=0 や G では入らない）。入れるのは play/config_h_20261029.mjs の読み込み。
+    //   JPチャンスの制限時間を、JPが始まる時の残り時計 s に合わせる：T' = clamp(s − JpMeterIntroSeconds − JpMarginSeconds, JpMinSeconds, JpMaxSeconds)、
+    //   必要個数 K' = max(1, round(K × (T'/T)^Exponent))（T・K は穴ごとの表の値）。表示（メーター・HUD・うぱ）は meter の seconds/threshold を読むので自動でそろう。
+    //   保険1: 継続のルーレットが終わった時、残り時計が ChainSuccessZeroBelow 秒以下なら 0 にする（次の選択で時計が残る状態を作らない）。
+    //   保険2: 選択画面なしの自動継続（最初の継続）を始める時、残り時計を AutoChainCapSeconds 秒に抑える。
+    this.ClockTune = o.ClockTune ?? null;
     this.RuleVariant = 'H_20261029';
     this._hReady = true;
     this.validate();
@@ -503,6 +509,7 @@ export class MedalGame extends GGame {
     } else {
       chain = this.jackpotChain; chainBase = chain?.baseAward ?? 0;
       if (chain) { chain.pendingAward += award; chain.pendingDreamHit ||= award === 500; chain.stage++; chain.inChallenge = false; chain.choicePending = true; chainStage = chain.stage; }
+      { const ct = this.rules.ClockTune; if (ct && this.secondsLeft > 0 && this.secondsLeft <= ct.ChainSuccessZeroBelow) { this.clockTuneZeroed = (this.clockTuneZeroed ?? 0) + 1; this.secondsLeft = 0; } }   // 保険1
       this.chainSuccesses++;
     }
     this.successes++; this.bestAward = Math.max(this.bestAward, award);
@@ -565,9 +572,11 @@ export class MedalGame extends GGame {
         this._emit('chainAnnounce', { first, atRisk: first ? 0 : chain.pendingAward, rate: '2/3', seconds, stage: chain.stage });   // atRisk: 失敗したとき没収される額（継続で得た配当の積み増し。最初のJPの配当は残る）
       }
     } else if (r.ChainFirstAuto && this.phase === MedalPhase.ChainChoice && chain?.choicePending && chain.stage === 0 && !this._chainNeedsAddNow()) {
-      this.chooseChain(true);   // 告知なしでも最初は選択を出さない（追加が要るときは客が選ぶ）
+      this._clockTuneCapAuto(); this.chooseChain(true);   // 告知なしでも最初は選択を出さない（追加が要るときは客が選ぶ）
     }
   }
+  /** 保険2：選択画面なしの自動継続を始める時、残り時計を上限に抑える（次の選択で時計が残らないように）。 */
+  _clockTuneCapAuto() { const ct = this.rules.ClockTune; if (ct && this.secondsLeft > ct.AutoChainCapSeconds) { this.clockTuneCapped = (this.clockTuneCapped ?? 0) + 1; this.secondsLeft = ct.AutoChainCapSeconds; } }
   /** 時計0で継続に追加（100円）が要る状態か。この選択は客が決める（自動で継続・スタッフ待ちへ進めない）。 */
   _chainNeedsAddNow() { return !!this.rules.ChainContinueNeedsAddAtZero && this.secondsLeft <= 0; }
   /** 追加（チケット）が要る選択は財布を出す時間が要るので 30 秒（10/31 監督）。 */
@@ -579,7 +588,7 @@ export class MedalGame extends GGame {
       this.announceLeft = Math.max(0, this.announceLeft - seconds);
       if (this.announceLeft > 1e-9) return false;
       this.announceLeft = 0; this.choiceLeft = this._chainChoiceSeconds();
-      if (this._announceFirst && !this._chainNeedsAddNow()) return this.chooseChain(true);   // 10/30 監督: 追加（100円）が要る選択は自動で決めない。時計0なら最初でも選択画面
+      if (this._announceFirst && !this._chainNeedsAddNow()) { this._clockTuneCapAuto(); return this.chooseChain(true); }   // 10/30 監督: 追加（100円）が要る選択は自動で決めない。時計0なら最初でも選択画面
       return false;
     }
     if (this.phase === MedalPhase.ChainChoice && this._chainNeedsAddNow()) {   // 選択中に時計が0になった時も、チケットが要る時点から 30 秒
@@ -635,7 +644,16 @@ export class MedalGame extends GGame {
   }
   _startJpMeter() {
     const r = this.rules, targets = LANES.filter((d) => !this._lamps.has(d)), cfg = r.jpMeterFor(targets[0]);   // 残りは1穴。穴ごとの秒・しきい値
-    this._startMeter('jp', { targets, threshold: cfg.Threshold, seconds: cfg.Seconds, intro: r.JpMeterIntroSeconds });
+    const tuned = this._clockTunedJp(cfg);
+    this._startMeter('jp', { targets, threshold: tuned.Threshold, seconds: tuned.Seconds, intro: r.JpMeterIntroSeconds });
+  }
+  /** 案C：いまの残り時計に合わせたJPチャンスの秒・個数（ClockTune が無ければそのまま）。 */
+  _clockTunedJp(cfg) {
+    const ct = this.rules.ClockTune; if (!ct) return cfg;
+    const s = this.secondsLeft, T = Math.floor(Math.min(ct.JpMaxSeconds, Math.max(ct.JpMinSeconds, s - this.rules.JpMeterIntroSeconds - ct.JpMarginSeconds)) + 1e-9);   // 表示（○びょう）とそろうよう整数秒に切り下げ
+    const K = Math.min(ct.ThresholdMax ?? 99, Math.max(ct.ThresholdMin ?? 1, Math.round(cfg.Threshold * Math.pow(T / cfg.Seconds, ct.Exponent))));   // 個数の範囲は液晶の個数札（2〜7本）に合わせる
+    this.clockTuneLast = { clock: +s.toFixed(3), baseSeconds: cfg.Seconds, baseThreshold: cfg.Threshold, seconds: T, threshold: K };
+    return { Threshold: K, Seconds: T };
   }
   /** 賞。PrizeBasis='wallet' なら、終了（精算）の瞬間の持ち玉 wallet（払い出し待ち・継続の積み増しの確定分を含む。飛行中の玉は無い）だけで決める。
    *  500配当の確保（jackpotDreamHit）による S賞の上書きはしない。'earnings'（既定）は G と同じ従来の判定。 */
