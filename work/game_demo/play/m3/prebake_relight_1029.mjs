@@ -125,7 +125,11 @@ void main(){
   // 10/30 段式の画質（?quality=auto|high|medium|low|lower|lowest、既定 auto）。
   //  high＝元解像度・球MSAA4（従来の経路）／medium＝1.333・MSAA4／low＝1.333・MSAA2／lower＝1.6・MSAA2／lowest＝2・MSAA2。
   //  auto は medium から始め、起動直後とプレイ中の fps を見て下の段へだけ移る（上げない）。?renderscale= / ?ballmsaa= を指定するとその値で固定。
-  const TIERS=[{name:'high',scale:1,msaa:4},{name:'medium',scale:1.333,msaa:4},{name:'low',scale:1.333,msaa:2},{name:'lower',scale:1.6,msaa:2},{name:'lowest',scale:2,msaa:2}];
+  // 11/1 最適化：medium の球の MSAA を 4→2 に（等倍で見分けがつかない：輪郭の1画素が違うだけ。球パス −15%）。?ballmsaa=4 で従来（自動画質は有効のまま）。
+  //  medium と low が同じ（倍率・MSAA）になるので、自動で下げるときは low を飛ばして lower へ進む（?ballmsaa=4 のときは従来どおり low を通る）
+  const MSAA_MED=new URLSearchParams(globalThis.location?.search??'').get('ballmsaa')==='4'?4:2;
+  const TIERS=[{name:'high',scale:1,msaa:4},{name:'medium',scale:1.333,msaa:MSAA_MED},{name:'low',scale:1.333,msaa:2},{name:'lower',scale:1.6,msaa:2},{name:'lowest',scale:2,msaa:2}];
+  const nextIdx=i=>{let j=i+1;while(j<TIERS.length-1&&TIERS[j].scale===TIERS[i].scale&&TIERS[j].msaa===TIERS[i].msaa)j++;return j;};
   const qName=pq.get('quality')??'auto',msaaQ=pq.get('ballmsaa');
   const tierQ=TIERS.findIndex(t=>t.name===qName);
   const scaleArg=pq.has('renderscale')?Number(pq.get('renderscale')):tierQ>=0?TIERS[tierQ].scale:pq.get('renderlite')==='1'?2:pq.get('renderlite')==='0'?1:TIERS[1].scale;
@@ -152,7 +156,7 @@ void main(){
   // 10/30 F0/F4 の混ぜ（uK4・uGlass）が厳密に 0 か 1 のとき、2 枚読んで混ぜる代わりに片方だけ読む（?k4branch=0 で従来）。
   //  遊技中の約 3 割の時間は 1。条件は uniform なので画素ごとに分岐はばらけない。
   const k4Branch=pq.get('k4branch')!=='0';
-  const autoQuality=renderLite&&qName==='auto'&&!pq.has('renderscale')&&!pq.has('renderlite')&&!['0','2','4'].includes(msaaQ);
+  const autoQuality=renderLite&&qName==='auto'&&!pq.has('renderscale')&&!pq.has('renderlite')&&!['0','2'].includes(msaaQ);
   // 10/30 表示実寸描画（?dispfit=0 で従来）：球と最終合成を「画面に実際に映る画素数」（上限1440×2560）で描く。
   // 素材と座標は元の1440×2560のまま、表示の画素の中心（=ブラウザが縮小で読む位置）で読むので、映る画は同じ。
   const dispFit=!renderLite&&new URLSearchParams(globalThis.location?.search??'').get('dispfit')!=='0';
@@ -188,7 +192,7 @@ void main(){
   // 10/30 球の軽量化：倍率 1〜2 未満の合成でも球バッファの上の空き行を切り詰め（?ballcrop=0 で従来）、
   // 合成は球バッファを画素そのまま読む（同じ大きさなので補間なし）。?ballmsaa=0|2|4 で球の MSAA を選ぶ（既定は従来どおり）。
   const liteCrop=renderLite;
-  const msaaArg=msaaQ;let ballSamples=['0','2','4'].includes(msaaArg)?Number(msaaArg):tierQ>=0?TIERS[tierQ].msaa:renderScale>=2?2:hr.rtMain.samples;
+  const msaaArg=msaaQ;let ballSamples=['0','2','4'].includes(msaaArg)?Number(msaaArg):tierQ>=0?TIERS[tierQ].msaa:autoQuality?TIERS[1].msaa:renderScale>=2?2:hr.rtMain.samples;
   // 10/30 球バッファの深度は解決しない（?ballzskip=0 で従来）：MSAA の解決で色と一緒に深度も写していたが、
   // 解決後の深度はどこからも読まない。色の解決だけにする（画は同一、帯域が減る）。hr.rtMain（従来経路と共有）には触らない。
   const ballZSkip=pq.get('ballzskip')!=='0';
@@ -362,7 +366,7 @@ vec4 prebakeC(ivec2 p){`);
   let spare=null;const prepStats={prepared:0,hits:0,misses:0,steps:0,disposed:0,setLiteMs:[]};
   function prepareNext(){   // 次の段（今の段の 1 つ下）を用意する対象に決める
     if(!tierPrep||quality.index<0||quality.index>=TIERS.length-1)return;
-    const t=TIERS[quality.index+1],[w,h]=tierSize(t.scale);
+    const t=TIERS[nextIdx(quality.index)],[w,h]=tierSize(t.scale);
     if(w===RW&&h===RH&&t.msaa===ballSamples)return;
     if(spare&&spare.w===w&&spare.h===h&&spare.samples===t.msaa)return;
     dropSpare();spare={w,h,samples:t.msaa,stage:0,balls:null,crop:null,display:null};
@@ -423,7 +427,7 @@ vec4 prebakeC(ivec2 p){`);
       const pr=quality.probe;
       if(mean>limit&&mean>pr.meanMs*.93){
         if(TIERS[quality.index].scale===TIERS[pr.from].scale&&quality.index<TIERS.length-1){   // まだ解像度が同じ：次の段も試す
-          const t=TIERS[++quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
+          quality.index=nextIdx(quality.index);const t=TIERS[quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
           quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name,probe:true});quality.since=now+(qHold?1500:700);return;
         }
         quality.probe=null;quality.index=pr.from;const t=TIERS[pr.from];setLite(t.scale,t.msaa);quality.tier=t.name;quality.locked=true;quality.reverts++;
@@ -441,9 +445,9 @@ vec4 prebakeC(ivec2 p){`);
       quality.lightHalf=true;quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:'halfbake'});quality.since=now+(qHold?1500:700);prepareNext();return;
     }
     if(mean>limit&&quality.index<TIERS.length-1){
-      const t=TIERS[++quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
+      const prevIdx=quality.index;quality.index=nextIdx(prevIdx);const t=TIERS[quality.index];setLite(t.scale,t.msaa);quality.tier=t.name;
       quality.history.push({at:Math.round(now),meanMs:+mean.toFixed(2),cpuMs:+cpu.toFixed(2),to:t.name});quality.since=now+(qHold?1500:700);
-      if(quality.guard)quality.probe={from:quality.index-1,meanMs:mean};
+      if(quality.guard)quality.probe={from:prevIdx,meanMs:mean};
     }
   }
   // 映る大きさ：canvas の CSS の箱（回転前の大きさ）× devicePixelRatio、1440×2560 が上限。大きさが 0.2 秒落ち着いてから切り替える。
