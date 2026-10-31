@@ -105,6 +105,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const JP_HOLD_GPU = new URLSearchParams(globalThis.location?.search ?? '').get('jpholdgpu') !== '0';
   const digitsNow=()=>{let hit=false;const spy=new Proxy(function(){},{get(){hit=true;return spy;},apply(){hit=true;return spy;},set(){hit=true;return true;}});try{jp.drawDigits(spy);}catch{hit=true;}return hit;};   // 数字が出る場面か(何かを描こうとしたか)だけを見る
   const TIMEUP_COVER = new URLSearchParams(globalThis.location?.search ?? '').get('timeupcover') !== '0'; let coverKey = null;
+  // 11/1 最適化：最終結果(stage_common)が全面を覆っている間は、下の通常映像のデコードを止める(出て0.3秒後から。覆いが外れれば clip_player が再開)。?finalpause=0 で従来
+  const FINAL_PAUSE = new URLSearchParams(globalThis.location?.search ?? '').get('finalpause') !== '0'; let finalAt = -1;
   const attractPause = new URLSearchParams(globalThis.location?.search ?? '').get('attractpause') !== '0';
   let clock = 0, manual = false, shotOn = false, jpOwns = false, lastEvent = null;
   let mode = { id: 'attract', p: {}, at: 0, until: Infinity }, guard = null;
@@ -335,7 +337,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
       const attractHidden=attractPause&&this.attractSurface?.active===true&&['attract','title','howto'].includes(mode?.id);
       // 10/31 CPU軽量化：継続・スタッフ待ちの画面(timeup)が全面を覆っている間は、下の通常映像を止め、映像の絵が変わった時だけ hold へ写す(毎フレームの 1152x1268 drawImage を無くす)。?timeupcover=0 で従来
       const timeupCover=TIMEUP_COVER&&!videoEligible&&!coveredPaint&&this.timeupSurface?.active===true&&!manual;
-      const videoSnapshot=clips.frame(dt,videoEligible||coveredPaint||timeupCover?null:hold,W,H,attractHidden||timeupCover);
+      const finalCover=FINAL_PAUSE&&!manual&&this.finalResultSurface?.active===true;if(finalCover){if(finalAt<0)finalAt=clock;}else finalAt=-1;
+      const videoSnapshot=clips.frame(dt,videoEligible||coveredPaint||timeupCover?null:hold,W,H,attractHidden||timeupCover||finalCover&&clock-finalAt>=.3);
       if(timeupCover){const key=videoSnapshot.layers.map(l=>l.name+'|'+l.generation+'|'+l.alpha+'|'+l.time).join(';');if(key!==coverKey){coverKey=key;drawClipSnapshot(videoSnapshot,hold,W,H);}}else coverKey=null;
       shotOn = !!clips.shot || clips.pending > 0;
       // Keep the original pulse lifetime and render equations; only its target changes.

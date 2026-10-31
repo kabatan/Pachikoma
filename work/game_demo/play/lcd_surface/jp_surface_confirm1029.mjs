@@ -232,6 +232,8 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   };
   // 10/31 CPU軽量化：初回JPの導入(雷)と「扉の寄り」の最初で映像の読み込み・復号待ち(0.5〜2.7秒、黒く見えて時計は進む)が出ていた。
   //   雷・開き・チャンスの映像を、封印の差し替えが済んだ後の空き時間に専用スロットへ読み込んで復号しておき、同じファイルの場面名が来たら(巻き戻して)使い回す。?jppin=0 で従来
+  // 11/1 最適化：使い終わって止まった映像は、場面が来る前に先頭へ巻き戻しておく(場面が来た時の seek で再生が約0.2秒遅れ、頭で33msが2回落ちていた)。先頭にある映像は seek し直さない。?jpprime=0 で従来
+  const PRIME=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jpprime')!=='0';
   const filePinned=[];const PIN_ON=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jppin')!=='0';
   async function pinScenes(names){
     if(!PIN_ON)return [];const out=[];
@@ -252,9 +254,10 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     // 常駐の継続成功v4は、使われていない間に先頭へ巻き戻し、次回の最初のコマに前回の末尾を出さない。
     if(pinned?.pinned&&pinned.ready&&pinned!==current&&pinned!==visible&&pinned!==previous&&!pinned.v.seeking&&pinned.v.currentTime>.001){pinned.v.pause();pinned.v.currentTime=0;}
     for(const x of extraPinned)if(x.pinned&&x.ready&&x!==current&&x!==visible&&x!==previous&&!x.v.seeking&&x.v.currentTime>.001){x.v.pause();x.v.currentTime=0;}
+    if(PRIME)for(const s of slots)if(s.ready&&s.name!==null&&s!==current&&s!==visible&&s!==previous&&!s.v.seeking&&s.v.currentTime>.001&&(s.v.paused||s.v.ended)){try{s.v.pause();s.v.currentTime=0;}catch{}}
     if(!model.active){for(const s of slots)if(!s.v.paused)s.v.pause();return;}
     if(man.scenes[model.name]?.offer){if(serial!==model.serial){serial=model.serial;offer.begin(man.scenes[visible?.name]?.layered?palace.canvas:visible?.v);for(const s of slots)s.v.pause();current=null;previous=null;const d=chainTarget();reserve(`chain_jp_aim_d${d}`);reserve(`chain_fly_in_d${d}`);record('start',{name:model.name});log(model.name);}return;}
-    if(serial!==model.serial){current=reserve(model.name);if(!current)return;serial=model.serial;hole=null;if(current.ready)current.v.currentTime=0;record('request',{name:model.name});log(model.name);if(sResult())compositor?.prefetch(sResult(),sResult()==='confirm'?84:64);}
+    if(serial!==model.serial){current=reserve(model.name);if(!current)return;serial=model.serial;hole=null;if(current.ready&&!(PRIME&&current.v.currentTime<=.001&&!current.v.seeking))current.v.currentTime=0;record('request',{name:model.name});log(model.name);if(sResult())compositor?.prefetch(sResult(),sResult()==='confirm'?84:64);}
     const s=man.scenes[model.name];
     if(current?.ready&&model.delay<=0){
       if(visible!==current){previous=visible;visible=current;fade=previous?0:1;record('start',{name:current.name});}
