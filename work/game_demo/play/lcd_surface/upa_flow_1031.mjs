@@ -13,12 +13,16 @@ import { chainWhyFacts, chainWhyLineId, chainWhyOn } from './choice_why_1101.mjs
 const PX = 34, PY = 28, W = 1152, GROUND = 1262, CELL = 6, MG = 8 * CELL, BROWN = '#30180a', GOLD = '#f0b840', CREAM = '#fff6de';
 const TIP_Y = 1176;   // しっぽの先（穴の少し上。穴のLEDを隠さない）
 const ASK_SEC = 3, ASK_GATE = 1.5, ASK_MAX = 2, EXPRS = ['idle', 'joy', 'big_joy', 'surprise', 'oshii', 'sad', 'cheer', 'panic'];
-const LINE_EXPR = { ch16_a_rank: 'big_joy', ch16_a_gain: 'big_joy', ch16_b_rank: 'joy', ch16_b_gain: 'joy', ch16n_a_rank: 'joy', ch16n_a_gain: 'joy', ch16n_b_rank: 'joy', ch16n_b_gain: 'joy', time_start: 'surprise', jp8_wow: 'surprise', jp8_come: 'big_joy', jp8_last: 'joy', jp8_award: 'big_joy', jp8_hole: 'cheer', jp8_free: 'joy', jp8_go: 'cheer', jp8s: 'cheer', ch15_how: 'cheer', ch15s: 'cheer', jp9_go: 'cheer', jp9_good: 'big_joy', jp9_slow: 'cheer', jp9_half: 'cheer', jp9_close: 'panic', jp9_oshii: 'oshii', rl11_how: 'cheer', rl11_short: 'cheer', jp12_clock: 'cheer', jp12_noclock: 'oshii', ch13_next: 'joy', ch13_a: 'big_joy', ch13_safe: 'joy', ch13_pick: 'idle', ch13_noclock: 'surprise', ch14_rate: 'joy', ch14_again: 'panic', ch14_keep: 'joy', ask_jp: 'idle', ask_chain: 'idle' };
+const LINE_EXPR = { ch16_a_rank: 'big_joy', ch16_a_gain: 'big_joy', ch16_b_rank: 'joy', ch16_b_gain: 'joy', ch16n_a_rank: 'joy', ch16n_a_gain: 'joy', ch16n_b_rank: 'joy', ch16n_b_gain: 'joy', time_start: 'surprise', jp8_wow: 'surprise', jp8_come: 'big_joy', jp8_last: 'joy', jp8_award: 'big_joy', jp8_hole: 'cheer', jp8_free: 'joy', jp8_go: 'cheer', jp8s: 'cheer', ch15_how: 'cheer', ch15s: 'cheer', jp9_go: 'cheer', jp9_good: 'big_joy', jp9_slow: 'cheer', jp9_half: 'cheer', jp9_close: 'panic', jp9_oshii: 'oshii', rl11_how: 'cheer', rl11_short: 'cheer', jp12_clock: 'cheer', jp12_noclock: 'oshii', ch13_next: 'joy', ch13_a: 'big_joy', ch13_safe: 'joy', ch13_pick: 'idle', ch13_noclock: 'surprise', ch14_rate: 'joy', ch14_again: 'panic', ch14_keep: 'joy', ask_jp: 'idle', ask_chain: 'idle', ch19_t1: 'big_joy', ch19_t2: 'joy', ch19_c1: 'big_joy', ch19_c2: 'joy', add_a1: 'joy', add_a1nb: 'joy', add_a2: 'big_joy', add_a3: 'cheer', add_a4: 'idle', add_nudge: 'oshii' };
 const JP_SEC = 22, CH_SEC = 16, GRACE = 8, SKIP_GAP = 0.4, SKIP_AGE = 0.8;
 const JP_ASK = new URLSearchParams(globalThis.location?.search ?? '').get('jpask') === '1';
 const UPA_N = 12, UPA_FOOT = 1170, ARROW_W = 200, ARROW_H = 300, ARROW_AT = 0.35, HOLE_LINE = /^(jp8_hole|jp8s|ch15_how|ch15s)$/, CUT = 'chain_announce_cutin', CUT_SEC = 1.7;   // 説明の主役のうぱは大きく。穴を指す文は穴の横へ歩いて、大きな矢印で実際の穴を指す
 const SHOWPIECE = /^(roulette_|reward_|chain_success|chain_jp_land|jp_rush|jp_bridge|jp_land|fail|chain_announce_)/;
 const CHOICE_LINE_AT = 1.6;   // 選択画面の入りの映像が終わってから台詞
+const CHAIN_EXPLAIN = new URLSearchParams(globalThis.location?.search ?? '').get('chainexplain') !== '0';   // 11/01 継続と追加の説明を順に（?chainexplain=0 で旧：1吹き出し）
+const CHAIN_AUTO = new URLSearchParams(globalThis.location?.search ?? '').get('chainauto') !== '0';   // 11/01 監督：時計が残る最初の継続（チケット不要）は選択画面なしで直接継続チャンスへ（規則の ChainFirstAuto）。?chainauto=0 で選択画面。チケットが要る選択を自動で決めることはしない（規則が出す）
+const ADD_NUDGE_AT = 8;   // 追加画面で残りが少なくなったら促す（秒。追加の秒数そのものは増やさない）
+const CH_TOP = 377, CH_BUBBLE_TOP = 392;   // 継続の説明の吹き出しの上端（映像側のうぱの真下に固定。吹き出しの行数が変わってもうぱが二重にならず、PUSH の下半分より下へ）
 const FIRST_CHOICE = true;   // 10/31 監督訂正：33%/67%の告知は本編から外す（旧は ?upahost=0 だけ）
 const TONE = { jp8_praise: 'joy', jp8_go: 'joy', jp8s: 'joy', jp9_go: 'joy', jp9_close: 'joy', jp10_ok: 'joy', rl11_big: 'joy', rl11_ok: 'joy', ch15_head: 'joy', ch15s: 'joy', jp9_slow: 'surp', jp9_oshii: 'surp', rl11_dokidoki: 'surp', ch13_noclock: 'surp', ch14_noclock: 'surp' };
 const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
@@ -36,8 +40,8 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
   const dimC = mk(4, 4); { const x = dimC.getContext('2d'); x.fillStyle = 'rgb(8,4,24)'; x.fillRect(0, 0, 4, 4); }
   const clkC = mk(520, 84);
   const T = { big: layerTexture(THREE, bigC), small: layerTexture(THREE, smallC), arrow: layerTexture(THREE, arrowC), dim: layerTexture(THREE, dimC), clk: layerTexture(THREE, clkC), comp: {} };
-  const F = { heard: { jp: false, chain: false, choice: false }, asked: { jp: 0, chain: 0, choice: 0 }, ch: null, chKey: null, cutNext: null, cutKey: null, ux: null, uy: null, repeat: false, ask: null, on: false, react: [], annFirst: true, rlFirst: true, mid: null, kind: null, seq: null, i: 0, lineT: 0, cur: null, said: new Set(), t: 0, lastPress: -9, pendFail: false, rl: null, annKey: null, log: [], tutAt: null, clockAtTut: null };
-  const setRules = () => { if (!R.ready) return; for (const r of new Set([controller.rules, game()?.rules].filter(Boolean))) { r.JpTutorialSeconds = JP_SEC; r.JpTutorialEvery = true; r.JpTutorialGraceSeconds = GRACE; if (FIRST_CHOICE) { r.ChainFirstAuto = false; r.ChainAnnounceSeconds = 0; r.ChainAnnounceSecondsFirst = 0; r.ChainIntroSeconds = CUT_SEC; } } };   // fx_trim が reset で入れ直すので毎コマ
+  const F = { heard: { jp: false, chain: false, choice: false, add: false }, asked: { jp: 0, chain: 0, choice: 0 }, ch: null, chKey: null, cutNext: null, cutKey: null, ux: null, uy: null, repeat: false, ask: null, on: false, react: [], annFirst: true, rlFirst: true, mid: null, kind: null, seq: null, i: 0, lineT: 0, cur: null, said: new Set(), t: 0, lastPress: -9, pendFail: false, rl: null, annKey: null, log: [], tutAt: null, clockAtTut: null };
+  const setRules = () => { if (!R.ready) return; for (const r of new Set([controller.rules, game()?.rules].filter(Boolean))) { r.JpTutorialSeconds = JP_SEC; r.JpTutorialEvery = true; r.JpTutorialGraceSeconds = GRACE; if (FIRST_CHOICE) { r.ChainFirstAuto = CHAIN_AUTO; r.ChainAnnounceSeconds = 0; r.ChainAnnounceSecondsFirst = 0; r.ChainIntroSeconds = CUT_SEC; } } };   // fx_trim が reset で入れ直すので毎コマ
   const img = (u) => new Promise((ok, ng) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ng; i.src = u; });
   const ready = (async () => {
     const meta = await (await fetch(new URL('flow.json', base))).json();
@@ -137,8 +141,9 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
         const hx = holes.reduce((a, b) => (Math.abs(b - 576) < Math.abs(a - 576) ? b : a)), upaX = clamp(hx < 576 ? hx + 300 : hx - 300, 200, W - 200), r = compose(c, id, { tails: [{ x: upaX, up: false }], minw: 700 }), y = UPA_FOOT - tall - 6 * CELL - r.h;
         T.big.needsUpdate = true; F.cur = { id, edge: false, t: 0, dur: L.dur, tex: T.big, cw: c.width, ch: c.height, x: r.left - MG, y: y - MG, tipX: 576 - (r.left - MG), tipY: r.h + MG, upaX, upaY: UPA_FOOT, holes, r };
       } else {
-        const onChoice = !!F.ch, upaX = F.ch?.add ? 230 : onChoice ? 560 : F.cur?.upaX && !F.cur.edge && !F.cur.holes ? F.cur.upaX : 252, r = compose(c, id, { tails: [{ x: upaX, up: true }], minw: onChoice ? W - 24 : plates ? 800 : 700, plates }), y = F.ch?.add ? 615 - r0h(id) : onChoice ? 785 - r0h(id) : TIP_Y - 6 * CELL - r.h;   // 選択画面：残り時間の下〜「確定」「継続」の上（選択肢と時間を隠さない）
-        T.big.needsUpdate = true; F.cur = { id, edge: false, t: 0, dur: L.dur, tex: T.big, cw: c.width, ch: c.height, x: r.left - MG, y: y - MG, tipX: 576 - (r.left - MG), tipY: r.h + MG, upaX, upaY: y - 6 * CELL + 2, holes: null, upaN: F.ch?.add ? 4 : onChoice ? 8 : UPA_N, r };
+        const onChoice = !!F.ch, upaX = F.ch?.add ? 480 : onChoice ? 560 : F.cur?.upaX && !F.cur.edge && !F.cur.holes ? F.cur.upaX : 252, r = compose(c, id, { tails: [{ x: upaX, up: true }], minw: onChoice ? W - 24 : plates ? 800 : 700, plates }), y = F.ch?.add ? 735 - r0h(id) : onChoice ? (CHAIN_EXPLAIN && /^ch19_/.test(id) ? CH_BUBBLE_TOP : 785 - r0h(id)) : TIP_Y - 6 * CELL - r.h;   // 選択画面：残り時間の下〜「確定」「継続」の上（選択肢と時間を隠さない）／追加画面（11/01）：吹き出しとうぱを左右の PUSH ボタンの下・間（x480）へ下げた（ボタンに被っていた）
+        T.big.needsUpdate = true; F.cur = { id, edge: false, t: 0, dur: L.dur, tex: T.big, cw: c.width, ch: c.height, x: r.left - MG, y: y - MG, tipX: 576 - (r.left - MG), tipY: r.h + MG, upaX, upaY: (CHAIN_EXPLAIN && onChoice && !F.ch?.add && /^ch19_/.test(id) ? CH_TOP : y) - 6 * CELL + 2,   // 継続の説明は吹き出しを下げてもうぱは映像側のうぱと同じ位置（二重にならない）
+         holes: null, upaN: F.ch?.add ? 4 : onChoice ? 8 : UPA_N, r };
       }
       if (/^ask_/.test(id)) { F.ask = { sc: { ask_jp: 'jp', ask_chain: 'chain' }[id], at: F.t }; F.cur.dur = ASK_SEC; }
     }
@@ -160,6 +165,12 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
   const seqFinish = (why) => { if (F.ch) { F.ch = null; F.seq = null; F.cur = null; F.log.push({ t: +F.t.toFixed(2), id: `choice-end:${why}`, clock: +game().secondsLeft.toFixed(2) }); } else { F.seqDone = true; endSeq(why); } };
   const endSeq = (why) => { F.seq = null; F.cur = null; const g = game(); g.endJpTutorial?.(); const clockLost = F.clockAtTut === null ? null : +(F.clockAtTut - g.secondsLeft).toFixed(3); F.log.push({ t: +F.t.toFixed(2), id: `end:${why}`, sec: +(F.t - F.tutAt).toFixed(2), clockLost, meterLeft: g.meterStatus?.timeLeft }); log('upa:flow-end', { why, clockLost }); };
 
+  /** 11/01 監督：継続の選択画面は1文だけ。チケットが要る：1回目「チケット1まいで もう一度 大当たりチャンス！」／2回目以降「…継続チャンス！」。チケットが要らない（時計が残る・2回目以降）：「もう一度 継続チャンス！」 */
+  const chainSeq = (stage, add) => (add ? [stage > 0 ? 'ch19_t2' : 'ch19_t1'] : [stage > 0 ? 'ch19_c2' : 'ch19_c1']);
+  const addSeq = () => {   // 時間切れの追加：いくつ増える→続きが遊べる→続ける後（スタッフにチケット）→終わる後（結果）。2回目以降は短く
+    const first = !F.heard.add; F.heard.add = true; const a1 = (game().extraLoanBallsNow ?? 1) > 0 ? 'add_a1' : 'add_a1nb';
+    return first ? [a1, 'add_a2', 'add_a3', 'add_a4'] : [a1, 'add_a3'];
+  };
   const tick = (dt) => {
     F.t += dt; const g = game(); if (!g) return;
     if (!R.ready) { if (g.meterStatus?.stage === 'tutorial') g.endJpTutorial?.(); return; }
@@ -231,18 +242,24 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
       if (F.chKey !== key) {
         F.chKey = key; F.ch = { t: 0 }; F.tutAt = F.t; const stage = g.jackpotChain.stage ?? 0;
         const say2 = stage > 0 ? ['ch14_again'] : ['ch13_a'], why = chainWhyOn() ? chainWhyLineId(chainWhyFacts(g), { noclock: !!g.chainNeedsAdd }) : null;   // 11/01 継続の嬉しさ（H 規則のとき。事実は choice_why_1101）
-        startSeq(why && R.meta.lines[why] ? [why] : g.chainNeedsAdd ? [stage > 0 ? 'ch14_noclock' : 'ch13_noclock'] : say2);
+        const ex = CHAIN_EXPLAIN && R.meta.lines.ch19_t1 && !(why && R.meta.lines[why]) ? chainSeq(stage, !!g.chainNeedsAdd) : null;
+        if (ex) F.ch.hold = true;
+        startSeq(ex ?? (why && R.meta.lines[why] ? [why] : g.chainNeedsAdd ? [stage > 0 ? 'ch14_noclock' : 'ch13_noclock'] : say2));
       }
     }
     // ---- 時間切れの100円追加の画面：1セリフ。選ぶのは客、受付の秒と誤選択防止はそのまま ----
     F.addAge = g.phase === 'Continue' && lcd.timeupSurface?.active && (g.offerLeft ?? 0) > 0 ? (F.addAge ?? 0) + dt : 0;
     if (!F.addAge) F.addSaid = false;
-    else if (F.addAge >= 1 && !F.addSaid && !F.ch && !F.seq) { F.addSaid = true; F.ch = { t: 0, add: true }; F.tutAt = F.t; startSeq([(g.extraLoanBallsNow ?? 1) > 0 ? 'add_offer' : 'add_offer_nb']); }
+    else if (F.addAge >= 1 && !F.addSaid && !F.ch && !F.seq) { F.addSaid = true; F.ch = { t: 0, add: true }; F.tutAt = F.t; if (CHAIN_EXPLAIN && R.meta.lines.add_a1) { F.ch.hold = true; startSeq(addSeq()); } else startSeq([(g.extraLoanBallsNow ?? 1) > 0 ? 'add_offer' : 'add_offer_nb']); }
     if (F.ch) {
       F.ch.t += dt;
       if (g.phase !== (F.ch.add ? 'Continue' : 'ChainChoice') || !F.seq) { F.ch = null; F.seq = null; F.cur = null; F.ask = null; }
       else {
-        if (F.cur && F.cur.t >= F.cur.dur) seqNext();
+        if (CHAIN_EXPLAIN && F.ch.hold) {   // 選ぶまで説明を出す：最後の1つは残す（選択の画面では選ぶか時間切れまで。追加では次の促しまで）。残りが少ないときは促しの一言へ
+          const left = g.offerLeft, nid = 'add_nudge';
+          if (F.ch.add && !F.ch.nudged && left > 0 && left <= ADD_NUDGE_AT && R.meta.lines[nid]) { F.ch.nudged = true; startSeq([nid]); F.cur.dur = 1e9; }
+          else if (F.cur && F.cur.t >= F.cur.dur) { if (F.i < F.seq.length - 1) seqNext(); else if (F.ch.nudged || !F.ch.add) F.cur.dur = 1e9; else if (F.cur.dur < 1e8) F.cur = null; }
+        } else if (F.cur && F.cur.t >= F.cur.dur) seqNext();
       }
     }
     if (!FIRST_CHOICE && g.chainAnnouncing) {   // ?firstchoice=0：旧の告知の映像の間
@@ -297,7 +314,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
     timeStart() { F.pendTime = true; },
     get asking() { return !!F.ask; },
     get holding() { return false; },
-    begin({ repeat = false } = {}) { Object.assign(F, { on: true, repeat, heard: { jp: false, chain: false, choice: false }, asked: { jp: 0, chain: 0, choice: 0 }, ch: null, chKey: null, cutNext: null, cutKey: null, ux: null, uy: null, ask: null, react: [], annFirst: !repeat, rlFirst: !repeat, mid: null, seq: null, cur: null, pendFail: false, rl: null, annKey: null, seqDone: false }); },
+    begin({ repeat = false } = {}) { Object.assign(F, { on: true, repeat, heard: { jp: false, chain: false, choice: false, add: false }, asked: { jp: 0, chain: 0, choice: 0 }, ch: null, chKey: null, cutNext: null, cutKey: null, ux: null, uy: null, ask: null, react: [], annFirst: !repeat, rlFirst: !repeat, mid: null, seq: null, cur: null, pendFail: false, rl: null, annKey: null, seqDone: false }); },
     reset() { Object.assign(F, { pendTime: false, on: false, ch: null, cutNext: null, ask: null, mid: null, seq: null, cur: null, pendFail: false, rl: null }); },
     /** 問いの答え。選択画面と同じゲート：出てから1.5秒は受けない＋連打が0.4秒止まるまで受けない */
     answerPress(side) { const a = F.ask; if (!a) return; const gap = F.t - F.lastPress; F.lastPress = F.t; if (F.t - a.at < ASK_GATE || gap < SKIP_GAP) return; answer(side, 'press'); },
