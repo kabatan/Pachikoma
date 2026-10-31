@@ -220,7 +220,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   const load=(slot,name,recordLoad=true)=>{
     if(!name||!man.scenes[name])return Promise.resolve();
     if(slot.name===name)return slot.promise??Promise.resolve();
-    slot.cancel?.();slot.v.pause();slot.name=name;slot.generation=(slot.generation??0)+1;slot.ready=false;
+    slot.cancel?.();slot.v.pause();if(slot.preroll){slot.preroll=false;try{slot.v.playbackRate=1;}catch{}}slot.name=name;slot.generation=(slot.generation??0)+1;slot.ready=false;
     const at=performance.now(),report=recordLoad?record:()=>{};report('load',{name});
     slot.promise=new Promise(resolve=>{
       const cleanup=()=>{clearTimeout(timer);slot.v.removeEventListener('loadeddata',done);slot.v.removeEventListener('error',bad);slot.cancel=null;};
@@ -234,6 +234,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   //   雷・開き・チャンスの映像を、封印の差し替えが済んだ後の空き時間に専用スロットへ読み込んで復号しておき、同じファイルの場面名が来たら(巻き戻して)使い回す。?jppin=0 で従来
   // 11/1 最適化：使い終わって止まった映像は、場面が来る前に先頭へ巻き戻しておく(場面が来た時の seek で再生が約0.2秒遅れ、頭で33msが2回落ちていた)。先頭にある映像は seek し直さない。?jpprime=0 で従来
   const PRIME=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jpprime')!=='0';
+  const SEAMLESS=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jpseamless')!=='0',SEAM_PRE=Math.max(.05,Math.min(1,+(new URLSearchParams(typeof location==='undefined'?'':location.search).get('jpseam_pre')??.35)));
   const filePinned=[];const PIN_ON=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jppin')!=='0';
   async function pinScenes(names){
     if(!PIN_ON)return [];const out=[];
@@ -255,9 +256,9 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
     if(pinned?.pinned&&pinned.ready&&pinned!==current&&pinned!==visible&&pinned!==previous&&!pinned.v.seeking&&pinned.v.currentTime>.001){pinned.v.pause();pinned.v.currentTime=0;}
     for(const x of extraPinned)if(x.pinned&&x.ready&&x!==current&&x!==visible&&x!==previous&&!x.v.seeking&&x.v.currentTime>.001){x.v.pause();x.v.currentTime=0;}
     if(PRIME)for(const s of slots)if(s.ready&&s.name!==null&&s!==current&&s!==visible&&s!==previous&&!s.v.seeking&&s.v.currentTime>.001&&(s.v.paused||s.v.ended)){try{s.v.pause();s.v.currentTime=0;}catch{}}
-    if(!model.active){for(const s of slots)if(!s.v.paused)s.v.pause();return;}
+    if(!model.active){for(const s of slots){if(s.preroll){s.preroll=false;try{s.v.playbackRate=1;}catch{}}if(!s.v.paused)s.v.pause();}return;}
     if(man.scenes[model.name]?.offer){if(serial!==model.serial){serial=model.serial;offer.begin(man.scenes[visible?.name]?.layered?palace.canvas:visible?.v);for(const s of slots)s.v.pause();current=null;previous=null;const d=chainTarget();reserve(`chain_jp_aim_d${d}`);reserve(`chain_fly_in_d${d}`);record('start',{name:model.name});log(model.name);}return;}
-    if(serial!==model.serial){current=reserve(model.name);if(!current)return;serial=model.serial;hole=null;if(current.ready&&!(PRIME&&current.v.currentTime<=.001&&!current.v.seeking))current.v.currentTime=0;record('request',{name:model.name});log(model.name);if(sResult())compositor?.prefetch(sResult(),sResult()==='confirm'?84:64);}
+    if(serial!==model.serial){current=reserve(model.name);if(!current)return;serial=model.serial;hole=null;if(current.preroll){current.preroll=false;try{current.v.playbackRate=1;}catch{}if(current.v.currentTime>.12&&!current.v.seeking)current.v.currentTime=0;}else if(current.ready&&!(PRIME&&current.v.currentTime<=.001&&!current.v.seeking))current.v.currentTime=0;record('request',{name:model.name});log(model.name);if(sResult())compositor?.prefetch(sResult(),sResult()==='confirm'?84:64);}
     const s=man.scenes[model.name];
     if(current?.ready&&model.delay<=0){
       if(visible!==current){previous=visible;visible=current;fade=previous?0:1;record('start',{name:current.name});}
@@ -265,8 +266,14 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
       if(!manual&&current!==blockedResult&&current.v.paused&&!current.v.ended)current.v.play().catch(()=>{});
     }
     const next=model.pending??(model.name.startsWith('fly_t')?`fly_t${Math.min(3,model.heat+1)}_d${model.d}`:s.next==='@roulette'?man.roulette[String(model.payout)]:s.next==='@reward'?`reward_${model.payout}`:(s.next==='@intro'&&JPREADY?(model.introVariant??'jp_intro_dopamine'):s.next));
-    if(next)reserve(next);
+    // 11/1 jpseamless：雷→題字のかくつき。①manifest の next は _d4 固定で、d≠4 だと題字（jp_chance_d{d}）が先読みされず、切替の瞬間に読み込み・復号待ち（前の映像の最後の白いコマが止まって見える）。start() と同じく d に置き換えて先読み。
+    //   ②先読み済みでも paused の映像は play() から最初のコマが出るまで 0.1〜0.3秒（負荷時）かかる。雷の終わり 0.35秒前から 1/16 速で回し続け（時刻は 0.02 秒しか進まない）、切替の瞬間に等速へ戻す。?jpseamless=0 で従来
+    if(next)reserve(SEAMLESS&&/^jp_(intro|chance)/.test(model.name)&&/_d[1-7]$/.test(next)&&model.d?next.replace(/_d[1-7]$/,'_d'+model.d):next);
     else if(model.name.startsWith('reward_'))reserve(`chain_jp_aim_d${chainTarget()}`);
+    if(SEAMLESS&&next&&model.name==='jp_intro_lightning'&&model.d&&model.delay<=0&&!manual&&current?.ready){
+      const nn=next.replace(/_d[1-7]$/,'_d'+model.d),ns=/^jp_chance_d\d$/.test(nn)?slots.find(s=>s.name===nn):null,sc0=man.scenes[model.name];
+      if(ns&&ns.ready&&ns.v.paused&&!ns.v.seeking&&ns.v.currentTime<=.001&&!ns.preroll&&model.time>=sc0.frames/man.fps-SEAM_PRE){ns.preroll=true;try{ns.v.playbackRate=.0625;}catch{}ns.v.play().catch(()=>{});record('preroll',{name:nn,at:model.time});}
+    }
   }
   const cue=model.cue;model.cue=c=>{if(c.kind==='hole')hole=c;return cue(c);};
   const stop=model.stop.bind(model);model.stop=reason=>{
