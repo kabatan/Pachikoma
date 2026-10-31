@@ -1,15 +1,19 @@
 import {createBallTargetCrop} from './ball_target_crop_1030.mjs';
 import * as THREE from '../../web/vendor/three/three.module.js';
 import {loadCompactProbe} from './prebake_probe_1029.mjs';
+import {lodTextures,buildRegions,lutAnalytic} from './final_region_1101.mjs';
+import {createAnalyticBalls} from './ball_analytic_1101.mjs';
 
 const W=1440,H=2560,S=4;
 const VS='void main(){gl_Position=vec4(position.xy,0.,1.);}';
 const replace=(s,a,b)=>{if(!s.includes(a))throw Error('Prebake source changed: '+a.slice(0,60));return s.replace(a,b);};
 const region=(s,a,b,v)=>{const start=s.indexOf(a),end=s.indexOf(b,start);if(start<0||end<0)throw Error('Prebake region changed');return s.slice(0,start)+v+s.slice(end);};
+// 11/1 毎コマ、配列を for-of で回すと反復子と結果の物が大量に確保される。添字の for に（値と判定は同じ）。?allocfix=0 で従来。
+const NOITER=(()=>{try{return new URLSearchParams(globalThis.location?.search??'').get('allocfix')!=='0';}catch{return true;}})();
 function watch(uniforms,names) {
   const previous=[];let valid=false,index=0,changed=false;
   const put=v=>{if(previous[index]!==v){previous[index]=v;changed=true;}index++;};
-  const add=v=>{if(typeof v==='number'||typeof v==='boolean')put(v);else if(v?.isTexture){put(v.id);put(v.version);}else if(Array.isArray(v)||ArrayBuffer.isView(v)){for(const x of v)add(x);}else if(v?.isVector2){put(v.x);put(v.y);}else if(v?.isVector3){put(v.x);put(v.y);put(v.z);}else if(v?.isVector4){put(v.x);put(v.y);put(v.z);put(v.w);}};
+  const add=v=>{if(typeof v==='number'||typeof v==='boolean')put(v);else if(v?.isTexture){put(v.id);put(v.version);}else if(Array.isArray(v)||ArrayBuffer.isView(v)){if(NOITER){for(let k=0,n=v.length;k<n;k++)add(v[k]);}else for(const x of v)add(x);}else if(v?.isVector2){put(v.x);put(v.y);}else if(v?.isVector3){put(v.x);put(v.y);put(v.z);}else if(v?.isVector4){put(v.x);put(v.y);put(v.z);put(v.w);}};
   return {invalidate(){valid=false;},changed(){index=0;changed=!valid;for(const n of names)add(uniforms[n]?.value);if(previous.length!==index){previous.length=index;changed=true;}valid=true;return changed;}};
 }
 
@@ -152,7 +156,8 @@ void main(){
   //  奇数フレームで枠の焼きと球のプローブ。光の変化は最大 1 フレーム（16.7ms）遅れる。既定の medium 以上は毎フレームのまま。
   //  ?halfbake=1 で常に半分、auto（既定）は low 以下、または medium で fps が足りないとき解像度を下げる前に先に半分にする。
   const idle30Mode=pq.get('idle30')==='0'?'0':pq.get('idle30')==='2'?'2':'1';let idleOdd=false;
-  const halfBakeArg=pq.get('halfbake'),halfBake=halfBakeArg!=='0',halfBakeForce=halfBakeArg==='1';
+  // 11/1 既定を「常に半頻度」に変更（?halfbake=0 で毎フレーム、?halfbake=auto で上の従来の自動：low 以下か fps 不足時だけ）。
+  const halfBakeArg=pq.get('halfbake'),halfBake=halfBakeArg!=='0',halfBakeForce=halfBakeArg!=='0'&&halfBakeArg!=='auto';
   // 10/30 F0/F4 の混ぜ（uK4・uGlass）が厳密に 0 か 1 のとき、2 枚読んで混ぜる代わりに片方だけ読む（?k4branch=0 で従来）。
   //  遊技中の約 3 割の時間は 1。条件は uniform なので画素ごとに分岐はばらけない。
   const k4Branch=pq.get('k4branch')!=='0';
@@ -228,15 +233,21 @@ void main(){
     hr.balls.geometry.setAttribute('aPBPI',selPI);hr.balls.geometry.setAttribute('aPBPW',selPW);
   }
   const f32=Math.fround;
+  let DD=new Float64Array(0);const IDX=[-1,-1,-1],WT=[0,0,0];
   function ballSelect(){
     const mesh=hr.balls,count=mesh.count,m=mesh.matrixWorld.elements,im=mesh.instanceMatrix.array,P=ballMaterial.uniforms.uPPos.value,Z=ballMaterial.uniforms.uPZone.value,NP=P.length,pi=selPI.array,pw=selPW.array;
     for(let k=0;k<count;k++){
       const o=k*16,tx=im[o+12],ty=im[o+13],tz=im[o+14],tw=im[o+15];
       const cx=f32(m[0]*tx+m[4]*ty+m[8]*tz+m[12]*tw),cy=f32(m[1]*tx+m[5]*ty+m[9]*tz+m[13]*tw),cz=f32(m[2]*tx+m[6]*ty+m[10]*tz+m[14]*tw);
-      const dd=i=>{const dx=f32(cx-P[i].x),dy=f32(cy-P[i].y),dz=f32(cz-P[i].z);return f32(f32(f32(dx*dx)+f32(dy*dy))+f32(dz*dz));};
-      let best=1e9,bi=0;for(let i=0;i<NP;i++){const d=dd(i);if(d<best){best=d;bi=i;}}
-      const zone=Z[bi],idx=[-1,-1,-1],wt=[0,0,0];
-      for(let s2=0;s2<3;s2++){let bd=1e9,bj=-1;for(let i=0;i<NP;i++){if(Z[i]!==zone)continue;if(s2>0&&i===idx[0])continue;if(s2>1&&i===idx[1])continue;const d=dd(i);if(d<bd){bd=d;bj=i;}}if(bj>=0){idx[s2]=bj;wt[s2]=f32(1/f32(bd+1e-5));}}
+      let dd;
+      if(NOITER){   // 距離を1回だけ表に（同じ式）。球ごとの関数・配列は作らない
+        if(DD.length<NP)DD=new Float64Array(NP);
+        for(let i=0;i<NP;i++){const dx=f32(cx-P[i].x),dy=f32(cy-P[i].y),dz=f32(cz-P[i].z);DD[i]=f32(f32(f32(dx*dx)+f32(dy*dy))+f32(dz*dz));}
+      }else dd=i=>{const dx=f32(cx-P[i].x),dy=f32(cy-P[i].y),dz=f32(cz-P[i].z);return f32(f32(f32(dx*dx)+f32(dy*dy))+f32(dz*dz));};
+      let best=1e9,bi=0;if(NOITER){for(let i=0;i<NP;i++){const d=DD[i];if(d<best){best=d;bi=i;}}}else for(let i=0;i<NP;i++){const d=dd(i);if(d<best){best=d;bi=i;}}
+      const zone=Z[bi];let idx,wt;
+      if(NOITER){idx=IDX;wt=WT;idx[0]=idx[1]=idx[2]=-1;wt[0]=wt[1]=wt[2]=0;}else{idx=[-1,-1,-1];wt=[0,0,0];}
+      for(let s2=0;s2<3;s2++){let bd=1e9,bj=-1;for(let i=0;i<NP;i++){if(Z[i]!==zone)continue;if(s2>0&&i===idx[0])continue;if(s2>1&&i===idx[1])continue;const d=NOITER?DD[i]:dd(i);if(d<bd){bd=d;bj=i;}}if(bj>=0){idx[s2]=bj;wt[s2]=f32(1/f32(bd+1e-5));}}
       const sum=Math.max(f32(f32(wt[0]+wt[1])+wt[2]),1e-12);
       for(let c=0;c<3;c++){pi[k*3+c]=idx[c];pw[k*3+c]=f32(wt[c]/sum);}
     }
@@ -360,7 +371,31 @@ vec4 prebakeC(ivec2 p){`);
     shader='uniform float uWashOn;\n'+shader;
     extra.uWashOn={value:1};
   }
-  const final=make(shader,{...U,...extra,uD:{value:balls.texture},...(dispFit||renderLite?{uPBK}:{}),...(staticBake?staticUni:{})});
+  const finalUniforms={...U,...extra,uD:{value:balls.texture},...(dispFit||renderLite?{uPBK}:{}),...(staticBake?staticUni:{})};
+  // 11/1 最終合成の整理（内蔵GPU／ANGLE-D3D11 向け、画は同じ。詳細は final_region_1101.mjs）：
+  //  ?lodtex=0 で texture() を textureLod(,0) にする整理を無効、?finalregion=0 で「枠だけ／内側だけ」の専用シェーダでの描き分けを無効（両方 0 で従来）。
+  //  ?shaderinfo=1 で変換後シェーダの確認と新旧の自動比較（画面左下のボタン）。
+  //  ?lutfn=1 でトーンマップの 3D LUT を閉じた解析式に（LUT の補間誤差ぶん画は少し違う：平均 ΔE76 0.15〜0.2）、?lutfn=2 は LUT と同じ補間のまま格子の値だけ式（LUT と同じ画）。既定は 0＝LUT。
+  // 11/1 球を解析式で描く（?ballfn=1、既定オフ。詳細は ball_analytic_1101.mjs）：球バッファの MSAA・頂点処理・解決を、画素ごとのレイ×球の合成 1 パスに。皿は従来の描画のまま。
+  let ab=null,abOn=pq.get('ballfn')==='1';
+  if(abOn&&ballSel){try{ab=createAnalyticBalls({THREE,hr,r,ballMaterial,selPI,selPW,vertexShader:VS,uPBK,nProbes:ballMaterial.uniforms.uPPos.value.length});owned.push({dispose(){ab?.dispose();}});}catch(e){console.warn('ballfn unavailable',e);ab=null;}}
+  const lodArg=pq.get('lodtex'),regionArg=pq.get('finalregion'),lutArg=pq.get('lutfn');
+  const finalSets=new Map();
+  const finalSet=(lod,region,lut)=>{
+    const key=(lod?'L':'l')+(region?'R':'r')+(lut===2?'G':lut?'F':'f');let st=finalSets.get(key);if(st)return st;
+    let sh=shader;
+    try{
+      if(lut)sh=lutAnalytic(sh,lut===2?2:1);
+      if(region){
+        const d=U.uMA.value.image.data;
+        const rg=buildRegions({THREE,vertexShader:VS,shader:sh,uniforms:finalUniforms,alphaOf:i=>d[i*4+3],mouthTop:U.uMouth.value.y,post:lod?(x=>lodTextures(x).src):undefined});
+        materials.push(...rg.materials);scenes.push(rg.scene);owned.push(...rg.geometries);st=rg;
+      }else if(lod){st=make(lodTextures(sh).src,finalUniforms);st.info={};}
+      else{st=make(sh,finalUniforms);st.info={};}
+    }catch(e){console.warn('final shader '+key+' fallback',e);st=make(shader,finalUniforms);st.info={fallback:String(e)};}
+    st.key=key;finalSets.set(key,st);return st;
+  };
+  let final=finalSet(lodArg!=='0',regionArg!=='0',lutArg==='1'?1:lutArg==='2'?2:0);
   // 段の切り替え：合成・球のバッファを作り直す（シェーダはそのまま）。古いバッファは捨てる。
   // 10/31 次の段のバッファを先に用意する（既定オフ：stablecanvas で段切替の主因が無くなり、確保 0.5〜1.9ms の差しか出なかった。?tierprep=1 で有効）：段を下げる瞬間に、新しい球バッファ（MSAA 付き）と切り詰め用の 2 枚を
   //  確保して最初に描くと 1 フレームが引っかかる。段を下げそうになった時点（半頻度の追加時と、段を下げた直後）から、次の段の分を
@@ -530,7 +565,8 @@ vec4 prebakeC(ivec2 p){`);
   const fieldNames=[['uWash','uRing','uEs'],['uZone','uZoneGain','uEs'],['uHole','uHoleX']];
   const backDirty=watch(hr.envBack.uniforms,Object.keys(hr.envBack.uniforms)),frontDirty=watch(hr.envFront.uniforms,Object.keys(hr.envFront.uniforms)),fieldDirty=fieldNames.map(names=>watch(U,names));
   const probePrevious=new Float32Array(16+hr.probes.sourceIndex.size*3);
-  function probeChanged(){let i=0,dirty=!probeValid;const put=v=>{v=Math.fround(v??0);if(probePrevious[i]!==v){probePrevious[i]=v;dirty=true;}i++;};for(let n=0;n<8;n++){put(hr.frame.ea?.[n]);put(hr.frame.eb?.[n]);}for(const id of hr.probes.sourceIndex.keys()){const q=hr.frame.q?.[id],c=q?.rgb??q;put(c?.[0]);put(c?.[1]);put(c?.[2]);}probeValid=true;return dirty;}
+  let probeIdsMap=null,probeIds=[];
+  function probeChanged(){let i=0,dirty=!probeValid;const put=v=>{v=Math.fround(v??0);if(probePrevious[i]!==v){probePrevious[i]=v;dirty=true;}i++;};for(let n=0;n<8;n++){put(hr.frame.ea?.[n]);put(hr.frame.eb?.[n]);}if(NOITER){const sm=hr.probes.sourceIndex;if(probeIdsMap!==sm||probeIds.length!==sm.size){probeIdsMap=sm;probeIds=[...sm.keys()];}const fq=hr.frame.q;for(let n=0;n<probeIds.length;n++){const q=fq?.[probeIds[n]],c=q?.rgb??q;put(c?.[0]);put(c?.[1]);put(c?.[2]);}}else for(const id of hr.probes.sourceIndex.keys()){const q=hr.frame.q?.[id],c=q?.rgb??q;put(c?.[0]);put(c?.[1]);put(c?.[2]);}probeValid=true;return dirty;}
   function invalidate(){ballEmptyDrawn=false;frameDirty?.invalidate();staticDirty?.invalidate();backDirty.invalidate();frontDirty.invalidate();for(const d of fieldDirty)d.invalidate();probeValid=false;}
   function drawField(target,pass,layer=0){
     const key=pass===bakeBack?'back':pass===bakeFront?'front':layer===1?'zone':'hole';
@@ -554,8 +590,12 @@ vec4 prebakeC(ivec2 p){`);
   }
   const restored=()=>{fieldInitialized.clear();invalidate();};
   const api={ballCrop,setStableCanvas(on){stableCanvas=!!on&&liteCanvas;ensureSDisplay();invalidate();return stableCanvas;},quality,tierPrep:prepStats,ballSkip:ballStats,setTier(name){const i=TIERS.findIndex(t=>t.name===name);if(i<1||!renderLite)return false;quality.probe=null;quality.index=i;quality.tier=name;setLite(TIERS[i].scale,TIERS[i].msaa);return true;},setFieldCropEnabled(on){fieldCropEnabled=!!on;invalidate();},setEnabled(on){enabled=!!on;invalidate();},invalidate,stats,diagnostics(){return{enabled,tierPrep:prepStats,ballSkip:ballStats,dispFit:dispFit?{...fit,uPBK:[uPBK.value.x,uPBK.value.y],ballTarget:[balls.width,balls.height]}:false,...stats,fieldCrop:{enabled:fieldCropEnabled,...cropStats,rects,backProof:proofCurrent(backProof,bakeBack),frontProof:proofCurrent(frontProof,bakeFront)},fieldResolution:[W/S,H/S],basisFormat:'sRGB8 linear decoded',renderLite,liteCanvas,canvasSize:[r.domElement.width,r.domElement.height],renderScale:+(W/RW).toFixed(3),quality:{...quality,history:[...quality.history]},liteCrop,compositeResolution:[RW,RH],ballResolution:[balls.width,balls.height],ballSamples:balls.samples,ballCrop:ballCrop?.diagnostics()??null,probeBasis:{format:'RGB9E5',faceSize:compact.faceSize,bytes:compact.bytes,originalBytes:compact.sourceBytes},additionalMiB:(n*4+(W/S)*(H/S)*8*5+compact.bytes+compact.atlas.width*compact.atlas.height*8)/1048576};},dispose(){if(disposed)return;disposed=true;hr.render=legacy;hr.dispose=dispose;hr.readLinear=readLinear;restoreFull();ballCrop?.dispose();if(dispFit){if(fitBalls)fitBalls.dispose();}liteBalls?.dispose();dropSpare();sDisplay?.dispose();display?.dispose();staticRT?.dispose();r.domElement.removeEventListener('webglcontextrestored',restored);for(const o of owned)o.dispose();for(const m of materials)m.dispose();delete hr.prebakeRelight;}};
+  api.setFinalMode=(lod,region,lut)=>{final=finalSet(!!lod,!!region,lut===2?2:lut?1:0);invalidate();return final.key;};
+  api.finalSet=finalSet;api.finalKey=()=>final.key;api.finalInfo=()=>final.info;api.finalScene=()=>final.scene;api.finalHook=null;api.setBallFn=(on)=>{abOn=!!on;invalidate();return !!ab&&abOn;};api.ballFnStats=()=>ab?.stats??null;
+  if(pq.get('shaderinfo')==='1'||pq.get('finalbench')==='1')import('./final_bench_1101.mjs').then(m=>m.installFinalBench({hr,r,api,THREE,pq})).catch(e=>console.warn('final bench',e));
   hr.prebakeRelight=api;
   ensureSDisplay();
+  function drawFinal(){if(api.finalHook)api.finalHook(hr.fsCam);r.render(final.scene,hr.fsCam);}   // 確認用の差し込み口（?shaderinfo=1 のとき final_bench が使う。普段は null）
   hr.render=function(){
     const plate=getPlate();
     if(!enabled||hr.viewMode!==0||U.uM3Off.value!==0||!plate?.mat.uniforms.uPanel){stats.legacyFrames++;restoreFull();return legacy.call(hr);}
@@ -591,6 +631,8 @@ vec4 prebakeC(ivec2 p){`);
     if(hr.balls.count&&hbB){if(probeChanged()){compact.compose(hr.frame);stats.probeUpdates++;}else stats.probeReuses++;}
     extra.uPBLCDOn.value=plate?.mesh.visible?1:0;
     if(plate){extra.uPBLCD.value=plate.mat.uniforms.uT.value;extra.uPBRect.value.copy(plate.mat.uniforms.uRect.value);extra.uPBPanel.value.copy(plate.mat.uniforms.uPanel.value);extra.uPBGain.value=plate.mat.uniforms.uGain.value;}
+    const realCount=hr.balls.count,analyticOn=!!ab&&abOn&&realCount>0;
+    if(analyticOn){ballSelect();hr.balls.count=0;}   // 球があっても、従来の球バッファには皿だけを描く（変わった時だけ）。球は下で解析式に
     balls=ballCrop?.select()??balls;final.material.uniforms.uD.value=balls.texture;
     const bSame=ballSkipMode!=='off'&&ballsUnchanged(),bSkip=bSame&&ballSkipMode==='on';
     if(bSkip)ballStats.skipped++;
@@ -603,15 +645,27 @@ vec4 prebakeC(ivec2 p){`);
       ballStats.drawn++;ballEmptyDrawn=!hr.balls.count&&!!hr.trayVisual;ballDrawnTarget=balls;
       if(bSame)ballCheckAfter();
     }
+    if(analyticOn){
+      hr.balls.count=realCount;
+      const res=ab.compose({count:realCount,trayTarget:balls,drew:!bSkip,RW,RH});
+      if(res)final.material.uniforms.uD.value=res.texture;
+      else{   // 1 タイルに球が多すぎる：このフレームだけ従来の描画（球バッファも選び直す）
+        balls=ballCrop?.select()??balls;final.material.uniforms.uD.value=balls.texture;
+        r.setRenderTarget(balls);r.setViewport(0,0,RW,RH);r.setClearColor(0x000000,0);r.clear(true,true,false);
+        const oldBM=hr.balls.material;hr.balls.material=ballMaterial;
+        try{r.render(hr.sBalls,hr.camera);}finally{hr.balls.material=oldBM;}
+        ballStats.drawn++;ballEmptyDrawn=false;ballDrawnTarget=balls;
+      }
+    }
     U.uUseLut.value=hr.lutEnabled?1:0;
     if(FINALOPT){let any=0;const nz=v=>{if(typeof v==='number')return Math.abs(v);return Math.abs(v?.x??v?.r??0)+Math.abs(v?.y??v?.g??0)+Math.abs(v?.z??v?.b??0);};const w=U.uWash.value,g=U.uRing.value;for(let i=0;i<8;i++)any+=nz(w[i]);for(let i=0;i<4;i++)any+=nz(g[i]);extra.uWashOn.value=any>0?1:0;}
     if(stableCanvas&&liteCanvas){
       setCanvas(baseCW,baseCH);
-      if(sDisplay){r.setRenderTarget(sDisplay);r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);presentS.material.uniforms.uImage.value=sDisplay.texture;r.setRenderTarget(null);r.setViewport(0,0,baseCW,baseCH);r.render(presentS.scene,hr.fsCam);stats.stablePresents=(stats.stablePresents??0)+1;}
-      else{r.setRenderTarget(null);r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);}
+      if(sDisplay){r.setRenderTarget(sDisplay);r.setViewport(0,0,RW,RH);drawFinal();presentS.material.uniforms.uImage.value=sDisplay.texture;r.setRenderTarget(null);r.setViewport(0,0,baseCW,baseCH);r.render(presentS.scene,hr.fsCam);stats.stablePresents=(stats.stablePresents??0)+1;}
+      else{r.setRenderTarget(null);r.setViewport(0,0,RW,RH);drawFinal();}
     }else{
     if(liteCanvas){setCanvas(RW,RH);r.setRenderTarget(null);}else r.setRenderTarget(display);
-    r.setViewport(0,0,RW,RH);r.render(final.scene,hr.fsCam);
+    r.setViewport(0,0,RW,RH);drawFinal();
     }
     if(present){r.setRenderTarget(null);r.setViewport(0,0,W,H);r.render(present.scene,hr.fsCam);}
   };

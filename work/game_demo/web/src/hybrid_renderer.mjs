@@ -146,7 +146,12 @@ export class HybridRenderer {
 
   async init() {
     const o = this.opts;
+    // 11/1 試験用 ?desync=1：WebGL コンテキストを desynchronized（ブラウザの合成を待たずに画面へ出す低遅延経路）で作る。three は属性を渡せないので、作る一瞬だけ getContext を包む。
+    //  既定はオフ（効くかは実機でだけ確かめられる。非対応なら無視される）。結果は window.__desynchronized（true/false）に残す。
+    const desync = o.canvas && new URLSearchParams(globalThis.location?.search ?? '').get('desync') === '1';
+    if (desync) { const gc = o.canvas.getContext.bind(o.canvas); o.canvas.getContext = (n, a) => { if (n === 'webgl2') { delete o.canvas.getContext; return gc(n, { ...a, desynchronized: true }); } return gc(n, a); }; }
     const r = this.renderer = new THREE.WebGLRenderer({ canvas: o.canvas || undefined, antialias: false, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: o.preserveDrawingBuffer });
+    if (desync) { try { delete o.canvas.getContext; window.__desynchronized = !!r.getContext().getContextAttributes().desynchronized; } catch {} }
     r.setPixelRatio(1); r.setSize(W, H, false);                 // backing 1440×2560 固定、DPR=1
     r.toneMapping = THREE.NoToneMapping; r.autoClear = false; r.info.autoReset = true;
     this.gl = r.getContext();

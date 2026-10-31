@@ -432,6 +432,17 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
   const ec = new Float32Array(geom.edge.length * 3);
   const U = fm.uniforms;
   const st = { k4: 0, regions: [], lastF: null };
+  // 11/1 毎コマの確保を減らす(?allocfix=0 で従来)：デバッグ用の st.k / st.wash / st.pocket は、毎コマ作らず読まれたときに作る。縁色は一時配列なしの版。
+  const ALLOCFIX = q.get('allocfix') !== '0', edgeTmp = new Float64Array(3);
+  if (ALLOCFIX) {
+    let lastFrame = null;
+    Object.defineProperties(st, {
+      lastF: { get: () => lastFrame, set: (v) => { lastFrame = v; }, enumerable: true, configurable: true },
+      k: { get: () => [...U.uK.value].map(v => +v.toFixed(2)), enumerable: true, configurable: true },
+      wash: { get: () => U.uWash.value.map(v => +Math.max(v.x, v.y, v.z).toFixed(2)), enumerable: true, configurable: true },
+      pocket: { get: () => (lastFrame ? Array.from(lastFrame.pocket, v => +v.toFixed(1)) : undefined), enumerable: true, configurable: true },
+    });
+  }
   const mixT = (a, b, w) => a.map((v, i) => v * (1 - w) + b[i] * w);
   // 盤面電飾の表（NOTES §5）：[出来事の中の時刻(秒、JP は配当で伸びる), 長さ(秒), 色, 波]
   const FLASH = {
@@ -479,7 +490,8 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
     const A = F.ambient ?? 1, act = F.active || [];
     // Complete 1029 script rows overwrite all these region outputs below.
     if (!(U.uScriptTint && completeScriptRegions(F.m3))) {
-    for (let i = 0; i < geom.edge.length; i++) { const c = adapter.edgeColor(F, i, clock); ec[i * 3] = c[0]; ec[i * 3 + 1] = c[1]; ec[i * 3 + 2] = c[2]; }
+    if (ALLOCFIX && adapter.edgeColorInto) for (let i = 0; i < geom.edge.length; i++) { const c = adapter.edgeColorInto(F, i, clock, edgeTmp); ec[i * 3] = c[0]; ec[i * 3 + 1] = c[1]; ec[i * 3 + 2] = c[2]; }
+    else for (let i = 0; i < geom.edge.length; i++) { const c = adapter.edgeColor(F, i, clock); ec[i * 3] = c[0]; ec[i * 3 + 1] = c[1]; ec[i * 3 + 2] = c[2]; }
     let ksum = 0;
     for (let r = 0; r < 8; r++) {
       let R = 0, G = 0, B = 0;
@@ -615,7 +627,7 @@ export async function installM3Cabinet({ hr, fxApi, presenter, pa = null, getLam
     const prizeRank = getPrize && prizeNames ? prizeNames.indexOf(getPrize()) : 0;
     const rank = Math.min(prizeRank,F.m3?.meterLimit??5);
     for (let i = 0; i < 5; i++) U.uMet.value[i] = Math.max(Math.max(0, met[i]), i < rank ? 0.9 : 0) * (F.m3?.meterGain ?? A);
-    st.lastF = F; st.k = [...U.uK.value].map(v => +v.toFixed(2)); st.wash = U.uWash.value.map(v => +Math.max(v.x, v.y, v.z).toFixed(2)); st.pocket = Array.from(F.pocket, v => +v.toFixed(1));
+    if (ALLOCFIX) st.lastF = F; else { st.lastF = F; st.k = [...U.uK.value].map(v => +v.toFixed(2)); st.wash = U.uWash.value.map(v => +Math.max(v.x, v.y, v.z).toFixed(2)); st.pocket = Array.from(F.pocket, v => +v.toFixed(1)); }
   }
   hr.rtMain.resolveDepthBuffer = false;
   installNativeMergedMain(hr, { getLCDMesh: () => fxApi?.plate?.mesh ?? null });

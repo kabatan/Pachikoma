@@ -14,7 +14,8 @@ export function createBallTargetCrop(hr, full) {
   });
   const world=new THREE.Matrix4(),clip=new THREE.Matrix4(),vp=new THREE.Matrix4(),instance=new THREE.Matrix4();
   const bounds=new WeakMap(),stats={frames:0,cropped:0,fullPixels:0,drawPixels:0,lastHeight:full.height,maxY:0};
-  let maxY=0,unsupported=false;
+  // 11/1 maxY を閉じ込め変数に置くと、代入のたびに数の箱が確保される。長さ1の配列に置く(値は同じ)
+  const mxA=new Float64Array(1);let unsupported=false;
   function bound(geometry,matrix) {
     const position=geometry.attributes.position;
     let rec=bounds.get(geometry);
@@ -27,7 +28,7 @@ export function createBallTargetCrop(hr, full) {
       if(!(w>0)){unsupported=true;return;}
       const sy=((e[1]*x+e[5]*y+e[9]*z+e[13])/w+1)*full.height*.5;
       if(!Number.isFinite(sy)){unsupported=true;return;}
-      maxY=Math.max(maxY,sy);
+      mxA[0]=Math.max(mxA[0],sy);
     }
   }
   function visit(o){
@@ -44,12 +45,12 @@ export function createBallTargetCrop(hr, full) {
       stats.frames++;stats.fullPixels+=full.width*full.height;
       let target=full;
       if(enabled){
-        maxY=0;unsupported=false;hr.sBalls.updateMatrixWorld(true);hr.camera.updateMatrixWorld(true);
+        mxA[0]=0;unsupported=false;hr.sBalls.updateMatrixWorld(true);hr.camera.updateMatrixWorld(true);
         vp.multiplyMatrices(hr.camera.projectionMatrix,hr.camera.matrixWorldInverse);
         hr.sBalls.traverseVisible(visit);
-        if(!unsupported)target=targets.find(t=>maxY+4<t.height)??full;
+        if(!unsupported){const my=mxA[0];target=targets.find(t=>my+4<t.height)??full;}
       }
-      stats.maxY=maxY;stats.lastHeight=target.height;stats.drawPixels+=target.width*target.height;if(target!==full)stats.cropped++;
+      stats.maxY=mxA[0];stats.lastHeight=target.height;stats.drawPixels+=target.width*target.height;if(target!==full)stats.cropped++;
       return target;
     },
     setEnabled(on){enabled=!!on;},

@@ -17,6 +17,18 @@ const hsv = (h, s, v) => {
   }
 };
 const toLin = (c) => (c <= .04045 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4));
+// 11/1 毎コマの一時配列を省く版(値は同じ演算順)。?allocfix=0 で従来。
+const ALLOCFIX = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('allocfix') !== '0'; } catch { return true; } })();
+const hsvLinInto = (h, out) => {
+  const i = Math.floor(h * 6), f = h * 6 - i, q = 1 - f * 1, t = 1 - (1 - f) * 1;   // s=1, v=1 (hsv と同じ式)
+  let r, g, b;
+  switch (((i % 6) + 6) % 6) {
+    case 0: r = 1; g = t; b = 0; break; case 1: r = q; g = 1; b = 0; break;
+    case 2: r = 0; g = 1; b = t; break; case 3: r = 0; g = q; b = 1; break;
+    case 4: r = t; g = 0; b = 1; break; default: r = 1; g = 0; b = q; break;
+  }
+  out[0] = toLin(r); out[1] = toLin(g); out[2] = toLin(b); return out;
+};
 
 /** 合成後の7穴×RGBを、色の比率を保ったまま各口の最大成分が上限(筐体側は0..8を超えると例外)以下になるよう縮める。上限以下の値は変えない */
 function clampTriples(a, max) {
@@ -59,9 +71,33 @@ export class LightAdapter {
    *  stage2a の env は0灯の常時E(口の赤LED・ロゴ・表示)をAに折り込み済みで、灯数で ea/eb が下がると一緒に暗くなる。
    *  光層が個別のE sourceを持てば、これを「絶対量(線形RGB)」として足し、envからは同量を引く。
    *  それまでは lf.steadyE に置くだけで描画は変えない(消費側が無ければ無害)。 */
+  /** edgeColor の一時配列なし版。結果は同じ値(同じ演算順)。out(長さ3)へ書いて返す */
+  edgeColorInto(F, i, t, out) {
+    const e = F.edge, ge = this.geom.edge[i], base = e.base || { amount: 1, speed: 1 };
+    const hue = ((ge.pf - t * .12 * (base.speed || 1)) % 1 + 1) % 1;
+    hsvLinInto(hue, out);
+    const g = (base.amount ?? 1) * this.rainbowGain, a = e.ovrA[i], m = e.mul[i], A = F.ambient ?? 1;
+    const k = ge.name.startsWith('EDGE_BOTTOM') ? (this.bottomK ?? 1) : 1;
+    for (let c = 0; c < 3; c++) out[c] = ((out[c] * g * m) * (1 - a) + e.ovr[i * 3 + c] * a + e.add[i * 3 + c]) * A * k;
+    return out;
+  }
   steadyE(F) {
     const A = F.ambient ?? 1, k = (v) => v * A;
     if (!F.logo || !F.pocket || !F.btn || !F.seg) return null;   // 光の無い最小フレーム(接続確認など)
+    if (ALLOCFIX) {   // 持ち回りの入れ物へ書く(毎コマ新しい配列を作らない)。値と演算順は同じ
+      let se = this._se;
+      if (!se || se.logo.length !== F.logo.length || se.pocket.length !== F.pocket.length || se.btn.length !== F.btn.length || se.seg.meter.length !== F.seg.meter.length) {
+        se = this._se = { mode: 'absolute-linear-rgb', logo: new Array(F.logo.length).fill(0), pocket: new Float32Array(F.pocket.length), btn: new Float32Array(F.btn.length), seg: { meter: new Array(F.seg.meter.length).fill(0), blink: 0, mode: '' } };
+      }
+      for (let i = 0; i < F.logo.length; i++) se.logo[i] = F.logo[i] * A;
+      const pk = Math.max(A, .8);
+      for (let i = 0; i < F.pocket.length; i++) se.pocket[i] = F.pocket[i] * pk;
+      clampTriples(se.pocket, 7.9);
+      for (let i = 0; i < F.btn.length; i++) se.btn[i] = F.btn[i] * A;
+      for (let i = 0; i < F.seg.meter.length; i++) se.seg.meter[i] = F.seg.meter[i];
+      se.seg.blink = F.seg.blink; se.seg.mode = F.seg.mode;
+      return se;
+    }
     return {
       mode: 'absolute-linear-rgb',
       logo: F.logo.map(k),
@@ -76,6 +112,12 @@ export class LightAdapter {
     lf.steadyE = this.steadyE(F);
     for (const id of ids || (this._ids ||= [...Object.keys(q)])) {
       const m = this.mapId(id); if (!m) continue;
+      if (ALLOCFIX) {   // 対応ごとに持ち回りの {rgb} を書き換える(毎コマ新しい物を作らない)。同じ対応を指すidは同じ値なので共有してよい
+        const o = m._q || (m._q = { rgb: [0, 0, 0] }), r = o.rgb;
+        if (m.petal !== undefined) { const j = m.petal * 3; r[0] = F.petal[j] * A; r[1] = F.petal[j + 1] * A; r[2] = F.petal[j + 2] * A; }
+        else this.edgeColorInto(F, m.edge, t, r);
+        q[id] = o; continue;
+      }
       if (m.petal !== undefined) { const o = m.petal * 3; q[id] = { rgb: [F.petal[o] * A, F.petal[o + 1] * A, F.petal[o + 2] * A] }; }
       else q[id] = { rgb: this.edgeColor(F, m.edge, t) };
     }

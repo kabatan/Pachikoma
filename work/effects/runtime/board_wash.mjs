@@ -3,19 +3,21 @@
 // 灯数ごとの色(紺/ピンク/金)・重複ルーレットの赤・勝負の赤・JP/大成功の虹は、花びらと縁の色がそのまま盤面へ出る。
 const SW = 1440, SH = 2560;
 const SPOTS = [[240, 430], [1200, 430], [720, 300], [150, 1100], [1290, 1100], [230, 1800], [1210, 1800], [720, 2120]];   // 画面px: 左上/右上/上中央/左/右/左下/右下/下中央
+const WASH_FAST = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('allocfix') !== '0'; } catch { return true; } })();
 export function makeBoardWash(geom, adapter, { radius = 640, gain = 2.2, sigma = 560 } = {}) {
   const ep = geom.edge.map((e) => [742.5 + ((e.x - 0.006) / 0.151) * 597, 1094 - ((e.y + 0.015) / 0.169) * 336]);
   const pp = geom.petals.map((p) => [p.u * SW, p.v * SH]);
   const wE = SPOTS.map((s) => ep.map((q) => Math.exp(-((q[0] - s[0]) ** 2 + (q[1] - s[1]) ** 2) / (2 * sigma * sigma))));
   const wP = SPOTS.map((s) => pp.map((q) => Math.exp(-((q[0] - s[0]) ** 2 + (q[1] - s[1]) ** 2) / (2 * sigma * sigma))));
   const sE = wE.map((w) => w.reduce((a, b) => a + b, 0) || 1), sP = wP.map((w) => w.reduce((a, b) => a + b, 0) || 1);
-  const ec = new Float32Array(geom.edge.length * 3);
+  const ec = new Float32Array(geom.edge.length * 3), edgeTmp = new Float64Array(3);
   return {
     SPOTS,
     /** F: Director のフレーム、t: 秒。戻り: BL.set 用の配列(盤面照射) */
     compute(F, t, { k = 1, navy = 0, ambientMin = 0, red = 0, sat = 1, rainbow = 0 } = {}) {
       if (!F || !F.edge || !F.petal) return [];
-      for (let i = 0; i < geom.edge.length; i++) { const c = adapter.edgeColor(F, i, t); ec[i * 3] = c[0]; ec[i * 3 + 1] = c[1]; ec[i * 3 + 2] = c[2]; }
+      if (WASH_FAST && adapter.edgeColorInto) for (let i = 0; i < geom.edge.length; i++) { const c = adapter.edgeColorInto(F, i, t, edgeTmp); ec[i * 3] = c[0]; ec[i * 3 + 1] = c[1]; ec[i * 3 + 2] = c[2]; }   // 一時配列なし版(値は同じ)。?allocfix=0 で従来
+      else for (let i = 0; i < geom.edge.length; i++) { const c = adapter.edgeColor(F, i, t); ec[i * 3] = c[0]; ec[i * 3 + 1] = c[1]; ec[i * 3 + 2] = c[2]; }
       const A = Math.max(F.ambient ?? 1, ambientMin), out = [];   // ambientMin: 重複ルーレット・勝負の暗転中も、盤面は深紅に照らす
       for (let s = 0; s < SPOTS.length; s++) {
         let r = 0, g = 0, b = 0;

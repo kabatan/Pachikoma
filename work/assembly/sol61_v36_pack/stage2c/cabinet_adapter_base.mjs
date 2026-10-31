@@ -2,6 +2,8 @@
 // LightAdapter with this subclass; do not install a second q writer in draw.
 import {LightAdapter} from '../../../effects/runtime/light_adapter.mjs';
 const clone=x=>JSON.parse(JSON.stringify(x));
+// 11/1 毎コマの確保を減らす版(値は同じ)。?allocfix=0 で従来。
+const ALLOCFIX=(()=>{try{return new URLSearchParams(globalThis.location?.search??'').get('allocfix')!=='0';}catch{return true;}})();
 const leaf=rgb=>({rgb:[...rgb],gain:0});
 const defaults=()=>({logo:leaf([1,.2,.4]),display:{digits:Array.from({length:28},()=>leaf([1,.015,.065])),meter:Array.from({length:5},()=>leaf([1,.025,.30]))},buttons:{left:leaf([1,0,0]),right:leaf([1,1,1])}});
 const checkKeys=(v,keys,name)=>{if(!v||typeof v!=='object'||Array.isArray(v))throw new TypeError(name);for(const k of Object.keys(v))if(!keys.includes(k))throw new TypeError(name+': unknown '+k);};
@@ -56,6 +58,22 @@ export class Stage2bLightAdapter extends LightAdapter {
  }
  apply(F,frame,t,ids){
   super.apply(F,frame,t,ids);const q=frame.q||(frame.q={});
+  if(ALLOCFIX){
+   const cids=this._cabinetIds;
+   if(this._fastFor!==cids){this._fastFor=cids;this._refIds=cids.filter(id=>kind(this._specs[id])==='reference');this._kinds=cids.map(id=>kind(this._specs[id]));this._qo=cids.map(()=>({rgb:[0,0,0]}));}
+   let h=0;const rids=this._refIds;
+   for(let i=0;i<rids.length;i++){const g=this._value(this._specs[this._specs[rids[i]].reference_for]).gain;if(g>h||g!==g)h=g;}
+   for(let i=0;i<cids.length;i++){
+    const id=cids[i],spec=this._specs[id],k=this._kinds[i],o=this._qo[i],r=o.rgb;
+    if(k==='steady'){const w=spec.steady_role==='residual'?h:1-h;r[0]=w;r[1]=w;r[2]=w;}
+    else if(k==='reference'){
+     const target=this._specs[spec.reference_for];if(!target)throw new Error('missing reference target');
+     const g=this._value(target).gain;const w=h-g;r[0]=w;r[1]=w;r[2]=w;
+    }else{const {rgb,gain}=this._value(spec);r[0]=rgb[0]*gain;r[1]=rgb[1]*gain;r[2]=rgb[2]*gain;}
+    q[id]=o;
+   }
+   return frame;
+  }
   // Positive implementation of E + sum g*(W*rgb-R). h>=every gain whose
   // frozen R is nonzero. Default gains0 leave only static/E_steady at1.
   const h=Math.max(0,...this._cabinetIds.filter(id=>kind(this._specs[id])==='reference').map(id=>this._value(this._specs[this._specs[id].reference_for]).gain));
