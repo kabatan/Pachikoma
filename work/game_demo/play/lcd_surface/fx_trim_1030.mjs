@@ -15,6 +15,14 @@ export const FX_TRIM = {
   // 失敗（ガラスが割れて灰色＋TOTAL）：TOTAL が出て約0.7秒（68〜89）だけ読ませ、灰色の静止（90〜149）を省く。5.0→3.8秒(10/30)→3.0秒(10/31 監督「失敗画面が体感長い」)
   fail: { scenes: ['fail_first', 'fail_chain'], frames: 90 },
 };
+// 10/31 回転率（監督）。?turnover=0 で上の長さに戻す。
+//   失敗：ガラスが割れて灰色になるまでの短い映像（fail_v9：元の 24〜63 コマ＋最後を保持、TOTAL なし）に FAILED の字（fail_label_1031）。3.0→1.6秒。
+//   確定：扉が開く途中から。TOTAL が出たら回転を飛ばして止まる直前へ。数字の計算を見せない（結果画面と重複）。7.1→2.7秒。
+export const TURNOVER = {
+  fail: { scenes: ['fail_first', 'fail_chain'], file: '../../../../effects/jp_teacher/06_failure/v9_1031/fail_v9.mp4', frames: 48, cueOffset: -24 },
+  confirm: { scene: 'chain_confirm', skip: [[0, 60], [100, 150]], frames: 190 },
+};
+export function turnoverEnabled(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('turnover') !== '0'; }
 const FPS = 30;
 export const FX_TRIM_RULES = {   // 規則（ルールH）の秒数。もとは 6.3・5.8
   JpMeterIntroSeconds: 6.3 - (13 - 1) / FPS,
@@ -55,6 +63,11 @@ export function attachFxTrim(lcd, { controller, log = () => {} } = {}) {
     for (const k of ['first', 'repeat']) skip(PAY_TRIM.announce[k].scene, PAY_TRIM.announce[k].skip);
   }
   for (const n of FX_TRIM.fail.scenes) tail(n, FX_TRIM.fail.frames);
+  const turn = turnoverEnabled();
+  if (turn) {
+    for (const n of TURNOVER.fail.scenes) { const s = man.scenes[n]; if (s) { s.file = TURNOVER.fail.file; s.frames = TURNOVER.fail.frames; s.cueOffset = TURNOVER.fail.cueOffset; applied.push({ name: n, turnover: true }); } }
+    skip(TURNOVER.confirm.scene, TURNOVER.confirm.skip); tail(TURNOVER.confirm.scene, TURNOVER.confirm.frames); if (man.scenes[TURNOVER.confirm.scene]) man.scenes[TURNOVER.confirm.scene].dropSkippedCues = true;
+  }
   // 規則の秒数（同じ rules はリセット後の新しい試合でも使われる）
   // payshort：規則の秒数（配当のあとの確定待ち・告知）を、短くした映像の長さに合わせる。どれも「いまの値より短いときだけ」下げる（規則の側で短くされたら、それに従う）。
   //   RouletteResultSeconds[段] = 止まってから配当の映像が終わるまで（ルーレットの止まった後の尾＋配当）。これより長いと映像が終わっても告知が出ず空白になる。
@@ -70,7 +83,7 @@ export function attachFxTrim(lcd, { controller, log = () => {} } = {}) {
     return out;
   };
   const payR = pay ? payRules() : null;
-  const setRules = () => { for (const r of new Set([controller.rules, controller.game?.rules].filter(Boolean))) { Object.assign(r, FX_TRIM_RULES); r.FailFilmSeconds = FX_TRIM_FAIL_SECONDS;
+  const setRules = () => { for (const r of new Set([controller.rules, controller.game?.rules].filter(Boolean))) { Object.assign(r, FX_TRIM_RULES); r.FailFilmSeconds = turn ? TURNOVER.fail.frames / FPS : FX_TRIM_FAIL_SECONDS; if (turn) r.ChainConfirmSeconds = (TURNOVER.confirm.frames - skippedOf(TURNOVER.confirm.skip)) / FPS;
     if (payR) {
       if (Array.isArray(r.RouletteResultSeconds)) r.RouletteResultSeconds = r.RouletteResultSeconds.map((x, i) => (payR.filmAfterStop[i] != null && payR.filmAfterStop[i] < x ? +payR.filmAfterStop[i].toFixed(3) : x));
       for (const key of ['ChainAnnounceSecondsFirst', 'ChainAnnounceSeconds']) if (payR[key] != null && (r[key] == null || payR[key] < r[key])) r[key] = payR[key];
@@ -87,6 +100,11 @@ export function attachFxTrim(lcd, { controller, log = () => {} } = {}) {
       let off = e.off;
       for (const [a, b] of [...ranges].reverse()) { if (e.off >= b) off -= b - a; else if (e.off >= a) off = a; }
       if (off !== e.off) { e.off = off; audio++; }
+    }
+    if (turn) for (const e of ev) {   // 確定：飛ばす区間の音は鳴らさず、後ろは同じだけ前へ
+      if (e.scene !== TURNOVER.confirm.scene || e.ref === 'stop' || !Number.isFinite(e.off) || e.off === 0) continue;
+      if (TURNOVER.confirm.skip.some(([a, b]) => e.off >= a && e.off < b)) { e.do = []; audio++; continue; }
+      e.off -= skippedOf(TURNOVER.confirm.skip.filter(([, b]) => b <= e.off)); audio++;
     }
     Object.defineProperty(ev, '__fxTrim', { value: true });
   }

@@ -1,6 +1,8 @@
 import {createFinalResultRenderer} from './final_result_renderer_20261029.mjs';
 import {createDailyResultBest,finalResultState} from './final_result_state_20261029.mjs';
 const W=1152,H=1268,PX=34,PY=28,DURATION=350/30;
+// 10/31 回転率：TOTAL が止まる直前（150コマ）から始める。玉数→賞のメーター→メダル（開始2.1秒後）。映像の終わりで待機へ、メダルの1.2秒後からボタンで閉じられる。?resultskip=0 で従来（頭から11.7秒・25秒で待機）
+const RESULT_SKIP=new URLSearchParams(globalThis.location?.search??'').get('resultskip')!=='0',START_F=RESULT_SKIP?150:0,START=START_F/30,CLOSE_AFTER=(250-150)/30,AUTO_AFTER=(350-150)/30+.5;
 export async function attachFinalResultSurface(lcd,{controller,finalResultImageFactory=null,fullPanelPrevious=null,manifestUrl=new URL('../../../effects/jp_teacher/10_result/prod/manifest.json',import.meta.url)}={}){
  if(!lcd?.production||lcd.finalResultSurface)return lcd;
  const response=await fetch(manifestUrl);if(!response.ok)throw Error(`final result manifest HTTP ${response.status}`);
@@ -36,8 +38,8 @@ export async function attachFinalResultSurface(lcd,{controller,finalResultImageF
  });};
  const warm=()=>renderer.prewarm().catch(recordError);
  const seek=t=>new Promise(resolve=>{t=Math.min(video.duration-1/60,Math.max(0,t));if(Math.abs(video.currentTime-t)<.00001){resolve();return;}const done=()=>{clearTimeout(timer);video.removeEventListener('seeked',done);resolve();},timer=setTimeout(done,5000);video.addEventListener('seeked',done,{once:true});video.currentTime=t;});
- const exit=()=>{if(!active)return;gpuFrame=null;active=false;pauseVideo('exit');if(replayAfter!=null)controller.replayAfter=replayAfter;replayAfter=null;};
- const start=()=>{if(active&&game===controller.game)return;exit();plain=false;lastCheck=0;guard.bad=0;guard.force=null;if(gpuRenderer&&guard.stage!=='gpu'){renderer=gpuRenderer;gpuMode=true;gpuFrame=null;guard.stage='gpu';guard.reason=null;guard.switchedAt=null;guardLog('warn','新しい客: GPU合成へ戻しました');}if(guard.stage==='gpu')guard.reason=null;if(guard.stage==='plain'){guard.stage='legacy';}game=controller.game;state=withExtras(finalResultState(game,daily),game);generation++;time=0;presentedTime=0;renderedFrame=-1;active=true;fresh=true;lastSeekAt=performance.now();video.currentTime=0;replayAfter=controller.replayAfter;controller.replayAfter=Math.max(replayAfter,controller.resultAge+DURATION);warm();if(!manual)playVideo();};
+ const exit=()=>{if(!active)return;gpuFrame=null;active=false;pauseVideo('exit');if(START)video.currentTime=START;if(replayAfter!=null)controller.replayAfter=replayAfter;replayAfter=null;};
+ const start=()=>{if(active&&game===controller.game)return;exit();plain=false;lastCheck=0;guard.bad=0;guard.force=null;if(gpuRenderer&&guard.stage!=='gpu'){renderer=gpuRenderer;gpuMode=true;gpuFrame=null;guard.stage='gpu';guard.reason=null;guard.switchedAt=null;guardLog('warn','新しい客: GPU合成へ戻しました');}if(guard.stage==='gpu')guard.reason=null;if(guard.stage==='plain'){guard.stage='legacy';}game=controller.game;state=withExtras(finalResultState(game,daily),game);generation++;time=START;presentedTime=START;renderedFrame=-1;active=true;fresh=true;lastSeekAt=performance.now();video.currentTime=START;replayAfter=controller.replayAfter;controller.replayAfter=RESULT_SKIP?controller.resultAge+CLOSE_AFTER:Math.max(replayAfter,controller.resultAge+DURATION);if(RESULT_SKIP&&!new URLSearchParams(globalThis.location?.search??'').has('resultauto'))controller.resultAutoSeconds=controller.resultAge+AUTO_AFTER;warm();if(!manual)playVideo();};
 
  // 10/30 保険（?finalguard=0 で無し）: 最終結果が出て2秒たっても動画が readyState<2、または画が黒(中央付近の輝度がほぼ0)なら、旧の描画経路へ切り替えて結果を必ず見せる。
  // 段階: GPU合成 → 旧の描画(WebGL2・2D転写) → それでも黒/動画なしなら、結果の数字だけの静止カード。原因は console.error と errors に残す。
@@ -64,7 +66,7 @@ export async function attachFinalResultSurface(lcd,{controller,finalResultImageF
   catch(e){guardLog('error','旧の描画を作れません: '+String(e?.message??e));guard.stage='legacy';guard.bad=2;}
  };
  const guardTick=()=>{
-  if(!GUARD||manual||plain||time<2)return;const now=performance.now();if(now-lastCheck<250)return;lastCheck=now;guard.checks++;
+  if(!GUARD||manual||plain||time-START<2)return;const now=performance.now();if(now-lastCheck<250)return;lastCheck=now;guard.checks++;
   let bad=guard.force&&(guard.stage==='gpu'||guard.force==='persist')?'test:'+guard.force:null;
   // 10/31 誤作動対策（?finalguard=old で従来）: readyState<2 でも再生位置が進んでいる間は止まりとみなさない。進みが1.5秒止まって初めて不良にする
   const ct=video.currentTime;if(ct!==guardCt||FINAL_OLD){guardCt=ct;guardMoveAt=now;}
@@ -112,7 +114,8 @@ export async function attachFinalResultSurface(lcd,{controller,finalResultImageF
  if(revision)Object.defineProperty(lcd,'uploadRevision',{configurable:true,enumerable:true,get:()=>active?undefined:revision.call(lcd)});
  Object.defineProperty(lcd,'gpuPanelSource',{configurable:true,enumerable:true,get:()=>active?gpuFrame:baseGpu?.call(lcd)});
  lcd.materializeGpuLcd=(reason,force)=>active&&gpuFrame?materializeFinal(reason):baseMaterialize?.(reason,force);
- lcd.finalResultSurface={video,get renderer(){return renderer;},guard,errors,initErrors,get gpuMode(){return gpuMode;},get generation(){return generation;},diagnostics:()=>renderer.diagnostics?.()??{mode:'legacy',extraContexts:1},playback,manifest:man,daily,get active(){return active;},get time(){return time;},get state(){return state;},get frame(){return renderedFrame;}};
+ if(START)video.currentTime=START;   // 次の結果で頭出しの待ちをなくす
+ lcd.finalResultSurface={startFrame:START_F,video,get renderer(){return renderer;},guard,errors,initErrors,get gpuMode(){return gpuMode;},get generation(){return generation;},diagnostics:()=>renderer.diagnostics?.()??{mode:'legacy',extraContexts:1},playback,manifest:man,daily,get active(){return active;},get time(){return time;},get state(){return state;},get frame(){return renderedFrame;}};
  lcd.dispose=()=>{if(disposed)return;disposed=true;exit();if(videoCallback!=null)video.cancelVideoFrameCallback?.(videoCallback);video.removeAttribute('src');video.load();for(const r of new Set([renderer,gpuRenderer,legacy]))r?.dispose?.();original.dispose();};
  // Load sparse lossless FX while attract/howto is displayed, never on a result stamp.
  try{await renderer.prewarm();renderer.warmup?.();renderer.warmActualDraw?.();}catch(error){disposed=true;if(videoCallback!=null)video.cancelVideoFrameCallback?.(videoCallback);renderer.dispose();video.removeAttribute('src');video.load();throw error;}return lcd;

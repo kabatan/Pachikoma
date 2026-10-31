@@ -67,6 +67,9 @@ export async function installAfterJpSound(engine, { lcd, controller, cuesUrl = n
         const nd = Math.min(5, String(Math.max(0, Math.round(model.earnings ?? 0))).length);
         for (let k = nd - 1; k >= 1; k--) jpItems.push({ f: 156 - 2 * k, s: 'digit_lock' + Math.min(3, 4 - k), db: -2 + (4 - k) });
       }
+      const sc = jp.man?.scenes?.[w.name];   // 10/31 回転率：短くした場面の音を映像に合わせる
+      if (sc?.cueOffset) jpItems = jpItems.map((it) => ({ ...it, f: it.f + sc.cueOffset }));
+      if (sc?.dropSkippedCues) jpItems = jpItems.filter((it) => !sc.skip?.some(([a, b]) => it.f >= a && it.f < b));
       api.scene = { key, name: w.name };
     }
     const f = w.f ?? 0; jpPulse = api.scene.key;
@@ -126,7 +129,7 @@ export async function installAfterJpSound(engine, { lcd, controller, cuesUrl = n
   function resultTick() {
     const fr = lcd.finalResultSurface; if (!fr) return;
     if (fr.active !== frActive) {
-      frActive = fr.active; frLast = -1; frItems = [];
+      frActive = fr.active; frLast = (fr.startFrame ?? 0) - 1; frItems = [];
       if (frActive) {
         const st = fr.state, R = cues.result; frItems = R.frames.slice();
         const [a, b] = R.meterFrames, v = Math.max(1, Math.min(st.value, st.thresholds.at(-1)));

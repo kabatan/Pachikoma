@@ -101,7 +101,7 @@ export class PhysicsAdapter {
       this.shuttleHas=true;this.refillAt=null;
       const event={type:'reserve_return',tick:this.tick+1,origin};this._stamp(event);this.events.push(event);
     }
-    if (this.shuttleHas) this._release(shotId); else { this.pendingLaunch.push(shotId); (this.pendingAim ??= new Map()).set(shotId, { aim: this.aim, dir: this.dir }); }   // 待たされる玉は押した瞬間の狙いで出す
+    if (this.shuttleHas) this._release(shotId); else { this.pendingLaunch.push(shotId); if (new URLSearchParams(globalThis.location?.search ?? '').get('fireheld') === '1') (this.pendingAim ??= new Map()).set(shotId, { aim: this.aim, dir: this.dir }); }   // 10/31 待たされる玉は出る瞬間の射出器の位置から（?fireheld=1 で押した瞬間の狙い）
   }
   _release(shotId) {
     const held = this.pendingAim?.get(shotId); if (held) { this.pendingAim.delete(shotId); this.aim = held.aim; this.dir = held.dir; }

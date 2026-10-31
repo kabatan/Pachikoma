@@ -8,6 +8,8 @@ import { MedalGame, MedalPhase } from '../rules/medal_rules.mjs';
 /** 三角波(0..1周期) -1..1。PortraitPreviewGeometry.BoardSweep の triangle。 */
 export function triangle(phase) { const u = phase - Math.floor(phase); return u < 0.25 ? 4 * u : u < 0.75 ? 2 - 4 * u : 4 * u - 4; }
 
+// 10/31 待たされた発射は発射の瞬間の射出器の位置から（押した瞬間の位置だと球がワープして見える）。?fireheld=1 で戻す
+const HELD_AIM = new URLSearchParams(globalThis.location?.search ?? '').get('fireheld') === '1';
 export class MedalController {
   constructor({ rules, seed, hooks = {}, sweepPeriod = 5.5 } = {}) {
     this.rules = rules; this.seed = seed; this.hooks = hooks; this.sweepPeriod = sweepPeriod;
@@ -96,7 +98,7 @@ export class MedalController {
     if (this.fireBuffer && this.fireBlockedReason()) { this.fireBuffer = null; this.fireGateDrops++; }   // 演出の間に溜まった押しは捨てる(終わった直後にまとめて撃たない)
     if (this.fireBuffer) {
       this.fireBuffer.left -= dt;
-      if (g.canFire && !this.confirmFinish && !this.preBuffer) { const b = this.fireBuffer; this.fireBuffer = null; if (this._fire(b.aim, b.dir)) for (const fn of this.listeners) fn('fire', this); }
+      if (g.canFire && !this.confirmFinish && !this.preBuffer) { const b = this.fireBuffer; this.fireBuffer = null; if (HELD_AIM ? this._fire(b.aim, b.dir) : this._fire()) for (const fn of this.listeners) fn('fire', this); }
       else if ((!g.rules.ContinuousFire && this.fireBuffer.left <= 0) || !g.canAim) { this.droppedInputs.push({ action: 'fire', frame: this.frame, reason: 'expired' }); this.fireBuffer = null; }
     }
     if (g.phase === MedalPhase.Continue || g.phase === MedalPhase.ChainChoice || g.phase === MedalPhase.Result || g.phase === MedalPhase.Fault || g.phase === 'Meter' || g.phase === 'Roulette' || g.meter) this.confirmFinish = false;   // 10/31 検証: 連打メーター(H)・ルーレット・故障に入ったら「ここで計数しますか」の確認待ちを消す（持ち越すと連打の発射を止める）

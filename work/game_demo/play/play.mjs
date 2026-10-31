@@ -176,7 +176,7 @@ if (!q.has('nofx')) {
   if(fullPanelPrevious){if(lcd){const dispose=lcd.dispose.bind(lcd);lcd.dispose=()=>{try{return dispose();}finally{fullPanelPrevious.dispose();}};}else fullPanelPrevious.dispose();}
   if(resultBoundaryGpu){if(lcd){const dispose=lcd.dispose.bind(lcd);lcd.dispose=()=>{try{return dispose();}finally{resultBoundaryGpu.dispose();}};}else resultBoundaryGpu.dispose();}
   if(lcd?.jp){   // 液晶の映像の長さ・状態を規則へ渡す(規則は映像を知らない): 外れ・確定の映像の最中に時間切れの画面が割り込まない/確定の映像の間の通常球の着地を静かにする
-    const {man,model}=lcd.jp,sec=n=>man.scenes[n]?man.scenes[n].frames/man.fps:0;
+    const {man,model}=lcd.jp,sec=n=>man.scenes[n]?(man.scenes[n].frames-(man.scenes[n].skip??[]).reduce((k,[a,b])=>k+b-a,0))/man.fps:0;
     Object.defineProperty(app.rules,'FailFilmSeconds',{value:Math.max(sec('fail_first'),sec('fail_chain')),enumerable:false,configurable:true,writable:true});
     Object.defineProperty(app.rules,'ChainConfirmSeconds',{value:sec('chain_confirm'),enumerable:false,configurable:true,writable:true});
     Object.defineProperty(app.rules,'quietGate',{value:()=>!!(model.active&&model.name==='chain_confirm'),enumerable:false,configurable:true,writable:true});
@@ -222,6 +222,7 @@ if (!q.has('nofx')) {
   if (lcd?.production && r2Audio && q.get('afterjp') !== '0') { try { window.__afterJp = await (await import('../../audio/runtime/after_jp_sound_1029.mjs')).installAfterJpSound(r2Audio.engine, { lcd, controller: ctrl }); } catch (error) { console.error('[after-jp]', error); } }   // JP後(継続・確定・時間切れ・最終リザルト)の音。?afterjp=0 で無効
   if (lcd?.production && r2Audio && q.get('newsfx') !== '0') { try { window.__r4Sfx = await (await import('../../audio/runtime/r4_sfx_1030.mjs')).installR4Sfx(r2Audio.engine, { lcd, controller: ctrl }); } catch (error) { console.error('[r4-sfx]', error); } }   // 10/30 新しい演出(チュートリアル・継続告知・封印の扉・穴の強調・残り時間)の効果音。?newsfx=0 で無効(従来の音)
   if (lcd?.production && r2Audio && q.get('audiolift') !== '0') { try { window.__audioLift = await (await import('../../audio/runtime/audio_lift_1031.mjs')).installAudioLift(r2Audio.engine, { lcd, controller: ctrl }); } catch (error) { console.error('[audio-lift]', error); } }   // 10/31 JPチャンス・配当ルーレット・JP成功の迫力(新しい合成音+段ごとの増幅+リミッター、通常時は素通し)。?audiolift=0 で無効(従来の音)
+  if (lcd?.production && r2Audio && q.get('fxloud') !== '0') { try { window.__loudFx = await (await import('../../audio/runtime/loud_fx_1101.mjs')).installLoudFx(r2Audio.engine, { lcd, controller: ctrl }); } catch (error) { console.error('[loud-fx]', error); } }   // 11/1 超つくこまRUSH・継続(カットイン・成功・着地)の決めの音を雷と同等の大きさに(新しい合成音を master 直結+その瞬間だけ他の音を絞る)。?fxloud=0 で無効(従来の音)
   fxApi = await connectPlayEffects({ hr, bus: effects, getSnapshot: () => effects.contextSnapshot(), lightingSources: pack.lighting.sources, rules: app.rules, lcdGain: Number(q.get('lcdgain') ?? 1), tray: q.has('notray') ? null : { ...runtime, get jpHold(){return runtime.jpHold;}, displayWallet: () => presenter.displayWallet() }, lcd, ownedFrontEarlyClip: M3, ownedBackEarlyClip: M3, ownedFrameSnapshot: M3 && !q.has('pack') && !q.has('fxjs') });
   app.overlay.fx.style.display = 'none';   // 旧ダミーの帯・カットイン・ルーレット・JPは液晶演出に置き換え
   if (!q.has('oldui')) app.overlay.setBare(true);   // 旧UI(上の帯・持ち玉・口の番号・キー表示・待機/時間切れ/結果の画面)は出さない。液晶と7セグが正式。?oldui で旧表示(デバッグ用)

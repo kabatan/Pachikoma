@@ -138,7 +138,11 @@ export function connectEffects({ ctrl, presenter, bus = new EffectsBus() }) {
         choiceSent = key;
       }
       if (phase === 'Continue') send('timeup', { reason: g.endReason, reasonCode: g.wallet === 0 ? 'balls' : 'time', duration: g.rules.ContinueSeconds, seconds: g.rules.ExtraSeconds, balls: g.extraLoanBallsNow ?? g.rules.ExtraLoanBalls });
-      if (phase === 'Result') send('finish_count', { reason: g.endReason, reasonCode: g.wallet === 0 ? 'balls' : g.secondsLeft <= 0 ? 'time' : null, balls: g.wallet, total: g.wallet, ...nextRank(g) });
+      if (phase === 'Result') {
+        send('finish_count', { reason: g.endReason, reasonCode: g.wallet === 0 ? 'balls' : g.secondsLeft <= 0 ? 'time' : null, balls: g.wallet, total: g.wallet, ...nextRank(g) });
+        // 10/31 回転率：皿の計数（約2秒）を待たず結果を出す。?resultnow=0 で計数の完了を待つ
+        if (!resultSent && new URLSearchParams(globalThis.location?.search ?? '').get('resultnow') !== '0') { resultSent = true; const next = nextRank(g), prizeRank = ['participation', 'C', 'B', 'A', 'S', 'SS'][next.rankIndex]; send('result', { prizeRank, rank: prizeRank, balls: g.wallet, total: g.wallet, counted: 0, ...next }); }
+      }
     }
     const readyAmbient = g.phase === 'Ready' && !presenter.reveal && !Object.values(presenter.fx).some(Boolean);
     if (readyAmbient && !ambient) send('ambient');
