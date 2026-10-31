@@ -21,6 +21,7 @@ const TONE = { go_more: 'joy', praise_first: 'joy', praise_4: 'joy', praise_5: '
   jp_early: 'surp', dup_first_reset: 'surp', dup_reset_5: 'surp', drop_all: 'surp', time_10: 'surp', time_10_close: 'surp', time_5: 'surp' };
 export const IMPORTANT = new Set(['go_dup', 'dup_first_reset', 'dup_reset_5', 'drop_all', 'jp_early', 'time_10', 'time_10_close']), MIN_IMPORTANT = 3;   // 10/31 大事な説明：最低3秒は見せ、弱い一言で上書きしない。待ちでも捨てない
 const NO_CAP = new Set(['praise_4', 'praise_5']);   // 4灯・5灯の一言は上限の対象外
+const AFTER_QUIET = 3.2;   // JPの失敗のテロップ（あと◯本）が引くまで次の台詞を待つ
 const DUP_TEXT_SEC = 2.2;   // 演出の字（同じ穴！・ランプが消えた…）が引くまで、消灯の説明を待つ
 const SMALL = new Set(['idle_1', 'idle_2', 'idle_3', 'idle_4', 'idle_5', 'time_5']);   // 小さく出す（吹き出しの画像は同じ。描く倍率を下げる）
 
@@ -158,7 +159,7 @@ export function createGuide({ game, quiet = () => false, held = () => false, log
     // 台詞の調停
     const c = out.cur;
     if (c && S.t - c.t0 >= c.dur) end();
-    if (held()) { for (const x of S.queue) { x.expire += dt; x.notBefore += dt; } return; }   // 開始の案内が出ている間は待つ（捨てない）
+    if (held() || S.t - (S.jpQuietAt ?? -9) < AFTER_QUIET) { for (const x of S.queue) { x.expire += dt; x.notBefore += dt; } return; }   // 開始の案内が出ている間は待つ（捨てない）
     S.queue = S.queue.filter((x) => x.expire > S.t);
     const due = S.queue.filter((x) => x.notBefore <= S.t);
     if (due.length) {

@@ -14,11 +14,11 @@ const TIP_Y = 1176;   // しっぽの先（穴の少し上。穴のLEDを隠さ�
 const ASK_SEC = 3, ASK_GATE = 1.5, ASK_MAX = 2, EXPRS = ['idle', 'joy', 'big_joy', 'surprise', 'oshii', 'sad', 'cheer', 'panic'];
 const LINE_EXPR = { time_start: 'surprise', jp8_wow: 'surprise', jp8_come: 'big_joy', jp8_last: 'joy', jp8_award: 'big_joy', jp8_hole: 'cheer', jp8_free: 'joy', jp8_go: 'cheer', jp8s: 'cheer', ch15_how: 'cheer', ch15s: 'cheer', jp9_go: 'cheer', jp9_good: 'big_joy', jp9_slow: 'cheer', jp9_half: 'cheer', jp9_close: 'panic', jp9_oshii: 'oshii', rl11_how: 'cheer', rl11_short: 'cheer', jp12_clock: 'cheer', jp12_noclock: 'oshii', ch13_next: 'joy', ch13_a: 'big_joy', ch13_safe: 'joy', ch13_pick: 'idle', ch13_noclock: 'surprise', ch14_rate: 'joy', ch14_again: 'panic', ch14_keep: 'joy', ask_jp: 'idle', ask_chain: 'idle' };
 const JP_SEC = 22, CH_SEC = 16, GRACE = 8, SKIP_GAP = 0.4, SKIP_AGE = 0.8;
-const UPA_N = 12, UPA_FOOT = 1170, ARROW_W = 200, ARROW_H = 300, ARROW_AT = 0.35, HOLE_LINE = /^(jp8_hole|jp8s|ch15_how|ch15s)$/, CUT = 'chain_announce_cutin', CUT_SEC = 2.8;   // 説明の主役のうぱは大きく。穴を指す文は穴の横へ歩いて、大きな矢印で実際の穴を指す
+const UPA_N = 12, UPA_FOOT = 1170, ARROW_W = 200, ARROW_H = 300, ARROW_AT = 0.35, HOLE_LINE = /^(jp8_hole|jp8s|ch15_how|ch15s)$/, CUT = 'chain_announce_cutin', CUT_SEC = 1.7;   // 説明の主役のうぱは大きく。穴を指す文は穴の横へ歩いて、大きな矢印で実際の穴を指す
 const SHOWPIECE = /^(roulette_|reward_|chain_success|chain_jp_land|jp_rush|jp_bridge|jp_land|fail|chain_announce_)/;
 const CHOICE_LINE_AT = 1.6;   // 選択画面の入りの映像が終わってから台詞
 const FIRST_CHOICE = true;   // 10/31 監督訂正：33%/67%の告知は本編から外す（旧は ?upahost=0 だけ）
-const TONE = { jp8_praise: 'joy', jp8_go: 'joy', jp8s: 'joy', jp9_go: 'joy', jp9_close: 'joy', jp10_ok: 'joy', rl11_big: 'joy', rl11_ok: 'joy', ch15_head: 'joy', ch15s: 'joy', jp9_slow: 'surp', jp9_oshii: 'surp', rl11_dokidoki: 'surp', ch13_noclock: 'surp' };
+const TONE = { jp8_praise: 'joy', jp8_go: 'joy', jp8s: 'joy', jp9_go: 'joy', jp9_close: 'joy', jp10_ok: 'joy', rl11_big: 'joy', rl11_ok: 'joy', ch15_head: 'joy', ch15s: 'joy', jp9_slow: 'surp', jp9_oshii: 'surp', rl11_dokidoki: 'surp', ch13_noclock: 'surp', ch14_noclock: 'surp' };
 const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const easeBack = (x) => { const c = 1.7, u = clamp(x, 0, 1) - 1; return 1 + (c + 1) * u ** 3 + c * u ** 2; };
@@ -225,7 +225,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
       if (F.chKey !== key) {
         F.chKey = key; F.ch = { t: 0 }; F.tutAt = F.t; const stage = g.jackpotChain.stage ?? 0;
         const say2 = stage > 0 ? ['ch14_again'] : ['ch13_a'];
-        startSeq(g.chainNeedsAdd ? ['ch13_noclock'] : say2);
+        startSeq(g.chainNeedsAdd ? [stage > 0 ? 'ch14_noclock' : 'ch13_noclock'] : say2);
       }
     }
     // ---- 時間切れの100円追加の画面：1セリフ。選ぶのは客、受付の秒と誤選択防止はそのまま ----
@@ -258,7 +258,7 @@ export function createUpaFlow(lcd, { controller, base, labels, liveVisible = () 
     if (!R.ready) return null;
     const c = F.cur, p = place(), out = [];
     if (F.ch) {   // 選択画面の説明：背景を沈める。時計は吹き出しの下に隠れるので札で出す
-      if (!F.ch.add) out.push({ tex: T.dim, w: W, h: 1268, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 0.42 * clamp(F.ch.t / 0.2, 0, 1), add: false });
+      out.push({ tex: T.dim, w: W, h: 1268, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 0.42 * clamp(F.ch.t / 0.2, 0, 1), add: false });
     }
     if (p && R.comp) {
       const e = expr(), lively = e !== 'idle', fr = lively ? Math.floor(F.t * 5) % 2 : (F.t % 3.2 < 0.14 ? 2 : 0), tex = T.comp[`${e}${fr}`];

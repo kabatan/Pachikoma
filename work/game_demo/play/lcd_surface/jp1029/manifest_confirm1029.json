@@ -24,10 +24,10 @@
   "scenes": {
     "chain_announce_cutin": {
       "file": "../chain_announce_v09/announce_cutin_1152.mp4",
-      "frames": 82,
+      "frames": 50,
       "loop": false,
       "pinned": true,
-      "note": "10/31 継続を選んだあとのカットイン「継続チャンス!!!」。chain_announce_first の頭（0〜57コマ）＋題字の保持。33%/67%の部分は含まない"
+      "note": "10/31 継続を選んだあとのカットイン「継続チャンス!!!」。chain_announce_first の頭（0〜49コマ。10/31 短縮）。33%/67%の部分は含まない"
     },
     "jp_rush": {
       "file": "production_20261028/jp_rush.mp4",
