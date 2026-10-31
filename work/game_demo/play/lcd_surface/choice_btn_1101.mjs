@@ -22,6 +22,15 @@ export function pressPhase(t, side) {
   return { depth: depth * depth * (3 - 2 * depth), ring, glow: 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 5.2)) };
 }
 
+// 11/01 ボタンの面：上下にはっきり塗り分ける（左=白/青、右=赤/黄。実機の色がどちらでも合う）。?btnsplit=0 で旧のグラデーション
+const BTN_SPLIT = new URLSearchParams(globalThis.location?.search ?? '').get('btnsplit') !== '0', SPLIT_COL = [[[250, 252, 255], [28, 88, 232]], [[226, 30, 40], [255, 214, 36]]];
+function domeFill(ctx, r, pal, side, k) {
+  const g = ctx.createLinearGradient(0, -r, 0, r);
+  if (BTN_SPLIT) { const [a, b] = SPLIT_COL[side ? 1 : 0]; g.addColorStop(0, rgb(a, k)); g.addColorStop(0.5, rgb(a, k)); g.addColorStop(0.5, rgb(b, k)); g.addColorStop(1, rgb(b, k)); }
+  else { g.addColorStop(0, rgb(pal.top, k)); g.addColorStop(0.5, rgb(pal.mid, k)); g.addColorStop(1, rgb(pal.bot, k)); }
+  return g;
+}
+
 // ---- 丸い押しボタン（実機の PUSH ボタン表示を手本）：金属の縁・影・ドーム・艶・字。d = ボタン面の直径 ----
 export function drawPushButton(ctx, cx, cy, d, side, t, { alpha = 1, label = 'PUSH' } = {}) {
   const pal = btnPalette(side, true), ph = pressPhase(t, side), r = d / 2, dep = ph.depth;
@@ -46,8 +55,7 @@ export function drawPushButton(ctx, cx, cy, d, side, t, { alpha = 1, label = 'PU
   // ドーム：沈むと小さく下がり、暗くなる
   const sc = 1 - 0.07 * dep, dy = r * 0.1 * dep + r * 0.0, k = 1 - 0.24 * dep;
   ctx.save(); ctx.translate(0, dy); ctx.scale(sc, sc);
-  const lg = ctx.createLinearGradient(0, -r, 0, r); lg.addColorStop(0, rgb(pal.top, k)); lg.addColorStop(0.5, rgb(pal.mid, k)); lg.addColorStop(1, rgb(pal.bot, k));
-  ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+  ctx.fillStyle = domeFill(ctx, r, pal, side, k); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
   const sh = ctx.createRadialGradient(-r * 0.2, -r * 0.3, r * 0.3, 0, 0, r); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(0.6, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.62)');
   ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
   // 面の字（PUSH）：彫り込み風（下に暗い影、上に明るい縁）
@@ -105,7 +113,8 @@ const CHOICE_OUT = {   // 案2：札の外・下の端（矢印の頭の中心�
   left: { L: { cx: 172, cy: 1140, d: 92, by: 1218, bd: 92 }, R: { cx: 1112, cy: 1128, d: 70, by: 1214, bd: 70 } },
   right: { L: { cx: 172, cy: 1128, d: 92, by: 1212, bd: 92 }, R: { cx: 1112, cy: 1128, d: 70, by: 1214, bd: 70 } },
 };
-const TIMEUP_IN = { L: { cx: 258, cy: 350, d: 168 }, R: { cx: 812, cy: 292, d: 136 } };   // 追加：左の札は TOTAL(y510〜)の上、右は砂時計の上の空き。文字・札に重ならない範囲で大きく
+const TIMEUP_IN = { L: { cx: 247, cy: 290, d: 144 }, R: { cx: 811, cy: 290, d: 144 } };   // 11/01 左右とも札の上辺から同じ高さ・札の左右中央・同じ大きさに
+//   // 追加：左の札は TOTAL(y510〜)の上、右は砂時計の上の空き。文字・札に重ならない範囲で大きく
 const TIMEUP_OUT = { L: { cx: 172, cy: 1040, d: 90 }, R: { cx: 1106, cy: 1200, d: 78 } };
 
 const mixPos = (a, b, k) => ({ ...b, cx: lerp(a.cx, b.cx, k), cy: lerp(a.cy, b.cy, k), d: lerp(a.d, b.d, k), by: b.by == null ? undefined : lerp(a.by ?? b.by, b.by, k) });
@@ -152,8 +161,7 @@ function buildParts(side, withLabel) {
 // ドームの面（drawPushButton と同じ絵。沈みなし）
 function drawDomeFace(ctx, d, side, label) {
   const pal = btnPalette(side, true), r = d / 2;
-  const lg = ctx.createLinearGradient(0, -r, 0, r); lg.addColorStop(0, rgb(pal.top)); lg.addColorStop(0.5, rgb(pal.mid)); lg.addColorStop(1, rgb(pal.bot));
-  ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+  ctx.fillStyle = domeFill(ctx, r, pal, side, 1); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
   const sh = ctx.createRadialGradient(-r * 0.2, -r * 0.3, r * 0.3, 0, 0, r); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(0.6, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.62)'); ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
   if (label) {
     const fs = Math.round(d * (label.length > 3 ? 0.3 : 0.5)); ctx.font = `${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.miterLimit = 2;
@@ -217,6 +225,7 @@ export async function attachChoiceBtn(lcd, { controller } = {}) {
   };
   const myLayers = (room) => {
     if (!cur) return null;
+    if (where === 'choice' && lcd.chainWhy?.state?.bigOn) return null;   // 11/01 継続の大きな字（choice_why_1101）が出ている間は重ならないよう引っ込める
     let L = pairLayers(parts, tex, mode, cur.lay, cur.t, cur.a, cur.pop, cur.withBtn);
     if (L.length > room) L = L.filter((l) => !l.add).slice(0, room);   // 層が足りないときは発光・輪を落とす
     layerSeen = L.length; return L.length ? L : null;

@@ -31,7 +31,7 @@ const CX = 576, GROUND = 1262, PARK = 410, MBIG = 24;
 // 映像の時刻（tv）での台本。listen は press=6.5 を基準にした続き
 const T = { FALL: 1.3, LAND: 1.8, SHR: 2.35, PARK: 2.75, ASK: [2.8, 6.8], BTN: 3.9, PRESS: 6.5,
   Q_CONF: 6.9, Q_BTN: 7.7, Q_PRESS: 9.4, Q_BYE: 9.6, LAUNCH: 10.6,
-  G_UP: 6.75, G_LAND: 7.25, EXPL: [7.5, 8.7], SHR2: 8.6, BALLS: [8.85, 11.35], SW: [11.45, 14.45], JPC: [14.5, 14.5], LAMP: [14.5, 18.0], SEAT0: 18.05, SEAT: [18.55, 21.65] };   // 11/01 JPの2つの台詞を rule_lamp に一本化（2.15秒短縮）
+  G_UP: 6.75, G_LAND: 7.25, EXPL: [7.6, 7.6], SHR2: 7.35, BALLS: [7.6, 10.1], SW: [10.2, 13.2], JPC: [13.25, 13.25], LAMP: [13.25, 16.75], SEAT0: 16.8, SEAT: [17.3, 20.4] };   // 11/01「じゃあ せつめい するね」を削除（1.25秒短縮）   // 11/01 JPの2つの台詞を rule_lamp に一本化（2.15秒短縮）
 //   // 10/31 台詞以外の間を半分以下に（入り3.25→1.6秒、押してから1文目2.1→1.0秒）
 const lampLift = (v) => 72 * Math.min(1, Math.max(0, Math.min((v - T.JPC[1]) / 0.25, (T.LAMP[1] - v) / 0.25)));   // ランプの説明の間はうぱを少し上げて矢印を空ける
 const CLOCK_IDLE_START = 20;   // 10/31 発射しないまま放置したら、促しのあとこの秒数で時計を動かす（スタッフ待ちで詰まらせない保険）
@@ -391,7 +391,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
       if (U.press2T !== null) { fire('bye', () => { sfx.bye(); speak('intro_quit_bye'); }, T.Q_BYE); fire('crouch', () => sfx.crouch(), T.LAUNCH - 0.3); fire('launch', () => sfx.launch(), T.LAUNCH); }
     } else if (U.branch === 'listen') {
       fire('joy', () => sfx.joy(), T.PRESS + 0.05); fire('grow', () => sfx.grow(), T.G_UP); fire('thud', () => sfx.thud(), T.G_LAND - 0.05);
-      fire('lst', () => { sfx.pop(740); speak('intro_listen'); }, T.EXPL[0]); fire('hop2', () => sfx.hop(), T.SHR2); fire('park2', () => sfx.park(), T.SHR2 + 0.9);
+      fire('hop2', () => sfx.hop(), T.SHR2); fire('park2', () => sfx.park(), T.SHR2 + 0.9);
       fire('ballpop', () => { sfx.pop(900); speak('rule_goal'); }, T.BALLS[0]); fire('rattle', () => sfx.rattle(), T.BALLS[0] + 0.2);
       fire('photo', () => { sfx.photo(); speak('rule_prize'); }, T.SW[0]); for (let i = 0; i < 5; i++) fire('tw' + i, () => sfx.twinkle(), T.SW[0] + 0.9 + i * 0.55);
       fire('lamppop', () => { sfx.pop(1020); speak('rule_lamp'); }, T.LAMP[0]); fire('hop3', () => sfx.hop(), T.SEAT0); fire('seatpop', () => { sfx.pop(1040, 0.4); speak('rule_hands'); }, T.SEAT[0]);
@@ -486,7 +486,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
         w = bubbleWin(v, T.Q_BYE, T.LAUNCH + 0.4); if (w && U.press2T !== null) placeTip(ctx, Bub('bye', L.intro_quit_bye, 100), tipUpa.x, tipUpa.y, w.p * 1.5 * w.f, w.p);
       } else if (U.branch === 'listen') {
         const TOPY = 520;
-        let w = bubbleWin(v, T.EXPL[0], T.EXPL[1]); if (w) placeTip(ctx, Bub('lst', L.intro_listen, 92, { tail: 'b' }), CX, TOPY, w.p * 1.5 * w.f, w.p);
+        let w;
         w = bubbleWin(v, T.BALLS[0], T.BALLS[1]); if (w) placeTip(ctx, Bub('ball', L.rule_goal, 96, { tail: 'b' }), CX, 945, w.p * 1.5 * w.f, w.p);
         if (v >= T.SW[0] && v < T.SW[1] + 0.3) {
           const p = v >= T.SW[0] + 0.25 ? Math.max(0.05, easeBack((v - T.SW[0] - 0.25) / 0.4)) : 0, f = v >= T.SW[1] ? Math.max(0, 1 - (v - T.SW[1]) / 0.25) : 1;
