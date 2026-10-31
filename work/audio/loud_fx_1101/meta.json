@@ -70,5 +70,229 @@
  "lf_cs_build_b": {
   "anchor": 0.0,
   "dur": 0.267
+ },
+ "lf_a_rush_build": {
+  "anchor": 0.0,
+  "dur": 0.367
+ },
+ "lf_a_rush_chou": {
+  "anchor": 0.0,
+  "dur": 2.0
+ },
+ "lf_a_rush_chou2": {
+  "anchor": 0.0,
+  "dur": 1.0
+ },
+ "lf_a_rush_tsuku": {
+  "anchor": 0.0,
+  "dur": 1.2
+ },
+ "lf_a_rush_rush": {
+  "anchor": 0.0,
+  "dur": 3.2
+ },
+ "lf_a_rush_glitter": {
+  "anchor": 0.0,
+  "dur": 1.9
+ },
+ "lf_a_ci_title": {
+  "anchor": 0.0,
+  "dur": 1.6
+ },
+ "lf_a_ci_burst": {
+  "anchor": 0.0,
+  "dur": 1.4
+ },
+ "lf_a_ci_zap": {
+  "anchor": 0.0,
+  "dur": 0.5
+ },
+ "lf_a_cs_ignite": {
+  "anchor": 0.0,
+  "dur": 0.55
+ },
+ "lf_a_cs_ring": {
+  "anchor": 0.0,
+  "dur": 1.2
+ },
+ "lf_a_cs_kei": {
+  "anchor": 0.0,
+  "dur": 1.8
+ },
+ "lf_a_cs_zoku": {
+  "anchor": 0.0,
+  "dur": 1.9
+ },
+ "lf_a_cs_build_a": {
+  "anchor": 0.0,
+  "dur": 0.3
+ },
+ "lf_a_cs_build_b": {
+  "anchor": 0.0,
+  "dur": 0.267
+ },
+ "lf_a_cs_final": {
+  "anchor": 0.0,
+  "dur": 3.4
+ },
+ "lf_a_cs_nirenme": {
+  "anchor": 0.0,
+  "dur": 2.0
+ },
+ "lf_a_land": {
+  "anchor": 0.0,
+  "dur": 2.0
+ },
+ "lf_b_rush_build": {
+  "anchor": 0.0,
+  "dur": 0.367
+ },
+ "lf_b_rush_chou": {
+  "anchor": 0.0,
+  "dur": 2.0
+ },
+ "lf_b_rush_chou2": {
+  "anchor": 0.0,
+  "dur": 1.0
+ },
+ "lf_b_rush_tsuku": {
+  "anchor": 0.0,
+  "dur": 1.2
+ },
+ "lf_b_rush_rush": {
+  "anchor": 0.0,
+  "dur": 3.4
+ },
+ "lf_b_rush_glitter": {
+  "anchor": 0.0,
+  "dur": 1.9
+ },
+ "lf_b_ci_title": {
+  "anchor": 0.0,
+  "dur": 1.6
+ },
+ "lf_b_ci_burst": {
+  "anchor": 0.0,
+  "dur": 1.4
+ },
+ "lf_b_ci_zap": {
+  "anchor": 0.0,
+  "dur": 0.5
+ },
+ "lf_b_cs_ignite": {
+  "anchor": 0.0,
+  "dur": 0.55
+ },
+ "lf_b_cs_ring": {
+  "anchor": 0.0,
+  "dur": 1.2
+ },
+ "lf_b_cs_kei": {
+  "anchor": 0.0,
+  "dur": 1.8
+ },
+ "lf_b_cs_zoku": {
+  "anchor": 0.0,
+  "dur": 1.9
+ },
+ "lf_b_cs_build_a": {
+  "anchor": 0.0,
+  "dur": 0.3
+ },
+ "lf_b_cs_build_b": {
+  "anchor": 0.0,
+  "dur": 0.267
+ },
+ "lf_b_cs_final": {
+  "anchor": 0.0,
+  "dur": 3.6
+ },
+ "lf_b_cs_nirenme": {
+  "anchor": 0.0,
+  "dur": 2.0
+ },
+ "lf_b_land": {
+  "anchor": 0.0,
+  "dur": 2.0
+ },
+ "lf_r_rush_build": {
+  "anchor": 0.0,
+  "dur": 0.367
+ },
+ "lf_r_rush_chou": {
+  "anchor": 0.0,
+  "dur": 1.4
+ },
+ "lf_r_rush_chou2": {
+  "anchor": 0.0,
+  "dur": 0.9
+ },
+ "lf_r_rush_tsuku": {
+  "anchor": 0.0,
+  "dur": 1.0
+ },
+ "lf_r_rush_rush": {
+  "anchor": 0.0,
+  "dur": 3.0
+ },
+ "lf_r_rush_glitter": {
+  "anchor": 0.0,
+  "dur": 1.5
+ },
+ "lf_r_cs_sweep1": {
+  "anchor": 0.0,
+  "dur": 0.6
+ },
+ "lf_r_cs_kei": {
+  "anchor": 0.0,
+  "dur": 1.8
+ },
+ "lf_r_cs_zoku": {
+  "anchor": 0.0,
+  "dur": 1.9
+ },
+ "lf_r_cs_ignite": {
+  "anchor": 0.0,
+  "dur": 0.55
+ },
+ "lf_r_cs_ring": {
+  "anchor": 0.0,
+  "dur": 1.0
+ },
+ "lf_r_cs_build_a": {
+  "anchor": 0.0,
+  "dur": 0.3
+ },
+ "lf_r_cs_build_b": {
+  "anchor": 0.0,
+  "dur": 0.267
+ },
+ "lf_r_cs_final": {
+  "anchor": 0.0,
+  "dur": 3.4
+ },
+ "lf_r_cs_nirenme": {
+  "anchor": 0.0,
+  "dur": 2.0
+ },
+ "lf_r_ci_title": {
+  "anchor": 0.0,
+  "dur": 1.6
+ },
+ "lf_r_ci_burst": {
+  "anchor": 0.0,
+  "dur": 1.4
+ },
+ "lf_r_ci_zap": {
+  "anchor": 0.0,
+  "dur": 0.5
+ },
+ "lf_r_ci_sweep": {
+  "anchor": 0.0,
+  "dur": 1.05
+ },
+ "lf_r_land": {
+  "anchor": 0.0,
+  "dur": 1.8
  }
 }

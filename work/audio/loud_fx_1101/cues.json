@@ -10,11 +10,11 @@
       { "f": 11, "s": "lf_rush_chou", "db": 0, "duck": { "d": 22, "pre": 0.0, "hold": 0.35, "rel": 0.5 } },
       { "f": 16, "s": "lf_rush_chou2", "db": -3, "duck": { "d": 14, "pre": 0.03, "hold": 0.12, "rel": 0.3 } },
       { "f": 21, "s": "lf_rush_tsuku", "db": -2, "duck": { "d": 16, "pre": 0.04, "hold": 0.15, "rel": 0.3 } },
-      { "f": 26, "s": "lf_rush_rush", "db": 0, "duck": { "d": 30, "pre": 0.16, "hold": 0.9, "rel": 1.0 } },
+      { "f": 26, "s": "lf_rush_rush", "db": 0, "dbk": {"r": -0.7}, "duck": { "d": 30, "pre": 0.16, "hold": 0.9, "rel": 1.0 } },
       { "f": 28, "s": "lf_rush_glitter", "db": -5 }
     ],
     "chain_announce_cutin": [
-      { "f": 4, "s": "lf_ci_title", "db": 0, "duck": { "d": 22, "pre": 0.05, "hold": 0.3, "rel": 0.5 } },
+      { "f": 4, "s": "lf_ci_title", "db": 0, "dbk": {"r": 1.5}, "duck": { "d": 22, "pre": 0.05, "hold": 0.3, "rel": 0.5 } },
       { "f": 9, "s": "lf_ci_burst", "db": -1, "duck": { "d": 18, "pre": 0.04, "hold": 0.25, "rel": 0.5 } },
       { "f": 13, "s": "lf_ci_zap", "db": -6, "duck": { "d": 10, "pre": 0.03, "hold": 0.1, "rel": 0.3 } },
       { "f": 26, "s": "lf_ci_zap", "db": -8, "duck": { "d": 8, "pre": 0.03, "hold": 0.1, "rel": 0.3 } }
@@ -22,13 +22,13 @@
     "chain_success": [
       { "f": 6, "s": "lf_cs_ignite", "db": -4, "duck": { "d": 10, "pre": 0.02, "hold": 0.12, "rel": 0.25 } },
       { "f": 11, "s": "lf_cs_ring", "db": -3, "duck": { "d": 14, "pre": 0.03, "hold": 0.15, "rel": 0.3 } },
-      { "f": 18, "s": "lf_cs_kei", "db": -1, "duck": { "d": 22, "pre": 0.05, "hold": 0.3, "rel": 0.5 } },
-      { "f": 42, "s": "lf_cs_zoku", "db": -1, "duck": { "d": 22, "pre": 0.05, "hold": 0.3, "rel": 0.5 } },
+      { "f": 18, "s": "lf_cs_kei", "db": -1, "dbk": {"r": -1.8}, "duck": { "d": 22, "pre": 0.05, "hold": 0.3, "rel": 0.5 } },
+      { "f": 42, "s": "lf_cs_zoku", "db": -1, "dbk": {"r": -0.8}, "duck": { "d": 22, "pre": 0.05, "hold": 0.3, "rel": 0.5 } },
       { "f": 87, "duck": { "d": 10, "pre": 0, "hold": 0.3, "rel": 0.04 } },
       { "f": 96, "s": "lf_cs_build_a", "pre": true, "db": -1 },
       { "f": 126, "s": "lf_cs_build_b", "pre": true, "db": -1 },
       { "f": 125, "duck": { "d": 34, "pre": 0.02, "hold": 0.045, "rel": 0.05 } },
-      { "f": 126, "s": "lf_cs_final", "db": 0, "duck": { "d": 30, "pre": 0.16, "hold": 0.9, "rel": 1.0 } },
+      { "f": 126, "s": "lf_cs_final", "db": 0, "dbk": {"r": -0.8}, "duck": { "d": 30, "pre": 0.16, "hold": 0.9, "rel": 1.0 } },
       { "f": 148, "s": "lf_cs_nirenme", "db": -2, "duck": { "d": 16, "pre": 0.04, "hold": 0.3, "rel": 0.5 } }
     ],
     "chain_jp_land": [

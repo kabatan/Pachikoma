@@ -304,6 +304,187 @@ def GLASS(name, dur=1.2, g=1.0):
     return finish(reverb(buf, 0.8, 0.1, r=r), 2.6, eq=False), 0.0
 
 
+
+# ================= 11/1 夜: 高音で刺さる版(案A: キュイン+高速アルペジオ / 案B: サイレン+高音の持続) =================
+# 手本(手元の実機成功音を再生→スペクトル・音高の追跡で分析。サンプルは使わない。数字は NOTES.md):
+#   エヴァ確定(eva_kakutei): 3-6kHz が全体の -9/-8dB(従来の自作は 4-8k が -11)。2kHz 前後の単音+1.5k→2kHz の速い上昇グリッサンド+6.9kHz のチップ。
+#   エヴァ10確定: 約1kHz(B5前後)の単音を長く保ち、2k・4k の倍音の梯子で刺さる(矩形波系)。
+#   北斗16R確定・シンフォギア: 2.2〜2.7kHz の高音と低音の交互(ピピピ)、5〜7kHz のチップを約12回/秒で連打。
+TARGET_A = [-40, -22, -11, -14, -10, -5, -4.5, -8, -14]       # 2-6kHz を前へ(従来の -6.5/-11.5 から +2/+3.5dB)
+TARGET_B = [-40, -22, -11, -14, -9, -5, -5, -8.5, -14]
+
+
+def sqr(ph, soft=5.0): return np.tanh(soft * np.sin(ph))
+
+
+def note_seq(r, notes, t_start, step, n_dur, wave='sq', amp_fn=None, total=None, pan_alt=True, fm=0.0, atk=0.0015):
+    """高速の電子音の連なり。notes[Hz] を step 秒おきに鳴らす(各音 n_dur 秒で減衰)。矩形波(任意でFM)。左右へ交互に振る。"""
+    total = total or (t_start + step * len(notes) + n_dur + 0.05); n = int(total * SR); out = np.zeros((n, 2))
+    for k, f in enumerate(notes):
+        at = t_start + k * step; i = int(at * SR); m = int(n_dur * SR); m = min(m, n - i)
+        if m <= 0: continue
+        tt = np.arange(m) / SR; ph = 2 * np.pi * f * tt
+        if fm: ph = ph + fm * np.sin(2 * np.pi * f * 2.0 * tt) * np.exp(-tt / (n_dur * 0.3))
+        x = sqr(ph) if wave == 'sq' else np.sin(ph) + 0.4 * np.sin(2 * ph)
+        x = x * np.minimum(1, tt / atk) * np.exp(-tt / (n_dur * 0.45)) * (amp_fn(k, len(notes)) if amp_fn else 1.0)
+        p = (k % 2) if pan_alt else 0.5
+        out[i:i + m, 0] += x * (1.0 - 0.45 * p); out[i:i + m, 1] += x * (0.55 + 0.45 * p)
+    return out
+
+
+def kyuin(r, dur, f0=900.0, f1=4800.0, ping=True, power=1.6):
+    """キュイン: FM の上昇スイープ(指数)。上がるほどFMの深さを減らし、最後は純音に近い高いピン(2〜6kHz)で止める。"""
+    n = int(dur * SR); t = np.arange(n) / SR; u = t / dur
+    f = f0 * (f1 / f0) ** (u ** (1 / power * 1.0 + 0.0)); ph = 2 * np.pi * np.cumsum(f) / SR
+    idx = 3.5 * (1 - u) + 0.4; x = np.sin(ph + idx * np.sin(2 * ph * 1.0)) + 0.5 * sqr(ph * 2.0, 3.0) * (u > 0.3)
+    e = (0.35 + 0.65 * u ** 1.2) * np.minimum(1, t / 0.004) * np.minimum(1, (dur - t) / 0.003)
+    y = np.stack([x, np.roll(x, 40)], 1) * e[:, None]
+    return y
+
+
+def siren(r, dur, lo=1500.0, hi=3000.0, period=0.30, rise=0.0, tri=True):
+    """高いサイレン: 三角波のウェイル。period 秒で lo↔hi。rise>0 なら中心音が時間とともに上がる。"""
+    n = int(dur * SR); t = np.arange(n) / SR; u = t / dur
+    lfo = np.abs(2 * ((t / period) % 1.0) - 1.0)           # 0..1..0 三角
+    c = (1 + rise * u); f = lo * c * (hi / lo) ** lfo
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    x = np.sin(ph) + 0.35 * np.sin(2 * ph) + 0.25 * np.sin(3 * ph)
+    e = np.minimum(1, t / 0.008) * np.minimum(1, (dur - t) / 0.02)
+    return np.stack([x, np.roll(x, 30)], 1) * e[:, None]
+
+
+def sustain_high(r, f=1760.0, dur=2.2, a=0.004, tau=1.3, vib=0.006):
+    """高音の単音の長いキメ(耳に残る持続音)。基音+奇数倍音の梯子(2k・4k・6k に線を立てる)+ゆっくりした微かな揺れ+きらめき。"""
+    n = int(dur * SR); t = np.arange(n) / SR
+    vv = 1 + vib * np.sin(2 * np.pi * 5.5 * t) * np.minimum(1, t / 0.3)
+    out = np.zeros((n, 2))
+    for c, d in ((0, 0.998), (1, 1.002)):
+        ph = 2 * np.pi * np.cumsum(f * d * vv) / SR
+        v = sqr(ph, 4.0) * 0.8 + 0.4 * np.sin(2 * ph) + 0.2 * np.sin(3 * ph + 1.0)
+        out[:, c] = v
+    e = env_ad(n, a, tau, 0.35)
+    return out * e[:, None]
+
+
+def pipi(r, dur, f_lo=3000.0, f_hi=5200.0, rate=22.0, gate=0.5, rising=True):
+    """ピピピピ: 高速連打の電子チップ(2〜6kHz)。"""
+    steps = int(dur * rate); notes = [f_lo + (f_hi - f_lo) * (k / max(1, steps - 1) if rising else (k % 2)) for k in range(steps)]
+    return note_seq(r, notes, 0.0, 1.0 / rate, gate / rate, total=dur + 0.05, atk=0.0008)
+
+
+def HITK(name, kind, root='D', oct0=2, size=1.0, dur=2.0, brass_dur=1.0, sub=(130, 46), timp=True, rms=-8.5, drive=2.6, preroll=0.0, rev=0.1, hi=1.0,
+         arp=None, arp_rate=24.0, siren_dur=0.0, sus=None, sus_dur=2.0, chips=0.0, metal=0.12, cym=0.1, glitter=0.0, tail_bell=0.0):
+    """決め(高音版): 低音の衝撃は土台に残し、金属打撃は大きく下げ、2〜6kHz の電子音を主役にする。"""
+    r = R(name); n = int((dur + preroll) * SR); buf = np.zeros((n, 2)); t0 = preroll; sz = size ** 0.5
+    place(buf, sub_boom(r, 0.8, sub[0], sub[1], 0.26 * sz), t0, 0.95 * sz)
+    if timp: place(buf, timpani(r, hz(root, 2), 0.8, 0.3), t0, 0.5 * sz)
+    place(buf, crack(r, 0.18, 2200, 9500, 0.03), t0, 0.7 * sz)
+    place(buf, brass(r, major_stack(root, oct0, True), brass_dur, a=0.008, tau=0.5, hold=0.08, bright0=0.6, bright1=0.95), t0, 0.55 * sz)
+    if metal > 0: place(buf, metal_hit(r, 900, min(dur, 1.0), 1.0, 0.25), t0, metal)            # 金属の打撃は大きく下げる
+    if cym > 0: place(buf, cymbal(r, min(dur, 1.2), 0.35, lo=6000), t0, cym)
+    H = 1.0 * hi
+    if kind == 'a':
+        if arp:   # 速い上昇アルペジオ(矩形波・FM少し)。根音の長三和音を2オクターブ上へ
+            place(buf, note_seq(r, arp, 0.0, 1.0 / arp_rate, 1.6 / arp_rate, fm=0.8, total=len(arp) / arp_rate + 0.15), t0 + 0.012, 0.9 * H)
+        place(buf, kyuin(r, 0.16, 2200, 5200), t0 + 0.0, 0.55 * H)                              # 打撃の頭の「キュイン」(短い高い一発)
+        if chips > 0: place(buf, pipi(r, 0.7, 3400, 5600, 26.0), t0 + 0.12, chips)
+    else:
+        if siren_dur > 0: place(buf, siren(r, siren_dur, 1700, 3300, 0.34, 0.0), t0 + 0.02, 0.75 * H)
+        if sus: place(buf, sustain_high(r, sus, sus_dur, tau=1.2), t0 + 0.0, 0.95 * H)
+        place(buf, kyuin(r, 0.1, 3000, 5800), t0, 0.45 * H)
+        if chips > 0: place(buf, pipi(r, 0.5, 4200, 5800, 20.0, rising=False), t0 + 0.1, chips)
+    if glitter > 0: place(buf, sparkle(r, min(dur - 0.05, 1.6), 30, 3200, 8500, 0.3), t0 + 0.05, glitter)
+    if tail_bell > 0:  # 高い鐘(2〜6kHz)の余韻
+        for k, f in enumerate([hz('A', 6), hz('E', 7), hz('A', 7)]): place(buf, sustain_high(r, f, 1.2, tau=0.5, vib=0.0)[:, :] * 0.5, t0 + 0.05 * k, tail_bell)
+    y = reverb(buf, 0.8 + 0.3 * size, rev, lo=400, r=r)
+    return finish_hi(y, kind, drive, rms), preroll
+
+
+def finish_hi(x, kind, drive, rms):
+    global match_eq
+    tgt = TARGET_A if kind == 'a' else TARGET_B
+    x = np.nan_to_num(x); x = match_eq(hp(x, 50, 2), tgt)
+    def go(dv):
+        y = softclip(x / np.abs(x).max(), dv); return y / np.abs(y).max() * db(-0.6)
+    n = int(0.4 * SR); y = go(1.0)
+    for dv in (1.0, 1.4, 1.8, 2.2, 2.8, 3.4, 4.2, 5.0, 6.5, 8.0):
+        y = go(dv)
+        if 20 * np.log10(np.sqrt((y[:n] ** 2).mean()) + 1e-12) >= rms: break
+    nf = int(0.03 * SR); y[-nf:] *= np.linspace(1, 0, nf)[:, None]; return y
+
+
+def BUILDK(name, kind, dur, f0, f1, gate=False, ignite=True, crack_at=None):
+    r = R(name)
+    if kind == 'a':
+        y = kyuin(r, dur, f0, f1) * 1.0
+        if gate:
+            n = len(y); t = np.arange(n) / SR; y *= (0.25 + 0.75 * (np.sin(2 * np.pi * 15 * t + np.pi / 2) > -0.2))[:, None]
+        y = y + 0.5 * pad(pipi(r, dur, f1 * 0.6, f1 * 1.1, 28.0), len(y))
+    else:
+        y = siren(r, dur, f0 * 0.9, f0 * 2.1, max(0.11, dur / 2.6), rise=(f1 / f0 - 1) * 0.5)
+        if gate:
+            n = len(y); t = np.arange(n) / SR; y *= (0.25 + 0.75 * (np.sin(2 * np.pi * 15 * t + np.pi / 2) > -0.2))[:, None]
+        y = y + 0.35 * pad(sustain_high(r, f1 * 0.5, dur, tau=5.0), len(y))
+    if crack_at is not None: place(y, crackle(r, dur - crack_at, 110), crack_at, 0.8)
+    if ignite: place(y, sub_boom(r, 0.3, 110, 55, 0.08), 0, 0.9); place(y, crack(r, 0.1, 2500, 9500, 0.02), 0, 0.6)
+    nf = int(0.003 * SR); y[-nf:] *= np.linspace(1, 0, nf)[:, None]
+    y = match_eq(hp(np.nan_to_num(y), 50, 2), TARGET_A if kind == 'a' else TARGET_B)
+    y = softclip(y / np.abs(y).max(), 3.0); return y / np.abs(y).max() * db(-0.6), 0.0
+
+
+def arp_notes(root, lo_oct, n_notes=14):
+    ks = {'D': ('D', 'F#', 'A'), 'A': ('A', 'C#', 'E'), 'E': ('E', 'G#', 'B'), 'F#': ('F#', 'A#', 'C#')}[root]; out = []; o = lo_oct
+    while len(out) < n_notes:
+        for k in (root, ks[1], ks[2]):
+            out.append(hz(k, o + (1 if k < root and False else 0)))
+        o += 1
+    return sorted(out)[:n_notes]
+
+
+def SPECS_HI(kind):
+    S = {}; k = kind; p = f'lf_{k}_'
+    A = (lambda root, o, nn: arp_notes(root, o, nn))
+    if k == 'a':
+        S[p + 'rush_build'] = lambda: BUILDK(p + 'rush_build', k, 11 / FPS, 900, 4800, ignite=True, crack_at=6 / FPS)
+        S[p + 'rush_chou'] = lambda: HITK(p + 'rush_chou', k, 'D', 2, 1.0, 2.0, arp=A('D', 5, 14), rms=-8.3, chips=0.6)
+        S[p + 'rush_chou2'] = lambda: HITK(p + 'rush_chou2', k, 'F#', 2, 0.55, 1.0, 0.5, sub=(110, 50), timp=False, arp=A('F#', 5, 8), rms=-10.0, metal=0.06, cym=0.05)
+        S[p + 'rush_tsuku'] = lambda: HITK(p + 'rush_tsuku', k, 'A', 2, 0.75, 1.2, 0.6, timp=False, arp=A('A', 5, 10), glitter=0.5, rms=-9.5, metal=0.08)
+        S[p + 'rush_rush'] = lambda: HITK(p + 'rush_rush', k, 'D', 3, 1.45, 3.2, 2.0, sub=(150, 42), arp=A('D', 5, 20), arp_rate=28.0, chips=0.7, glitter=0.4, tail_bell=0.5, rms=-7.6, drive=3.2, preroll=0.0)
+        S[p + 'rush_glitter'] = lambda: (finish_hi(np.nan_to_num(pad(pipi(R('g'), 1.6, 3000, 6000, 30.0), int(1.9 * SR)) + sparkle(R('gg'), 1.9, 34, 3200, 9000, 0.35)), 'a', 2.0, -10), 0.0)
+        S[p + 'ci_title'] = lambda: HITK(p + 'ci_title', k, 'A', 2, 1.1, 1.6, arp=A('A', 5, 12), chips=0.5, rms=-8.3)
+        S[p + 'ci_burst'] = lambda: HITK(p + 'ci_burst', k, 'A', 3, 0.8, 1.4, 0.6, timp=False, arp=A('E', 5, 12), arp_rate=30.0, glitter=0.8, rms=-9.5)
+        S[p + 'ci_zap'] = lambda: (finish_hi(np.nan_to_num(pad(note_seq(R('z'), [hz('A', 7), hz('E', 7), hz('A', 6), hz('E', 7), hz('A', 7)], 0, 0.035, 0.05, fm=1.0), int(.5 * SR)) + pad(crackle(R('zz'), .4, 90), int(.5 * SR)) * 0.6), 'a', 3.0, -10), 0.0)
+        S[p + 'cs_ignite'] = lambda: (finish_hi(np.nan_to_num(pad(kyuin(R('i'), .3, 1500, 5200), int(.55 * SR)) * 0.9 + pad(crackle(R('ii'), .5, 120), int(.55 * SR)) * 0.7 + pad(sub_boom(R('s'), .3, 95, 50, .1), int(.55 * SR)) * 0.8), 'a', 3.0, -10), 0.0)
+        S[p + 'cs_ring'] = lambda: HITK(p + 'cs_ring', k, 'A', 2, 0.7, 1.2, 0.6, timp=False, arp=A('A', 5, 9), glitter=0.4, rms=-10.0, metal=0.05)
+        S[p + 'cs_kei'] = lambda: HITK(p + 'cs_kei', k, 'A', 2, 1.1, 1.8, arp=A('A', 5, 14), chips=0.5, rms=-8.4)
+        S[p + 'cs_zoku'] = lambda: HITK(p + 'cs_zoku', k, 'E', 2, 1.2, 1.9, arp=A('E', 5, 16), chips=0.5, rms=-8.2)
+        S[p + 'cs_build_a'] = lambda: BUILDK(p + 'cs_build_a', k, 9 / FPS, 1000, 3600, ignite=False, crack_at=0.0)
+        S[p + 'cs_build_b'] = lambda: BUILDK(p + 'cs_build_b', k, 8 / FPS, 3000, 5600, gate=True, ignite=False, crack_at=0.0)
+        S[p + 'cs_final'] = lambda: HITK(p + 'cs_final', k, 'A', 3, 1.5, 3.4, 2.1, sub=(150, 42), arp=A('A', 5, 22), arp_rate=28.0, chips=0.7, glitter=0.4, tail_bell=0.5, rms=-7.6, drive=3.2)
+        S[p + 'cs_nirenme'] = lambda: HITK(p + 'cs_nirenme', k, 'E', 3, 1.05, 2.0, 1.0, timp=False, arp=A('E', 5, 14), glitter=0.6, rms=-9.0)
+        S[p + 'land'] = lambda: HITK(p + 'land', k, 'A', 2, 1.25, 2.0, arp=A('A', 5, 14), chips=0.5, rms=-8.2)
+    else:
+        S[p + 'rush_build'] = lambda: BUILDK(p + 'rush_build', k, 11 / FPS, 1300, 3600, ignite=True, crack_at=6 / FPS)
+        S[p + 'rush_chou'] = lambda: HITK(p + 'rush_chou', k, 'D', 2, 1.0, 2.0, siren_dur=1.2, sus=hz('D', 6), sus_dur=1.8, chips=0.4, rms=-8.3)
+        S[p + 'rush_chou2'] = lambda: HITK(p + 'rush_chou2', k, 'F#', 2, 0.55, 1.0, 0.5, sub=(110, 50), timp=False, sus=hz('F#', 6), sus_dur=0.8, rms=-10.0, metal=0.06, cym=0.05)
+        S[p + 'rush_tsuku'] = lambda: HITK(p + 'rush_tsuku', k, 'A', 2, 0.75, 1.2, 0.6, timp=False, sus=hz('A', 6), sus_dur=1.0, chips=0.4, glitter=0.5, rms=-9.5, metal=0.08)
+        S[p + 'rush_rush'] = lambda: HITK(p + 'rush_rush', k, 'D', 3, 1.45, 3.4, 2.0, sub=(150, 42), siren_dur=1.5, sus=hz('D', 7), sus_dur=3.2, chips=0.5, glitter=0.4, tail_bell=0.5, rms=-7.6, drive=3.2)
+        S[p + 'rush_glitter'] = lambda: (finish_hi(np.nan_to_num(pad(sustain_high(R('g'), hz('A', 7), 1.8, tau=0.9, vib=0.01), int(1.9 * SR)) * 0.6 + sparkle(R('gg'), 1.9, 34, 3200, 9000, 0.35)), 'b', 2.0, -10), 0.0)
+        S[p + 'ci_title'] = lambda: HITK(p + 'ci_title', k, 'A', 2, 1.1, 1.6, siren_dur=0.9, sus=hz('A', 6), sus_dur=1.4, chips=0.4, rms=-8.3)
+        S[p + 'ci_burst'] = lambda: HITK(p + 'ci_burst', k, 'A', 3, 0.8, 1.4, 0.6, timp=False, sus=hz('E', 7), sus_dur=1.1, glitter=0.8, rms=-9.5)
+        S[p + 'ci_zap'] = lambda: (finish_hi(np.nan_to_num(pad(siren(R('z'), .3, 2200, 4200, .1), int(.5 * SR)) * 0.8 + pad(crackle(R('zz'), .4, 90), int(.5 * SR)) * 0.6), 'b', 3.0, -10), 0.0)
+        S[p + 'cs_ignite'] = lambda: (finish_hi(np.nan_to_num(pad(siren(R('i'), .3, 1800, 3600, .15), int(.55 * SR)) * 0.8 + pad(crackle(R('ii'), .5, 120), int(.55 * SR)) * 0.7 + pad(sub_boom(R('s'), .3, 95, 50, .1), int(.55 * SR)) * 0.8), 'b', 3.0, -10), 0.0)
+        S[p + 'cs_ring'] = lambda: HITK(p + 'cs_ring', k, 'A', 2, 0.7, 1.2, 0.6, timp=False, sus=hz('E', 6), sus_dur=0.9, glitter=0.4, rms=-10.0, metal=0.05)
+        S[p + 'cs_kei'] = lambda: HITK(p + 'cs_kei', k, 'A', 2, 1.1, 1.8, siren_dur=0.9, sus=hz('A', 6), sus_dur=1.5, rms=-8.4)
+        S[p + 'cs_zoku'] = lambda: HITK(p + 'cs_zoku', k, 'E', 2, 1.2, 1.9, siren_dur=1.0, sus=hz('E', 6), sus_dur=1.6, rms=-8.2)
+        S[p + 'cs_build_a'] = lambda: BUILDK(p + 'cs_build_a', k, 9 / FPS, 1200, 3000, ignite=False, crack_at=0.0)
+        S[p + 'cs_build_b'] = lambda: BUILDK(p + 'cs_build_b', k, 8 / FPS, 2200, 4500, gate=True, ignite=False, crack_at=0.0)
+        S[p + 'cs_final'] = lambda: HITK(p + 'cs_final', k, 'A', 3, 1.5, 3.6, 2.1, sub=(150, 42), siren_dur=1.5, sus=hz('A', 7), sus_dur=3.4, chips=0.5, glitter=0.4, tail_bell=0.5, rms=-7.6, drive=3.2)
+        S[p + 'cs_nirenme'] = lambda: HITK(p + 'cs_nirenme', k, 'E', 3, 1.05, 2.0, 1.0, timp=False, sus=hz('E', 7), sus_dur=1.7, glitter=0.6, rms=-9.0)
+        S[p + 'land'] = lambda: HITK(p + 'land', k, 'A', 2, 1.25, 2.0, siren_dur=0.9, sus=hz('A', 6), sus_dur=1.5, rms=-8.2)
+    return S
+
+
 def SPECS():
     S = {}
     # ===== 超つくこまRUSH(映像 jp_rush。コマは元の映像) =====
@@ -335,7 +516,11 @@ def SPECS():
 
 def main(names):
     os.makedirs(OUT_WAV, exist_ok=True); os.makedirs(OUT_OGG, exist_ok=True)
-    S = SPECS(); meta_path = os.path.join(HERE, '..', 'meta.json')
+    S = SPECS(); S.update(SPECS_HI('a')); S.update(SPECS_HI('b'))
+    try:
+        import synth_ref; S.update(synth_ref.SPECS_R())
+    except ImportError: pass
+    meta_path = os.path.join(HERE, '..', 'meta.json')
     meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {}
     for nm in (names or list(S)):
         y, anchor = S[nm](); y = y.astype(np.float32)

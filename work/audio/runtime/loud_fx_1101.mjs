@@ -11,18 +11,20 @@ const sceneKey = n => n === 'jp_rush' ? 'jp_rush' : n === 'chain_announce_cutin'
 
 export async function installLoudFx(engine, { lcd, controller, cuesUrl = new URL('../loud_fx_1101/cues.json', import.meta.url) } = {}) {
   const q = new URLSearchParams(globalThis.location?.search ?? '');
+  // ?loudkind=a|b|m: a=キュイン+高速アルペジオ(既定) b=サイレン+高音の持続キメ m=金属の打撃+ブラス(11/1 昼の版)。素材名 lf_x → lf_<kind>_x(m は lf_x のまま)
+  const KIND = ['a', 'b', 'm', 'r'].includes(q.get('loudkind')) ? q.get('loudkind') : 'r', fileOf = n => KIND === 'm' ? n : n.replace(/^lf_/, `lf_${KIND}_`);
   const cues = await (await fetch(cuesUrl)).json();
   const meta = await (await fetch(new URL('meta.json', cuesUrl))).json();
   const ctx = engine.ctx, now = () => ctx.currentTime;
   const used = new Set(); for (const list of Object.values(cues.scenes)) for (const c of list) if (c.s) used.add(c.s);
   const buffers = {}, missing = [];
-  await Promise.all([...used].map(async n => { try { const r = await fetch(new URL(`sfx_ogg/${n}.ogg`, cuesUrl)); if (!r.ok) throw Error('HTTP ' + r.status); buffers[n] = await ctx.decodeAudioData(await r.arrayBuffer()); } catch (e) { missing.push(n); } }));
+  await Promise.all([...used].map(async n => { try { const r = await fetch(new URL(`sfx_ogg/${fileOf(n)}.ogg`, cuesUrl)); if (!r.ok) throw Error('HTTP ' + r.status); buffers[n] = await ctx.decodeAudioData(await r.arrayBuffer()); } catch (e) { missing.push(n); } }));
 
   // 出口: 雷と同じ(+6.3dB 固定 → master)。絞りの対象にならない
   const out = ctx.createGain(); out.gain.value = dB(6.3 + (cues.out_db ?? 0)); out.connect(engine.master);
   const mixP = engine.mix?.gain, hotP = engine.hot?.gain;
   const base = new Map([[mixP, mixP?.value ?? 1], [hotP, hotP?.value ?? dB(6.3)]]);
-  const api = { enabled: true, version: '1101.1', log: [], missing, played: 0, ducks: 0, buffers, cues, base, nodes: { out } };
+  const api = { enabled: true, version: '1101.2', kind: KIND, log: [], missing, played: 0, ducks: 0, buffers, cues, base, nodes: { out } };
   const sources = new Set();
 
   // ---- 絞り: 区間の重なりは深い方。区分線形で予約し直す(jp_audio_v5 と同じ方式。曲線イベントは重なると例外になるので使わない) ----
@@ -74,14 +76,14 @@ export async function installLoudFx(engine, { lcd, controller, cuesUrl = new URL
       if (cur.fired.has(i)) return;
       if (skips.some(([a, b]) => c.f >= b && fcur < Math.min(c.f, b + 2) - .01)) return;   // 飛ばす区間の向こうの出来事は、映像が飛び先に着いて2コマ進んでから(飛んだ直後の止まりに音が先走らない)
       const T = t + (eff(skips, c.f) - fe) / FPS;                                  // その出来事の時刻(音の時計)
-      const dur = c.s ? (buffers[c.s]?.duration ?? meta[c.s]?.dur ?? 0) : 0, anchor = c.s ? (meta[c.s]?.anchor ?? 0) : 0;
+      const dur = c.s ? (buffers[c.s]?.duration ?? meta[fileOf(c.s)]?.dur ?? 0) : 0, anchor = c.s ? (meta[fileOf(c.s)]?.anchor ?? 0) : 0;
       const start = c.s ? (c.pre ? T - dur : T - anchor) : T;
       const lead = Math.min(start, T - (c.duck?.pre ?? 0) - .01);
       if (lead - t > AHEAD) return;
       cur.fired.add(i);
       if (T < t - .15) return;                                                      // 場面の途中から検知した古い出来事は鳴らさない
       if (!api.enabled) return;                                                    // api.enabled=false で一時的に従来の音へ(比較用)
-      if (c.s) play(c.s, start, c.db ?? 0);
+      if (c.s) play(c.s, start, c.dbk?.[KIND] ?? c.db ?? 0);
       if (c.duck) duck(T, c.duck);
     });
   }
