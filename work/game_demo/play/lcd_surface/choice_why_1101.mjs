@@ -9,7 +9,7 @@
 import * as THREE from '../../web/vendor/three/three.module.js';
 import { layerTexture } from './lcd_split_1030.mjs';
 
-export const chainWhyOn = (search = globalThis.location?.search ?? '') => new URLSearchParams(search).get('chainwhy') !== '0';
+export const chainWhyOn = (search = globalThis.location?.search ?? '') => new URLSearchParams(search).get('chainwhy') === '1';   // 11/01 監督の指示で既定オフ（うぱの台詞そのものを改善した）。?chainwhy=1 で字と台詞の試作
 
 const PX = 34, PY = 28, W_PANEL = 1152;
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
