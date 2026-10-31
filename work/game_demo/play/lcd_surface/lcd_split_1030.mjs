@@ -104,6 +104,25 @@ const SPLIT_SKIP = splitParam('splitskip');
 // 10/31 試験：?splitalt=1 は低性能時（照明の半頻度に入った／画質の段が low 以下）だけ、液晶の層の合成を 2 フレームに 1 回にする（動く層は 30Hz 更新）。
 //  ?splitalt=2 は性能に関係なく常にそうする（確認用）。既定は無効。層の数・texture の id が変わったとき（画面の切り替わり）は省かず描く。
 const SPLIT_ALT = splitParam('splitalt'), SPLIT_FRONT = splitParam('splitfront') !== '0';
+// 11/1 描く範囲の限定（試験。既定は無効＝従来。?splitscissor=1 で有効、?splitscissor=check は限定した結果と全面描画を読み比べる検証用。効果は描く画素 -6〜9% に対し外側の消去が 3 割のコマで要るため採用せず）：層の外接矩形の外は黒のまま（描かない）。画素は全面描画と同じ。
+const SPLIT_SCISSOR = splitParam('splitscissor');
+// 層 i（位置・回転・拡大つき）の外接矩形。パネルを式に取り込んだ層 0 は窓 (34,28,1152,1268) の外が黒なので窓だけ。
+function splitBounds(layers) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < SPLIT_N; i++) {
+    const L = layers[i]; if (!L || !(((L.alpha ?? 1)) > 0)) continue;
+    let qx0 = 0, qy0 = 0, qx1 = L.w, qy1 = L.h;
+    if (i === 0 && L.fuse) { qx0 = 34; qy0 = 28; qx1 = 34 + 1152; qy1 = 28 + 1268; }
+    const c = Math.cos(L.rot ?? 0), s = Math.sin(L.rot ?? 0), k = L.sc ?? 1, ax = L.ax ?? 0, ay = L.ay ?? 0, X = L.x ?? 0, Y = L.y ?? 0;
+    for (const [qx, qy] of [[qx0, qy0], [qx1, qy0], [qx1, qy1], [qx0, qy1]]) {
+      const dx = (qx - ax) * k, dy = (qy - ay) * k, px = X + c * dx - s * dy, py = Y + s * dx + c * dy;
+      if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py;
+    }
+  }
+  if (!(x1 > x0 && y1 > y0)) return null;
+  x0 = Math.max(0, Math.floor(x0) - 2); y0 = Math.max(0, Math.floor(y0) - 2); x1 = Math.min(CANVAS_W, Math.ceil(x1) + 2); y1 = Math.min(CANVAS_H, Math.ceil(y1) + 2);
+  return (x1 > x0 && y1 > y0) ? [x0, y0, x1 - x0, y1 - y0] : null;
+}
 const SPLIT_FUSE = splitParam('lcdfuse');   // '0' で従来、'check' は新旧を両方描いて読み比べる（検証用）
 const lowPerf = () => { const q = globalThis.window?.__prebakeRelight?.quality; return !!q && (q.lightHalf || q.index >= 2); };
 export function createSplitCompositor(T, renderer, opts = {}) {
@@ -141,7 +160,7 @@ export function createSplitCompositor(T, renderer, opts = {}) {
   });
   const scene = new T.Scene(), camera = new T.Camera();
   scene.add(new T.Mesh(new T.PlaneGeometry(2, 2), mat));
-  let disposed = false, before = null;
+  let disposed = false, before = null, lastBox = '';
   // 検証用：省ける場面で、描く前の target の中身(before)と描いた後を読み比べる
   const readTarget = () => { const a = new Uint8Array(CANVAS_W * CANVAS_H * 4); renderer.readRenderTargetPixels(target, 0, 0, CANVAS_W, CANVAS_H, a); return a; };
   const checkBefore = () => { try { before = readTarget(); } catch (e) { before = null; stats.checkError = String(e?.message ?? e); } };
@@ -170,7 +189,20 @@ export function createSplitCompositor(T, renderer, opts = {}) {
       const state = { target: renderer.getRenderTarget(), viewport: renderer.getViewport(new T.Vector4()), scissor: renderer.getScissor(new T.Vector4()), test: renderer.getScissorTest(), color: renderer.getClearColor(new T.Color()), alpha: renderer.getClearAlpha(), auto: renderer.autoClear };
       try {
         renderer.autoClear = false; renderer.setRenderTarget(target); renderer.setScissorTest(false); renderer.setViewport(0, 0, CANVAS_W, CANVAS_H);
+        const bb = SPLIT_SCISSOR === '1' || SPLIT_SCISSOR === 'check' ? splitBounds(layers) : null, key = bb ? bb.join(',') : '';
+        if (bb && (key !== lastBox || forceDraw)) {   // 範囲が変わったら全面を黒で消す（範囲が同じなら外側は前回から黒のまま）
+          renderer.setClearColor(0x000000, 1); renderer.clear(true, false, false); stats.scissorClears = (stats.scissorClears ?? 0) + 1;
+        }
+        lastBox = key;
+        if (bb) { target.scissor.set(bb[0], CANVAS_H - bb[1] - bb[3], bb[2], bb[3]); target.scissorTest = true; renderer.setRenderTarget(target); stats.scissorPx = (stats.scissorPx ?? 0) + bb[2] * bb[3]; }
         renderer.render(scene, camera);
+        target.scissorTest = false;
+        if (bb && SPLIT_SCISSOR === 'check') {   // 検証：全面描画と読み比べる
+          const a = readTarget(); lastBox = '';
+          renderer.setRenderTarget(target); renderer.setViewport(0, 0, CANVAS_W, CANVAS_H); renderer.render(scene, camera); const f = readTarget();
+          let bad = 0, mx = 0; for (let j = 0; j < a.length; j++) { const d = Math.abs(a[j] - f[j]); if (d) { bad++; if (d > mx) mx = d; } }
+          stats.scissorChecked = (stats.scissorChecked ?? 0) + 1; if (bad) { stats.scissorMismatch = (stats.scissorMismatch ?? 0) + 1; stats.scissorBad = Math.max(stats.scissorBad ?? 0, bad); stats.scissorMax = Math.max(stats.scissorMax ?? 0, mx); }
+        }
         stats.composed++; forceDraw = false;
       } finally {
         renderer.setRenderTarget(state.target); renderer.setViewport(state.viewport); renderer.setScissor(state.scissor); renderer.setScissorTest(state.test); renderer.setClearColor(state.color, state.alpha); renderer.autoClear = state.auto;

@@ -262,6 +262,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     materializeGpuLcd(reason='consumer',force=false){if(fullPrevious?.active){fullPrevious.materialize(reason);gpuFrame=null;return true;}return materializeGpu(reason,force);},
     async warm(){if(clock!==0||jpOwns)throw Error('normal warm is boot-only');return clips.warm(hold,W,H);},
     setManual(on) { manual = !!on; clips.setManual(on); jp?.setManual(on); },
+    // 11/1 最適化：継続の選択画面(choice_surface_v20)が全面を覆っている間、下の通常映像(idle)を止める。選択の frame は base.frame を呼ばないので、ここから止める。覆いが外れれば frame() の run() が再開する。?choicepause=0 で従来(choice 側の旗)
+    pauseCoveredClips() { if (!manual) clips.pause(); },
     async prepare(dt) { if(!displayRecovery.active&&jp?.active){await jp.prepare(dt);return;} await clips.prepare(dt); },
     frame(dt, F) {
       const t0 = performance.now(); clock += dt;stableResult=false;

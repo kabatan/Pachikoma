@@ -9,6 +9,7 @@
 //   ・陰影は従来の球フラグメントシェーダの式そのまま（プローブ 3 点の補間・視差補正・フレネル・studioEnv・前景の奥行き判定）
 //   ・タイルあたりの球が多すぎる（K 個超）フレームだけ、従来の描画へ戻す（stats.overflow）
 // 最終合成のシェーダにはサンプラーの余裕が無い（16 個の上限）ので、最終合成の中ではなく、手前の 1 パスにした。
+import { lodTextures } from './final_region_1101.mjs';
 const TILE = 32, K = 32, W = 1440, H = 2560;
 
 export function createAnalyticBalls({ THREE, hr, r, ballMaterial, selPI, selPW, vertexShader, uPBK, nProbes }) {
@@ -17,7 +18,7 @@ export function createAnalyticBalls({ THREE, hr, r, ballMaterial, selPI, selPW, 
   if (a < 0 || b < a) throw Error('ball_analytic: ball fragment shader changed');
   const chunk = fs.slice(a + 'flat varying vec3 vPW;'.length, b);   // PROBE_FACE_GLSL・probeRadiance・studioEnv（vWorld は下でグローバルに）
   const TX = Math.ceil(W / TILE), TY = Math.ceil(H / TILE);
-  const stats = { composes: 0, overflow: 0, maxPerTile: 0, trayDepthDraws: 0, skippedNear: 0, rowsAvg: 0 };
+  const stats = { composes: 0, overflow: 0, maxPerTile: 0, trayDepthDraws: 0, skippedNear: 0, tilesAvg: 0, trayRows: 0 };
   const tilesArr = new Uint16Array(TX * K * TY), tiles = new THREE.DataTexture(tilesArr, TX * K, TY, THREE.RedIntegerFormat, THREE.UnsignedShortType);
   tiles.minFilter = tiles.magFilter = THREE.NearestFilter; tiles.generateMipmaps = false; tiles.flipY = false; tiles.unpackAlignment = 1;
   const cnt = new Uint8Array(TX * TY);
@@ -25,7 +26,9 @@ export function createAnalyticBalls({ THREE, hr, r, ballMaterial, selPI, selPW, 
   const dataArr = new Float32Array(maxBalls * 12), data = new THREE.DataTexture(dataArr, 3, maxBalls, THREE.RGBAFormat, THREE.FloatType);
   data.minFilter = data.magFilter = THREE.NearestFilter; data.generateMipmaps = false; data.flipY = false;
   const order = new Uint32Array(maxBalls), dist = new Float32Array(maxBalls);
-  let out = null, depthRT = null, depthKey = '', rowsPrev = 0, outKey = '';
+  let depthGen = -1;
+  let out = null, depthRT = null, depthKey = '', outKey = '', trayGenSeen = -1;
+  const prevFlag = new Uint8Array(TX * TY), dirtyIdx = new Uint16Array(TX * TY);
   const U = ballMaterial.uniforms;
   const uniforms = {
     uPBK, uTrayC: { value: null }, uTrayD: { value: null }, uBallTex: { value: data }, uTiles: { value: tiles }, uCam: { value: new THREE.Vector3() },
@@ -91,8 +94,18 @@ void main() {
   }
   gl_FragColor = vec4(rgb, fr) + (1.0 - acc) * tray;
 }`;
-  const mat = new THREE.ShaderMaterial({ vertexShader, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false, blending: THREE.NoBlending });
-  const scene = new THREE.Scene(), mesh = new THREE.Mesh(hr._tri, mat); mesh.frustumCulled = false; scene.add(mesh);
+  // D3D11（ANGLE）は、可変回数のループの中で暗黙の微分を使う texture() をコンパイルできない／展開に失敗することがある。ミップなしなので textureLod(,0) と同じ
+  const fragL = lodTextures(frag).src;
+  const mat = new THREE.ShaderMaterial({ vertexShader, fragmentShader: fragL, uniforms, depthTest: false, depthWrite: false, blending: THREE.NoBlending });
+  const scene = new THREE.Scene(), mesh = new THREE.Mesh(hr._tri, mat); mesh.frustumCulled = false; scene.add(mesh);   // 全画面 1 枚（皿の行の写しだけに使う）
+  // 球があるタイルと前回あったタイルだけを描く：1 タイル 1 つの四角（インスタンス）。それ以外の画素は前の内容のまま（0 または皿）
+  const matT = new THREE.ShaderMaterial({
+    vertexShader: `attribute vec2 aTile; void main() { vec2 q = (aTile + position.xy) * ${TILE}.0 / vec2(${W}.0, ${H}.0); gl_Position = vec4(q * 2.0 - 1.0, 0.0, 1.0); }`,
+    fragmentShader: fragL, uniforms, depthTest: false, depthWrite: false, blending: THREE.NoBlending, side: THREE.DoubleSide });
+  const tileGeo = new THREE.InstancedBufferGeometry();
+  tileGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0]), 3));
+  const tileAttr = new THREE.InstancedBufferAttribute(new Float32Array(TX * TY * 2), 2); tileAttr.setUsage(THREE.DynamicDrawUsage); tileGeo.setAttribute('aTile', tileAttr);
+  const sceneT = new THREE.Scene(), meshT = new THREE.Mesh(tileGeo, matT); meshT.frustumCulled = false; sceneT.add(meshT);
   const depthMat = new THREE.ShaderMaterial({
     vertexShader: 'varying float vD; void main() { vec4 vp = modelViewMatrix * vec4(position, 1.0); vD = -vp.z; gl_Position = projectionMatrix * vp; }',
     fragmentShader: 'varying float vD; void main() { gl_FragColor = vec4(vD, 0.0, 0.0, 1.0); }',
@@ -104,7 +117,8 @@ void main() {
     if (out && outKey === key) return;
     out?.dispose();
     out = new THREE.WebGLRenderTarget(RW, RH, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false });
-    r.initRenderTarget?.(out); outKey = key; rowsPrev = RH;   // 作った直後は中身が不定なので、次の 1 回は全面を描く
+    r.initRenderTarget?.(out); outKey = key; trayGenSeen = -1; prevFlag.fill(0);   // 作った直後は 0 に消して、皿の行を写し直す
+    r.setRenderTarget(out); r.setClearColor(0x000000, 0); r.clear(true, false, false);
   }
 
   // 皿の深度（皿が描き直された時と、球バッファの大きさが変わった時だけ）。クリア値 0 ＝ 皿なし
@@ -129,7 +143,7 @@ void main() {
 
   const m4 = new THREE.Matrix4(), v = new THREE.Vector3();
   // 球の数だけ CPU で振り分けて合成パスを 1 回描く。戻り値＝最終合成が読む RT（タイルあふれ時は null）
-  function compose({ count, trayTarget, drew, RW, RH }) {
+  function compose({ count, trayTarget, trayGen, RW, RH }) {
     const cam = hr.camera; cam.updateMatrixWorld(true);
     const mesh0 = hr.balls, mw = mesh0.matrixWorld.elements, im = mesh0.instanceMatrix.array, view = cam.matrixWorldInverse.elements, P = cam.projectionMatrix.elements;
     cnt.fill(0); tilesArr.fill(0);
@@ -167,7 +181,7 @@ void main() {
     }
     if (overflow) { stats.overflow++; return null; }
     // 球のデータの並びは、手前の順（idx）ではなく到着順 i で置いてあるので、タイル内の番号 i+1 で引ける。
-    trayDepth(trayTarget, drew, RW, RH);
+    trayDepth(trayTarget, trayGen !== depthGen, RW, RH); depthGen = trayGen;
     ensureOut(RW, RH);
     data.needsUpdate = true; tiles.needsUpdate = true;
     uniforms.uTrayC.value = trayTarget.texture; uniforms.uTrayD.value = depthRT.texture;
@@ -175,16 +189,28 @@ void main() {
     m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); uniforms.uInvVP.value.copy(m4).invert();
     uniforms.uView.value.copy(cam.matrixWorldInverse);
     uniforms.uPixAng.value = 2 / (H * P[5]);
-    // 描く行：球と皿の範囲＋前回描いた範囲（前回の球を消す）。画素は下から
-    const scale = RH / H, rowsNow = Math.min(RH, Math.max(Math.ceil(topRow * scale) + 2, trayTarget.height));
-    const rows = Math.min(RH, Math.max(rowsNow, rowsPrev)); rowsPrev = rowsNow;
-    stats.rowsAvg += (rows / RH - stats.rowsAvg) * 0.05;
-    r.setRenderTarget(out); r.setViewport(0, 0, RW, RH); r.setScissorTest(true); r.setScissor(0, 0, RW, rows);
-    try { r.render(scene, hr.fsCam); } finally { r.setScissorTest(false); }
+    // 描く所：皿の行（皿が描き直された時だけ全幅）＋ 球があるタイルと前回あったタイル
+    const scale = RH / H;
+    r.setRenderTarget(out); r.setViewport(0, 0, RW, RH);
+    if (trayGen !== trayGenSeen) {
+      r.setScissorTest(true); r.setScissor(0, 0, RW, Math.min(RH, trayTarget.height + 2));
+      try { r.render(scene, hr.fsCam); } finally { r.setScissorTest(false); }
+      trayGenSeen = trayGen; stats.trayRows = (stats.trayRows ?? 0) + 1;
+    }
+    let nd = 0;
+    for (let t = 0; t < TX * TY; t++) {
+      if (cnt[t] > 0 || prevFlag[t]) { const o2 = nd * 2; tileAttr.array[o2] = t % TX; tileAttr.array[o2 + 1] = (t / TX) | 0; nd++; }
+      prevFlag[t] = cnt[t] > 0 ? 1 : 0;
+    }
+    if (nd) {
+      tileGeo.instanceCount = nd; tileAttr.clearUpdateRanges(); tileAttr.addUpdateRange(0, nd * 2); tileAttr.needsUpdate = true;
+      r.render(sceneT, hr.fsCam);
+    }
+    stats.tilesAvg += (nd / (TX * TY) - stats.tilesAvg) * 0.05;
     stats.composes++;
     return out;
   }
   const scr = new Float32Array(maxBalls * 3);
 
-  return { compose, stats, dispose() { out?.dispose(); depthRT?.dispose(); tiles.dispose(); data.dispose(); mat.dispose(); depthMat.dispose(); } };
+  return { compose, stats, dispose() { out?.dispose(); depthRT?.dispose(); tiles.dispose(); data.dispose(); mat.dispose(); matT.dispose(); tileGeo.dispose(); depthMat.dispose(); } };
 }

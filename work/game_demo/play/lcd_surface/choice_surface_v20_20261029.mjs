@@ -128,10 +128,13 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
     const need=new Set([selected,blend?.from,wake?.state,'neutral']);
     for(const st of FILES){const v=videos[st];if(!need.has(st)&&!v.paused)v.pause();}
   };
+  // 11/1 最適化（?choicepause=0 で従来）：選択画面は全面不透明(黒地に動画)で下の通常映像は見えない。入った時点で下の idle を止め、同時再生を 3→2 に減らす（出る時は通常側の frame が再開する）
+  const CHOICE_PAUSE=new URLSearchParams(globalThis.location?.search??'').get('choicepause')!=='0';
   const setActive=on=>{
     if(active===on)return;
     if(on){dropHeld();entryGpu=choiceBackend&&choiceBackend.diagnostics().enabled?baseGpu?.call(lcd):null;if(entryGpu)choiceGpu={...entryGpu,owner:'choice'};else baseMaterialize?.('choice-enter',true);choiceGeneration++;}else {choiceGpu=null;entryGpu=null;if(!handoff)dropHeld();}
     active=on;selected='neutral';blend=null;clock=0;
+    if(on&&CHOICE_PAUSE&&!manual)lcd.pauseCoveredClips?.();
     if(on){hasChoiceFrame=false;countdown.reset();}
     record(on?'enter':'exit');
     if(canvas)canvas.style.cursor=on?'pointer':originalCursor;

@@ -81,15 +81,30 @@ export async function attachJpCount(lcd, { controller, log = () => {} } = {}) {
   const SPW = 576, SPH = 634, spC = mk(SPW, SPH), spx = spC.getContext('2d');
   // 実写の炎・光の筋・火の粉（CC-BY の配布素材、出典は count_1031/CREDITS.txt）。黒地を加算で重ねる。無ければ出さない。
   const loadVid = async (n) => { try { const r = await fetch(new URL(`./count_1031/${n}.mp4`, import.meta.url)); if (!r.ok) return null; const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.loop = true; v.src = URL.createObjectURL(await r.blob()); await new Promise((res) => { const d = () => res(); v.addEventListener('loadeddata', d, { once: true }); v.addEventListener('error', d, { once: true }); setTimeout(d, 3000); v.load(); }); return v.readyState >= 2 ? v : null; } catch { return null; } };
-  const V = qs.get('jpcount_fx') === '0' ? {} : { fl: await loadVid('fx_flame'), fr: await loadVid('fx_flare'), em: await loadVid('fx_embers') };
+  // 11/1 最適化：光の筋と炎は加算の層どうしなので、現行の式で 1 本に焼いた下層ミックス fx_mix_1101.mp4（焼き方 perf/countmerge_bake_1101.py。30fps・拍の頭が t=0・ファイルの時刻＝カウントダウンの経過時刻、
+  //  余韻は 2.0 秒以降）で 4 本→3 本（炎の毎コマ 2D 描画も不要）。既定の ?jpcount_sec=2.0 のときだけ。11/1 判断：等倍で同等ではない（15層→13層で捨てられていた輪が出る、30fpsの階段）ため既定オフ、?countmerge=1 で有効。読めなければ従来に戻る。
+  const VM = qs.get('countmerge') === '1' && qs.get('jpcount_fx') !== '0' && Math.abs(SEC - 2.0) < 1e-6 ? await loadVid('fx_mix_1101') : null;
+  if (VM) VM.loop = false;
+  const V = qs.get('jpcount_fx') === '0' ? {} : VM ? { mx: VM, em: await loadVid('fx_embers') } : { fl: await loadVid('fx_flame'), fr: await loadVid('fx_flare'), em: await loadVid('fx_embers') };
+  const MIXW = VM ? VM.videoWidth || 1248 : 1248, MIXH = VM ? VM.videoHeight || 1364 : 1364;   // 窓座標 (-48,-48)〜(1200,1316) を MIXW×MIXH に焼いてある。層の拡大は 1248/MIXW、中心は窓の (576,634)
   const solid = (c) => { const x = mk(8, 8); const g = x.getContext('2d'); g.fillStyle = c; g.fillRect(0, 0, 8, 8); return x; };
-  const flameC = mk(576, 634), flx = flameC.getContext('2d');
-  const FXT = { dark: layerTexture(THREE, solid('#000')), white: layerTexture(THREE, solid('#fff')), fl: layerTexture(THREE, flameC) };
+  const flameC = mk(V.mx ? 8 : 576, V.mx ? 8 : 634), flx = flameC.getContext('2d');
+  const FXT = { dark: layerTexture(THREE, solid('#000')), white: layerTexture(THREE, solid('#fff')) };
+  if (!V.mx) FXT.fl = layerTexture(THREE, flameC);
+  if (V.mx) FXT.mx = layerTexture(THREE, V.mx);
   if (V.fr) FXT.fr = layerTexture(THREE, V.fr); if (V.em) FXT.em = layerTexture(THREE, V.em);
   const flMask = (() => { const c = mk(576, 634), x = c.getContext('2d'), g = x.createRadialGradient(288, 317, 40, 288, 317, 300); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.55, 'rgba(0,0,0,0.85)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, 576, 634); return c; })();
   const driveFx = (b, t) => {   // 拍ごとに素材の頭から。manual（試験の手送り）は時刻へ seek、実機は拍の頭で再生し直す
     for (const [key, v] of Object.entries(V)) {
-      if (!v) continue; const tv = Math.min(t, (v.duration || 2) - 0.05);
+      if (!v) continue;
+      if (key === 'mx') {   // 下層ミックス：ファイルの時刻＝カウントダウンの経過（余韻は 2.0 秒以降）。実機は最初に再生して、拍の頭でずれが 0.05 秒を超えたときだけ合わせる（seek を減らす）
+        const want = S.out ? 2.0 + S.outT : S.e;
+        if (S.manual) { const tm = Math.min(want, (v.duration || 2.5) - 0.02) + 0.002; if (Math.abs(v.currentTime - tm) > 1e-4) { try { v.currentTime = tm; } catch {} S.seekPs.push(new Promise((res) => { v.addEventListener('seeked', res, { once: true }); setTimeout(res, 400); })); } }
+        else if (S.fxBeat === -1 || v.paused) { try { v.currentTime = want; v.play().catch(() => {}); } catch {} }
+        else if (S.fxBeat !== b && Math.abs(v.currentTime - want) > 0.05) { try { v.currentTime = want; } catch {} }
+        continue;
+      }
+      const tv = Math.min(t, (v.duration || 2) - 0.05);
       if (S.manual) { if (Math.abs(v.currentTime - tv) > 1e-4) { try { v.currentTime = tv; } catch {} S.seekPs.push(new Promise((res) => { v.addEventListener('seeked', res, { once: true }); setTimeout(res, 400); })); } }
       else if (S.fxBeat !== b) { try { v.currentTime = 0; v.play().catch(() => {}); } catch {} }
     }
@@ -102,7 +117,7 @@ export async function attachJpCount(lcd, { controller, log = () => {} } = {}) {
   const pauseFx = () => { if (!FXPAUSE || S.manual) return; for (const v of Object.values(V)) { try { if (v && !v.paused) v.pause(); } catch {} } S.fxBeat = -1; };
   const T = { d3: layerTexture(THREE, G.d3), d2: layerTexture(THREE, G.d2), d1: layerTexture(THREE, G.d1), go: layerTexture(THREE, G.go), g3: layerTexture(THREE, GL.d3), g2: layerTexture(THREE, GL.d2), g1: layerTexture(THREE, GL.d1), gg: layerTexture(THREE, GL.go),
     flash: layerTexture(THREE, flashC), ring: layerTexture(THREE, ringC), ray: layerTexture(THREE, rayC), sp: layerTexture(THREE, spC) };
-  (lcd.splitWarmers ??= []).push({ name: 'jpcount', done: false, step(r) { for (const t of [...Object.values(T), ...Object.values(FXT)]) { try { r.initTexture(t); } catch {} } return (this.done = true); } });
+  (lcd.splitWarmers ??= []).push({ name: 'jpcount', done: false, step(r) { for (const t of [...Object.values(T), ...Object.values(FXT)].filter(Boolean)) { try { r.initTexture(t); } catch {} } return (this.done = true); } });
 
   // ---- 音（hotBus。3拍は金のベルの上昇、開始は大きな衝撃＋明るい和音＋空気を切る音） ----
   const eng = () => globalThis.__r2Audio?.engine;
@@ -153,6 +168,7 @@ export async function attachJpCount(lcd, { controller, log = () => {} } = {}) {
   // ---- 揺れ・層 ----
   const hash = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
   const win = (tex, w, h, wx, wy, k, alpha, add, ox = 0, oy = 0, rot = 0) => { const s = WW / w; return { tex, w, h, ax: w / 2, ay: h / 2, x: PX + wx + ox, y: PY + wy + oy, rot, sc: s * k, alpha, add }; };
+  const MIXK = 1248 / WW;   // 下層ミックスの層の拡大（win() の s=WW/w に掛ける k。全体で 1248/MIXW 倍）
   const CY = 560;   // 字の中心（窓座標。右上の全体の時計・下の札と重ならない画面の中央）
   const drawSparks = (tt) => {
     if (!S.spark) { let s = 11; const r = () => (s = (s * 16807) % 2147483647) / 2147483647; S.spark = Array.from({ length: 70 }, () => ({ a: r() * TAU, v: 500 + r() * 1400, l: 0.25 + r() * 0.4, w: 2.5 + r() * 6, g: r() < 0.3, c: r() < 0.5 ? '255,214,100' : r() < 0.5 ? '255,250,230' : '255,140,50' })); }
@@ -184,8 +200,11 @@ export async function attachJpCount(lcd, { controller, log = () => {} } = {}) {
       const heat = [0.55, 0.75, 0.95][b];
       A(FXT.dark, 8, 8, 1.3, (0.8 - 0.07 * b) * clamp(t / 0.012) * (1 - lastU * 0.6), false);
       A(FXT.white, 8, 8, 1.3, 0.85 * Math.exp(-t / 0.035), true);                         // 白閃（2 コマ）
+      if (V.mx) A(FXT.mx, MIXW, MIXH, MIXK, 1, true, 0, 634);                             // 光の筋＋炎（実写・焼いた 1 本。透明度・回転・脈動は焼き込み済み）
+      else {
       A(FXT.fr, 448, 448, 1.35 + 0.15 * b, 0.9 * Math.exp(-t / 0.5) * heat, true, t * 0.25 * (b % 2 ? -1 : 1));   // 光の筋（実写）
       A(FXT.fl, 576, 634, 1.7, heat * al * pulse, true, 0, CY + 60);                      // 炎（実写）
+      }
       A(T[gk], ww, hh, K[key], 0.5 * al * pulse, true, rot);                              // 字の後ろの発光
       A(tex, ww, hh, k, al, false, rot);
       A(FXT.em, 640, 360, 1.8, 0.9 * al, true, 0, CY - 40);                               // 火の粉（実写・手前）
@@ -199,10 +218,13 @@ export async function attachJpCount(lcd, { controller, log = () => {} } = {}) {
       A(FXT.dark, 8, 8, 1.3, 0.7 * clamp(t / 0.01) * (1 - hold), false);
       A(FXT.white, 8, 8, 1.3, 1.0 * Math.exp(-t / 0.12), true);                            // 画面全体の閃光
       A(T.flash, 288, 317, 3.6, 1.0 * Math.exp(-t / 0.25), true);
+      if (V.mx) A(FXT.mx, MIXW, MIXH, MIXK, 1, true, 0, 634);                             // 光の筋 2 枚＋炎（焼いた 1 本）
+      else {
       A(FXT.fr, 448, 448, 2.4, 1.0 * Math.exp(-t / 0.7), true, t * 0.3);
       A(FXT.fr, 448, 448, 1.5, 0.8 * Math.exp(-t / 0.9), true, -t * 0.45);
+      }
       if (t < 0.9) { A(T.ray, 256, 256, 2.6 + 4.2 * easeOut(clamp(t / 0.6)), 1.0 * (1 - clamp(t / 0.9)) ** 1.4, true, t * 0.3); A(T.ray, 256, 256, 1.8 + 3 * easeOut(clamp(t / 0.6)), 0.8 * (1 - clamp(t / 0.9)) ** 1.4, true, -t * 0.5 + 0.4); }
-      A(FXT.fl, 576, 634, 1.95, 1.0 * al * pulse, true, 0, CY + 60);
+      if (!V.mx) A(FXT.fl, 576, 634, 1.95, 1.0 * al * pulse, true, 0, CY + 60);
       A(T.gg, ww, hh, K.go, 0.8 * al * pulse, true, rot);
       A(T.go, ww, hh, k, al, false, rot);
       A(FXT.em, 640, 360, 2.2, 1.0 * al, true, 0, CY - 40);

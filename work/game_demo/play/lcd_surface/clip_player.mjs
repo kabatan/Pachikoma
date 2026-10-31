@@ -10,6 +10,8 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
   const pool = [], queue = [], fadeSeconds = .12;
   // 11/1 最適化：使い終わって止まった映像は、次に使われる前に先頭へ巻き戻しておく（始める時の seek で再生が約0.2秒遅れ、頭で落ちていた）。?jpprime=0 で従来
   const PRIME = new URLSearchParams(globalThis.location?.search??'').get('jpprime')!=='0';
+  // 11/1 最適化：クロスフェード（0.12秒）の間、出ていく側の映像を止めて最後のコマを保持し、デコードを 1 本に（?fadefreeze=0 で従来＝2 本同時に流す）。入る側が最初のコマを出すまでは出ていく側は動き続ける
+  const FREEZE = new URLSearchParams(globalThis.location?.search??'').get('fadefreeze')!=='0';let frozenCur=null;
   let current = null, incoming = null, idleName = 'idle0', fade = 0, manual = false, seq = 0, clock = 0, generation = 0;
   const emit = (kind, data) => record({kind, at: clock, wall: performance.now(), ...data});
   function make() {
@@ -33,7 +35,7 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
       s.v.src=new URL(files[name],base).href;s.v.loop=name.startsWith('idle');s.v.load();
     });return s;
   }
-  function run(s) {if(s && !manual && s.ready && s.v.paused && !s.v.ended)s.v.play().catch(()=>{});}
+  function run(s) {if(s && !manual && s.ready && s.v.paused && !s.v.ended && !(s===frozenCur))s.v.play().catch(()=>{});}
   function start(s, request) {
     incoming=s;incoming.time=0;if(!(PRIME&&incoming.v.currentTime<=.001))incoming.v.currentTime=0;fade=0;   // 11/1 先頭にある映像は seek し直さない（?jpprime=0 で従来）
     run(incoming);emit('start',{name:s.name,waitMs:request?(performance.now()-request.wall):0,queue:queue.length});
@@ -68,8 +70,9 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
       if(current?.ready && current.v.readyState>=2)draw(current,1);
       if(incoming?.ready && !incoming.v.seeking && incoming.v.readyState>=2){
         // The decoder owns realtime. Do not skip a new clip's opening on a slow frame.
+        if(FREEZE&&!manual&&current&&frozenCur!==current){try{current.v.pause();}catch{}frozenCur=current;}
         fade+=Math.min(dt,1/30);draw(incoming,Math.min(1,fade/fadeSeconds));
-        if(fade>=fadeSeconds){end(current,ended?'ended':'crossfade');current=incoming;incoming=null;emit('transition',{name:current.name,seconds:fade});if(queue[0])load(queue[0].name,true);}
+        if(fade>=fadeSeconds){frozenCur=null;end(current,ended?'ended':'crossfade');current=incoming;incoming=null;emit('transition',{name:current.name,seconds:fade});if(queue[0])load(queue[0].name,true);}
       }
       if(manual){if(current)current.time+=dt;if(incoming)incoming.time+=dt;}
       return snapshot;
@@ -82,7 +85,7 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
     suspend(){
       for(const r of queue)emit('cancel',{name:r.name,reason:'superseded-by-jp-before-start',waitMs:performance.now()-r.wall});
       queue.length=0;end(current,'crossfade-to-jp');end(incoming,'crossfade-to-jp');
-      current=incoming=null;for(const s of pool)s.v.pause();
+      frozenCur=null;current=incoming=null;for(const s of pool)s.v.pause();
     },
     diagnostics(){return pool.map(s=>({name:s.name,ready:s.ready,time:s.v.currentTime,quality:s.v.getVideoPlaybackQuality?.()}));},
     dispose(){for(const s of pool){s.cancel?.();s.v.pause();s.v.removeAttribute('src');s.v.load();}},

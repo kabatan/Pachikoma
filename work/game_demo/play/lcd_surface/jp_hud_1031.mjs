@@ -158,7 +158,20 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     t.fillStyle = g; t.beginPath(); t.moveTo(450, 450); t.arc(450, 450, 430, -0.36, 0.36); t.closePath(); t.fill(); t.beginPath(); t.moveTo(450, 450); t.arc(450, 450, 430, Math.PI - 0.36, Math.PI + 0.36); t.closePath(); t.fill();   // 二灯の回転灯（180°反対に光束が出る）
     x.filter = 'blur(26px)'; x.drawImage(tmp, 0, 0); x.filter = 'none';
     const lg = x.createRadialGradient(450, 450, 0, 450, 450, 120); lg.addColorStop(0, 'rgba(255,230,210,0.95)'); lg.addColorStop(0.3, 'rgba(255,70,50,0.7)'); lg.addColorStop(1, 'rgba(255,20,10,0)'); x.fillStyle = lg; x.fillRect(330, 330, 240, 240); }
-  T.beam = layerTexture(THREE, beamC);
+  // 11/1 最適化：光束（回転灯）の透明な余白を切り詰める（?jpbeamcrop=0 で従来）。層の矩形の中だけ texture を読むので、回転した 900x900 の約半分の画素で読みが済む。
+  //  切り詰めた canvas の基準点を同じ位置に保つので、描かれる画は従来と画素まで同じ（外側は完全に透明、周囲 2 画素の余白を残す）。
+  const BEAM = { w: 900, h: 900, ax: 450, ay: 450 }; let beamTexC = beamC;
+  if (qs.get('jpbeamcrop') !== '0') {
+    try {
+      const d = beamC.getContext('2d').getImageData(0, 0, 900, 900).data; let x0 = 900, y0 = 900, x1 = -1, y1 = -1;
+      for (let y = 0; y < 900; y++) for (let x = 0; x < 900; x++) if (d[(y * 900 + x) * 4 + 3] > 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 >= x0 && y1 >= y0) {
+        x0 = Math.max(0, x0 - 2); y0 = Math.max(0, y0 - 2); x1 = Math.min(899, x1 + 2); y1 = Math.min(899, y1 + 2);
+        const w = x1 - x0 + 1, h = y1 - y0 + 1; if (w * h < 900 * 900 * 0.9) { const cc = mk(w, h); cc.getContext('2d').drawImage(beamC, -x0, -y0); beamTexC = cc; BEAM.w = w; BEAM.h = h; BEAM.ax = 450 - x0; BEAM.ay = 450 - y0; }
+      }
+    } catch (e) { console.warn('[jphud] beam crop', e); }
+  }
+  T.beam = layerTexture(THREE, beamTexC);
   // 数字・火花の動く canvas
   const tC = mk(TX.w, TX.h), tx = tC.getContext('2d'); T.txt = layerTexture(THREE, tC);
   const mC = mk(MT.w, MT.h), mt = mC.getContext('2d'); T.met = layerTexture(THREE, mC);
@@ -499,8 +512,8 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
       } else out.push({ tex: T.vig, w: 288, h: 317, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 4, alpha: clamp(va), add: false });
       if (lvl >= 2) {
         const al = clamp(0.8 + 0.5 * pw * (0.4 + 0.6 * h)), rot = ck * TAU * (0.8 + 0.25 * lvl);
-        out.push({ tex: T.beam, w: 900, h: 900, ax: 450, ay: 450, x: PX + 20, y: PY + 1010, rot, sc: 1.9, alpha: al, add: true });
-        out.push({ tex: T.beam, w: 900, h: 900, ax: 450, ay: 450, x: PX + W - 20, y: PY + 1010, rot: rot + Math.PI * 0.9, sc: 1.9, alpha: al, add: true });
+        out.push({ tex: T.beam, w: BEAM.w, h: BEAM.h, ax: BEAM.ax, ay: BEAM.ay, x: PX + 20, y: PY + 1010, rot, sc: 1.9, alpha: al, add: true });
+        out.push({ tex: T.beam, w: BEAM.w, h: BEAM.h, ax: BEAM.ax, ay: BEAM.ay, x: PX + W - 20, y: PY + 1010, rot: rot + Math.PI * 0.9, sc: 1.9, alpha: al, add: true });
       }
     }
     if (S.fx.length || (ARROW && S.on && (S.st?.count | 0) > 0)) out.push({ tex: T.fx, w: fC.width, h: fC.height, ax: 0, ay: 0, x: PX + FX.x, y: PY + FX.y, rot: 0, sc: 1 / FX.k, alpha: 1, add: true });   // 炎・火花は字とメーターの下（白飛びや炎で字が読めなくならないように）
@@ -520,7 +533,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     }
     return out;
   };
-  (lcd.splitWarmers ??= []).push({ name: 'jphud', done: false, step(r) { for (const t of Object.values(T)) { try { r.initTexture(t); } catch { } } return (this.done = true); } });
+  (lcd.splitWarmers ??= []).push({ name: 'jphud', done: false, step(r) { for (const t of Object.values(T)) { try { r.initTexture(t); } catch { } } if (new URLSearchParams(globalThis.location?.search ?? '').get('jpfirepre') !== '0') { try { fireFrame(0.5, 1250, 0.7); const sc = mk(8, 8).getContext('2d'); sc.drawImage(fm, 0, 0, 8, 8); sc.getImageData(0, 0, 1, 1); } catch { } } return (this.done = true); } });   // 炎の板の初回(実写コマの切り出し＋縁のなじませ、約20ms)を空き時間に済ませる(?jpfirepre=0 で従来)
   const baseXform = () => { if (!FLOOR || !S.show) return null; const k = S.on ? clamp((S.clock - S.enterAt) / 0.6) : 1 - clamp((S.clock - S.exitAt) / 0.35); return k > 0 ? { y: -50 * k * k * (3 - 2 * k) } : null; };   // 床の奥の縁に扉の足元が接するよう、扉の映像を上へ
   lcd.jpHud = { splitLayers, baseXform, state: S, get active() { return !!S.show; }, panicLevel, dispose() { offAct?.(); lcd.frame = baseFrame; setCue(false); lcd.jpHud = null; } };
   note('attached');

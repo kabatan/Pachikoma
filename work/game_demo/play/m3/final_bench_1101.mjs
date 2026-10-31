@@ -38,6 +38,32 @@ export function installFinalBench({ hr, r, api, THREE, pq }) {
   const med = (a) => { const v = [...a].sort((x, y) => x - y); return v.length ? v[v.length >> 1] : null; };
   const fmt = (x, d = 3) => x == null ? '-' : x.toFixed(d);
 
+  const dec = (v, ty) => ty === 1016 ? h2f(v) : ty === 1015 ? v : v / 255;
+  const h2f = (h) => { const e = (h >> 10) & 31, f = h & 1023, sg = h & 0x8000 ? -1 : 1; return e === 0 ? sg * f * 5.960464477539063e-8 : e === 31 ? (f ? NaN : sg * Infinity) : sg * (1 + f / 1024) * 2 ** (e - 15); };
+  const s2l = (v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  const lab = (r, g, b) => { const R = s2l(Math.min(1, Math.max(0, r))), G = s2l(Math.min(1, Math.max(0, g))), B = s2l(Math.min(1, Math.max(0, b)));
+    const X = (0.4124564 * R + 0.3575761 * G + 0.1804375 * B) / 0.95047, Y = 0.2126729 * R + 0.7151522 * G + 0.072175 * B, Z = (0.0193339 * R + 0.119192 * G + 0.9503041 * B) / 1.08883;
+    const f = (t) => t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116; const fx = f(X), fy = f(Y), fz = f(Z); return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]; };
+
+  // 2 枚の画の比較：食い違う画素の数・最大差。detail が真なら色差（sRGB 符号化の値として CIE76 ΔE）も
+  const compare = (A, base, type, detail = true) => {
+    let differ = 0, maxd = 0, first = -1;
+    for (let i = 0; i < A.length; i += 4) { const d = Math.max(Math.abs(A[i] - base[i]), Math.abs(A[i + 1] - base[i + 1]), Math.abs(A[i + 2] - base[i + 2])); if (d) { differ++; if (d > maxd) maxd = d; if (first < 0) first = i >> 2; } }
+    const o = { pixelsDiffer: differ, maxRawDiff: maxd, firstDiffPixel: first };
+    if (differ && detail) {
+      const hist = [0, 0, 0, 0]; let sumE = 0, maxE = 0, maxCode = 0; const px = A.length / 4;
+      for (let i = 0; i < A.length; i += 4) {
+        if (A[i] === base[i] && A[i + 1] === base[i + 1] && A[i + 2] === base[i + 2]) continue;
+        const a = lab(dec(A[i], type), dec(A[i + 1], type), dec(A[i + 2], type)), b = lab(dec(base[i], type), dec(base[i + 1], type), dec(base[i + 2], type));
+        const e = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); sumE += e; if (e > maxE) maxE = e;
+        const cd = Math.max(Math.abs(dec(A[i], type) - dec(base[i], type)), Math.abs(dec(A[i + 1], type) - dec(base[i + 1], type)), Math.abs(dec(A[i + 2], type) - dec(base[i + 2], type))) * 255; if (cd > maxCode) maxCode = cd;
+        if (e > 0.5) hist[0]++; if (e > 1) hist[1]++; if (e > 2) hist[2]++; if (e > 4) hist[3]++;
+      }
+      o.dE76 = { mean: +(sumE / px).toFixed(5), max: +maxE.toFixed(3), maxCode8: +maxCode.toFixed(2), over0_5: hist[0], over1: hist[1], over2: hist[2], over4: hist[3], fracOver0_5: +(hist[0] / px).toExponential(2) };
+    }
+    return o;
+  };
+
   const log = (m) => { if (pq.get('benchlog') !== '0') console.warn('[finalbench] ' + m + ' +' + Math.round(performance.now() - T0) + 'ms'); };
   let T0 = 0;
   const run = (cam) => {
@@ -48,32 +74,12 @@ export function installFinalBench({ hr, r, api, THREE, pq }) {
     log('sets built');
     // 1) 画素：lr を基準に比べる（等しい=全画素一致）
     let base = null;
-    const dec = (v, ty) => ty === 1016 ? h2f(v) : ty === 1015 ? v : v / 255;
-    const h2f = (h) => { const e = (h >> 10) & 31, f = h & 1023, sg = h & 0x8000 ? -1 : 1; return e === 0 ? sg * f * 5.960464477539063e-8 : e === 31 ? (f ? NaN : sg * Infinity) : sg * (1 + f / 1024) * 2 ** (e - 15); };
-    const s2l = (v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-    const lab = (r, g, b) => { const R = s2l(Math.min(1, Math.max(0, r))), G = s2l(Math.min(1, Math.max(0, g))), B = s2l(Math.min(1, Math.max(0, b)));
-      const X = (0.4124564 * R + 0.3575761 * G + 0.1804375 * B) / 0.95047, Y = 0.2126729 * R + 0.7151522 * G + 0.072175 * B, Z = (0.0193339 * R + 0.119192 * G + 0.9503041 * B) / 1.08883;
-      const f = (t) => t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116; const fx = f(X), fy = f(Y), fz = f(Z); return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]; };
     let baseF = false;
     for (const m of sets) {
       log('render ' + m.name); orig(m.st.scene, cam); orig(m.st.scene, cam); log('read ' + m.name);
       const shot = readTarget(); out.dim = shot.dim; out.targetType = shot.type;
       if (!base) { base = shot.A; baseF = true; }
-      let differ = 0, maxd = 0, first = -1; const A = shot.A;
-      for (let i = 0; i < A.length; i += 4) { const d = Math.max(Math.abs(A[i] - base[i]), Math.abs(A[i + 1] - base[i + 1]), Math.abs(A[i + 2] - base[i + 2])); if (d) { differ++; if (d > maxd) maxd = d; if (first < 0) first = i >> 2; } }
-      out.modes[m.name] = { pixelsDiffer: differ, maxRawDiff: maxd, firstDiffPixel: first };
-      if (differ && baseF) {   // 数値が違うモードは色差（sRGB 符号化の値として CIE76 ΔE）も出す
-        const hist = [0, 0, 0, 0, 0]; let sumE = 0, maxE = 0, maxCode = 0; const px = A.length / 4, E = new Float32Array(Math.min(px, 1 << 22));
-        let n = 0;
-        for (let i = 0; i < A.length; i += 4) {
-          if (A[i] === base[i] && A[i + 1] === base[i + 1] && A[i + 2] === base[i + 2]) { n++; continue; }
-          const a = lab(dec(A[i], shot.type), dec(A[i + 1], shot.type), dec(A[i + 2], shot.type)), b = lab(dec(base[i], shot.type), dec(base[i + 1], shot.type), dec(base[i + 2], shot.type));
-          const e = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); sumE += e; if (e > maxE) maxE = e;
-          const cd = Math.max(Math.abs(dec(A[i], shot.type) - dec(base[i], shot.type)), Math.abs(dec(A[i + 1], shot.type) - dec(base[i + 1], shot.type)), Math.abs(dec(A[i + 2], shot.type) - dec(base[i + 2], shot.type))) * 255; if (cd > maxCode) maxCode = cd;
-          if (e > 0.5) hist[0]++; if (e > 1) hist[1]++; if (e > 2) hist[2]++; if (e > 4) hist[3]++;
-        }
-        out.modes[m.name].dE76 = { mean: +(sumE / px).toFixed(5), max: +maxE.toFixed(3), maxCode8: +maxCode.toFixed(2), over0_5: hist[0], over1: hist[1], over2: hist[2], over4: hist[3], fracOver0_5: +(hist[0] / px).toExponential(2) };
-      }
+      out.modes[m.name] = compare(shot.A, base, shot.type, baseF && m.name !== 'lrf');
     }
     log('pixels done');
     // 2) 変換後シェーダ
@@ -128,13 +134,71 @@ export function installFinalBench({ hr, r, api, THREE, pq }) {
     return L.join('\n');
   };
 
-  const save = (o) => {
+  const save = (o, pre = 'finalbench_') => {
     const json = JSON.stringify(o, null, 1), a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = 'finalbench_' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = pre + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   };
 
   let box = null;
+  // ---- 球の解析描画（?ballfn=1）の確認：従来との画素・色差と、1 コマ全体の GPU/CPU 時間（同じコマを K 回描く増幅）。画面左下の「BALL比較」。球が盤にある時に押す
+  const ballOk = !!api.ballFnStats?.();
+  S.armedBall = null;
+  S.startBalls = () => new Promise((resolve) => { S.armedBall = resolve; });
+  const runBalls = (self, hook) => {
+    const on0 = true, out = { kind: 'ballbench-1101', now: new Date().toISOString(), ua: navigator.userAgent, gpu: dri ? gl.getParameter(dri.UNMASKED_RENDERER_WEBGL) : null, url: location.search, balls: hr.balls.count, timer: !!ext };
+    const shots = [];
+    for (const on of [0, 1]) { api.setBallFn(on); hook.call(self); hook.call(self); shots.push(readTarget()); }
+    out.dim = shots[1].dim; out.targetType = shots[1].type;
+    out.compare = compare(shots[1].A, shots[0].A, shots[1].type, true);   // 解析式 を 従来 と比べる
+    // 時間
+    api.setBallFn(1); gl.finish(); const q0 = performance.now(); for (let k = 0; k < 3; k++) hook.call(self); gl.finish();
+    const KB = Math.max(2, Math.min(40, Math.ceil(80 / Math.max((performance.now() - q0) / 3, 0.5)))); out.K = KB;
+    const pend = [], cpu = { 0: [], 1: [] }, wall = { 0: [], 1: [] };
+    for (let round = 0; round < ROUNDS; round++) for (const on of (round % 2 ? [1, 0] : [0, 1])) {
+      api.setBallFn(on); hook.call(self); gl.finish();
+      const t0 = performance.now(); let q = null;
+      if (ext) { q = gl.createQuery(); gl.beginQuery(ext.TIME_ELAPSED_EXT, q); }
+      for (let k = 0; k < KB; k++) hook.call(self);
+      const t1 = performance.now(); if (q) gl.endQuery(ext.TIME_ELAPSED_EXT); else gl.finish();
+      cpu[on].push((t1 - t0) / KB); wall[on].push((performance.now() - t0) / KB); if (q) pend.push([on, q]);
+    }
+    api.setBallFn(1);
+    return new Promise((resolve) => {
+      let tries = 0;
+      const fin = () => {
+        const g = { 0: [], 1: [] };
+        if (ext) {
+          if (!pend.every(([, q]) => gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) && tries++ < 200) return setTimeout(fin, 50);
+          for (const [on, q] of pend) g[on].push(gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6 / KB);
+        }
+        const gpu = ext ? g : wall;
+        out.gpuMs = { legacy: med(gpu[0]), analytic: med(gpu[1]) }; out.cpuMs = { legacy: med(cpu[0]), analytic: med(cpu[1]) };
+        out.gpuRatio = out.gpuMs.legacy ? +(out.gpuMs.analytic / out.gpuMs.legacy).toFixed(3) : null; out.stats = { ...api.ballFnStats() };
+        resolve(out);
+      };
+      fin();
+    });
+  };
+  const summarizeBalls = (o) => {
+    const c = o.compare, d = c.dE76;
+    return ['ball bench  ' + (o.gpu ?? '?') + '  timer=' + o.timer + '  球 ' + o.balls + ' 個  K=' + o.K,
+      '画素差 ' + c.pixelsDiffer + (d ? ' (最大 ' + c.maxRawDiff + ')  dE76 mean ' + d.mean + ' max ' + d.max + '  >0.5:' + d.over0_5 + ' >1:' + d.over1 + ' >2:' + d.over2 : ''),
+      'GPU(1コマ) 従来 ' + fmt(o.gpuMs.legacy) + 'ms  解析式 ' + fmt(o.gpuMs.analytic) + 'ms  (' + o.gpuRatio + '倍)   主スレッド(CPU) 従来 ' + fmt(o.cpuMs.legacy) + ' 解析式 ' + fmt(o.cpuMs.analytic) + 'ms',
+      'overflow ' + o.stats.overflow + '  maxPerTile ' + o.stats.maxPerTile].join('\n');
+  };
+  if (ballOk) {
+    const hook = hr.render;
+    hr.render = function (...a) {
+      const res = hook.apply(this, a);
+      if (S.armedBall && hr.balls.count > 0) {
+        const done = S.armedBall; S.armedBall = null;
+        let p; try { p = runBalls(this, hook); } catch (e) { p = Promise.resolve({ error: String(e && e.stack || e) }); }
+        p.then((o) => { S.textBalls = o.error ? 'ERROR ' + o.error : summarizeBalls(o); if (box) box.textContent = S.textBalls; try { save(o, 'ballbench_'); } catch {} done(o); });
+      }
+      return res;
+    };
+  }
   S.start = () => new Promise((resolve) => { S.armed = resolve; api.invalidate(); });
   api.finalHook = (cam) => {
     if (!S.armed) return;
@@ -150,6 +214,13 @@ export function installFinalBench({ hr, r, api, THREE, pq }) {
     b.addEventListener('click', (e) => { e.stopPropagation(); box.textContent = '計測中…（数秒）'; S.start(); });
     for (const ev of ['keydown', 'keyup', 'pointerdown']) b.addEventListener(ev, (e) => e.stopPropagation());
     document.body.append(b, box);
+    if (ballOk) {
+      const bb = document.createElement('button'); bb.id = 'ballbench-run'; bb.textContent = 'BALL比較';
+      bb.style.cssText = 'position:fixed;left:270px;bottom:8px;z-index:99999;padding:10px 16px;font:600 16px sans-serif;background:#341;color:#fe9;border:2px solid #ca6;border-radius:6px;opacity:.85;cursor:pointer';
+      bb.addEventListener('click', (e) => { e.stopPropagation(); box.textContent = '球が盤に出るまで待って計測（数秒）…'; S.startBalls(); });
+      for (const ev of ['keydown', 'keyup', 'pointerdown']) bb.addEventListener(ev, (e) => e.stopPropagation());
+      document.body.append(bb);
+    }
   };
   if (document.body) ui(); else document.addEventListener('DOMContentLoaded', ui);
 }

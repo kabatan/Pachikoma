@@ -647,7 +647,7 @@ vec4 prebakeC(ivec2 p){`);
     }
     if(analyticOn){
       hr.balls.count=realCount;
-      const res=ab.compose({count:realCount,trayTarget:balls,drew:!bSkip,RW,RH});
+      const res=ab.compose({count:realCount,trayTarget:balls,trayGen:ballStats.drawn,RW,RH});
       if(res)final.material.uniforms.uD.value=res.texture;
       else{   // 1 タイルに球が多すぎる：このフレームだけ従来の描画（球バッファも選び直す）
         balls=ballCrop?.select()??balls;final.material.uniforms.uD.value=balls.texture;
