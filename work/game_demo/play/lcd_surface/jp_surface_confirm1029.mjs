@@ -232,7 +232,7 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   };
   // 10/31 CPU軽量化：初回JPの導入(雷)と「扉の寄り」の最初で映像の読み込み・復号待ち(0.5〜2.7秒、黒く見えて時計は進む)が出ていた。
   //   雷・開き・チャンスの映像を、封印の差し替えが済んだ後の空き時間に専用スロットへ読み込んで復号しておき、同じファイルの場面名が来たら(巻き戻して)使い回す。?jppin=0 で従来
-  const filePinned=[];const PIN_ON=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jppin')==='1';
+  const filePinned=[];const PIN_ON=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jppin')!=='0';
   async function pinScenes(names){
     if(!PIN_ON)return [];const out=[];
     for(const n of names){const sc=man.scenes[n];if(!sc?.file||filePinned.some(x=>x.pinFile===sc.file))continue;

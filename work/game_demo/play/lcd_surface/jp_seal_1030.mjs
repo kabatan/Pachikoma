@@ -209,8 +209,8 @@ export async function attachJpSeal(lcd, { controller, log = () => {} } = {}) {
     return jpFrame(dt);
   };
   lcd.jpSeal = { state: S, ms, N, dispose() { off?.(); model.start = start0; jp.frame = jpFrame; lcd.frame = frame0; if (end0) rh.meter.end = end0; } };
-  // 10/31 CPU軽量化：初回JPの雷・開き・チャンスの映像の読み込み・復号待ち(0.5〜2.7秒)を、待機中の空き時間に済ませる(jp_surface の pinScenes)。?jppin=1 で有効(既定オフ・効果未確認)
-  if (new URLSearchParams(globalThis.location?.search ?? '').get('jppin') === '1') (lcd.splitWarmers ??= []).push({ name: 'jppin', done: false, started: false, step() { if (!this.started) { this.started = true; Promise.resolve(jp.pinScenes?.(['jp_intro_lightning', 'jp_chance_open_d4', 'jp_chance_d4'])).catch((e) => console.warn('[jppin]', e)); } return (this.done = true); } });
+  // 10/31 CPU軽量化：初回JPの雷・開き・チャンスの映像の読み込み・復号待ち(0.5〜2.7秒)を、待機中の空き時間に済ませる(jp_surface の pinScenes)。?jppin=0 で従来
+  if (new URLSearchParams(globalThis.location?.search ?? '').get('jppin') !== '0') (lcd.splitWarmers ??= []).push({ name: 'jppin', done: false, started: false, step() { if (!this.started) { this.started = true; Promise.resolve(jp.pinScenes?.(new URLSearchParams(globalThis.location?.search ?? '').get('jppinlist') === 'all' ? ['jp_intro_lightning', 'jp_chance_open_d4', 'jp_chance_d4'] : ['jp_chance_open_d4', 'jp_chance_d4'])).catch((e) => console.warn('[jppin]', e)); } return (this.done = true); } });
   note('attached', { d: Object.keys(ms.byD), openSec });
   return lcd;
 }
