@@ -46,7 +46,7 @@ export const PAY_TRIM = {
 //   音：配当の出来事（jp_events_v5.json の reward_*）は 100 以上と共有なので、30・40 だけ別の表（globalThis.__sceneEvents）を jp_audio_v5 が引く。
 //     鳴らさない＝うぱの明滅(3)・白い光の爆発 L1(46)・「OVER」の叩きつけ(55)（L1 は 46→109 の白でつながった L2 と1コマ差で同時になるため、55 は映像ごと無いため）。
 //     動かす＝閃光1(139)→ 133（短くした映像の終わりに間に合わせる。133 は明るさの脈動の頂点）。 閃光2・3（163・187）は映像の終わりより後なので鳴らさない。
-export const PAY_TRIM2 = { scenes: ['reward_30', 'reward_40'], skip: [[3, 27], [47, 109]], frames: 140, audio: { drop: [3, 46, 55], move: { 139: 133 } } };
+export const PAY_TRIM2 = { scenes: ['reward_30', 'reward_40'], skip: [[3, 27], [47, 109]], frames: 175, audio: { drop: [3, 46, 55], move: {} } };   // 11/01 監督「30 OVER FEVER をもう少し見せて」：全景を 109〜139 → 109〜174 に（1.8→3.0 秒）。閃光 139・163 はそのまま鳴らす
 export function payShort2Enabled(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('payshort2') !== '0'; }
 export function payShortEnabled(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('payshort') !== '0'; }
 const skippedOf = (ranges) => ranges.reduce((n, [a, b]) => n + (b - a), 0);
