@@ -15,6 +15,7 @@ const TIP_Y = 1176;   // しっぽの先（穴の少し上。穴のLEDを隠さ�
 const ASK_SEC = 3, ASK_GATE = 1.5, ASK_MAX = 2, EXPRS = ['idle', 'joy', 'big_joy', 'surprise', 'oshii', 'sad', 'cheer', 'panic'];
 const LINE_EXPR = { ch16_a_rank: 'big_joy', ch16_a_gain: 'big_joy', ch16_b_rank: 'joy', ch16_b_gain: 'joy', ch16n_a_rank: 'joy', ch16n_a_gain: 'joy', ch16n_b_rank: 'joy', ch16n_b_gain: 'joy', time_start: 'surprise', jp8_wow: 'surprise', jp8_come: 'big_joy', jp8_last: 'joy', jp8_award: 'big_joy', jp8_hole: 'cheer', jp8_free: 'joy', jp8_go: 'cheer', jp8s: 'cheer', ch15_how: 'cheer', ch15s: 'cheer', jp9_go: 'cheer', jp9_good: 'big_joy', jp9_slow: 'cheer', jp9_half: 'cheer', jp9_close: 'panic', jp9_oshii: 'oshii', rl11_how: 'cheer', rl11_short: 'cheer', jp12_clock: 'cheer', jp12_noclock: 'oshii', ch13_next: 'joy', ch13_a: 'big_joy', ch13_safe: 'joy', ch13_pick: 'idle', ch13_noclock: 'surprise', ch14_rate: 'joy', ch14_again: 'panic', ch14_keep: 'joy', ask_jp: 'idle', ask_chain: 'idle' };
 const JP_SEC = 22, CH_SEC = 16, GRACE = 8, SKIP_GAP = 0.4, SKIP_AGE = 0.8;
+const JP_ASK = new URLSearchParams(globalThis.location?.search ?? '').get('jpask') === '1';
 const UPA_N = 12, UPA_FOOT = 1170, ARROW_W = 200, ARROW_H = 300, ARROW_AT = 0.35, HOLE_LINE = /^(jp8_hole|jp8s|ch15_how|ch15s)$/, CUT = 'chain_announce_cutin', CUT_SEC = 1.7;   // 説明の主役のうぱは大きく。穴を指す文は穴の横へ歩いて、大きな矢印で実際の穴を指す
 const SHOWPIECE = /^(roulette_|reward_|chain_success|chain_jp_land|jp_rush|jp_bridge|jp_land|fail|chain_announce_)/;
 const CHOICE_LINE_AT = 1.6;   // 選択画面の入りの映像が終わってから台詞
@@ -148,7 +149,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
 
   const howLine = () => ((game()?.meterStatus?.targets?.length ?? 1) > 1 ? 'ch15_how' : 'jp8_hole');   // 「何秒で、どの穴に、何回」は全部の経路で必ず出す
   const shortSeq = () => [howLine()];
-  const fullSeq = (sc) => (sc === 'jp' ? ['jp8_award', howLine(), 'jp8_free', 'jp8_go'] : [howLine(), 'jp8_free', 'jp8_go']);
+  const fullSeq = (sc) => (sc === 'jp' ? ['jp8_award', howLine(), 'jp8_go'] : [howLine(), 'jp8_go']);   // 11/01「玉は へらないよ」を削除
   const answer = (side, why) => {   // 左=きかない／右=きく。答えなしは「きく」
     const a = F.ask; if (!a) return; F.ask = null; const yes = side === 'R'; if (yes) F.heard[a.sc] = true;
     F.log.push({ t: +F.t.toFixed(2), id: `ask:${a.sc}:${yes ? 'きく' : 'きかない'}:${why}`, clock: +game().secondsLeft.toFixed(2) }); sfx?.click?.();
@@ -182,7 +183,9 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
         if (!F.seq && /^(jp_(intro|chance)|chain_announce_)|_in$/.test(lcd.jp?.model?.name ?? '') && lcd.jp?.model?.active) { /* JACKPOT CHANCE の題字・継続チャンスのカットインが終わってから（時計は止まっている） */ }
         else if (!F.seq) {
           F.tutAt = F.t; F.clockAtTut = g.secondsLeft; const sc = m.kind === 'jp' ? 'jp' : 'chain';
-          if (!F.repeat && !F.heard[sc] && F.asked[sc] < (sc === 'jp' ? ASK_MAX : 1)) { F.asked[sc]++; startSeq([sc === 'jp' ? 'ask_jp' : 'ask_chain']); }   // 止まっている間にほめ言葉は出さない（メーター中へ）。継続は2回目以降聞かない
+          if (JP_ASK && !F.repeat && !F.heard[sc] && F.asked[sc] < (sc === 'jp' ? ASK_MAX : 1)) { F.asked[sc]++; startSeq([sc === 'jp' ? 'ask_jp' : 'ask_chain']); }
+          else if (!JP_ASK && !F.repeat && !F.heard[sc]) { F.heard[sc] = true; startSeq(fullSeq(sc)); }   // 11/01「きく？」を廃止：1回目は説明、2回目以降は成功基準だけ（?jpask=1 で問いに戻す）
+            // 止まっている間にほめ言葉は出さない（メーター中へ）。継続は2回目以降聞かない
           else startSeq(shortSeq(sc));
         } else if (F.ask) {
           if (F.t - F.ask.at >= ASK_SEC) answer('R', 'timeout');
