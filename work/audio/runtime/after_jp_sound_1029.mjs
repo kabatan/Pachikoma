@@ -69,6 +69,7 @@ export async function installAfterJpSound(engine, { lcd, controller, cuesUrl = n
       }
       const sc = jp.man?.scenes?.[w.name];   // 10/31 回転率：短くした場面の音を映像に合わせる
       if (sc?.cueOffset) jpItems = jpItems.map((it) => ({ ...it, f: it.f + sc.cueOffset }));
+      if (sc?.cueExtra) jpItems.push(...sc.cueExtra);
       if (sc?.dropSkippedCues) jpItems = jpItems.filter((it) => !sc.skip?.some(([a, b]) => it.f >= a && it.f < b));
       api.scene = { key, name: w.name };
     }

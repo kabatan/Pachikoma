@@ -340,7 +340,6 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   await (await import('./fx_trim_1030.mjs')).attachFxTrim(lcd, { controller, log });   // 10/30 演出の短縮（溜めと間）。?fxtrim=0 で無し
   await (await import('./jp_seal_1030.mjs')).attachJpSeal(lcd, { controller, log });
   try { await (await import('./jp_start_1031.mjs')).attachJpStart(lcd, { controller, log }); } catch (e) { console.warn('[jp-start]', e); }   // 10/31 JPチャンスの始まり（止め→雷→扉→題字。黒背景＋文字を外す）。?jpstart=0 で旧、?jpblack=1 で黒背景＋文字を戻す
-  try { await (await import('./fail_label_1031.mjs')).attachFailLabel(lcd); } catch (e) { console.warn('[fail-label]', e); }   // 10/31 失敗の FAILED
   try { await (await import('./jp_count_1031.mjs')).attachJpCount(lcd, { controller, log }); } catch (e) { console.warn('[jp-count]', e); }   // 10/31 連打メーターの前の 3→2→1→開始（?jpcount=0 で戻す）
   try { await (await import('./jp_hud_1031.mjs')).attachJpHud(lcd, { controller, log }); } catch (e) { console.warn('[jp-hud]', e); }   // 10/31 JPチャンス中の残り個数＋残り時間の札・焦り（心拍・赤い縁・警告灯・囲いの赤）。?jphud=0 で無し   // 10/30 JPチャンス中の映像を封印の扉に。?jpseal=0 で旧（jp_aim）
   try { if (new URLSearchParams(location.search).get('jpidle') === '1') await (await import('./jp_idle_fx_1031.mjs')).attachJpIdleFx(lcd, { controller, log }); } catch (e) { console.warn('[jp-idle]', e); }   // 10/31 JPチャンス・継続チャンスの鎖が切れていない間の煽り（外れの火花・惜しい・入れろ・矢印・脈動）。第6版は監督が却下（10/31）のため既定オフ。?jpidle=1 のときだけ入る

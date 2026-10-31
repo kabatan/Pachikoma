@@ -16,10 +16,10 @@ export const FX_TRIM = {
   fail: { scenes: ['fail_first', 'fail_chain'], frames: 90 },
 };
 // 10/31 回転率（監督）。?turnover=0 で上の長さに戻す。
-//   失敗：ガラスが割れて灰色になるまでの短い映像（fail_v9：元の 24〜63 コマ＋最後を保持、TOTAL なし）に FAILED の字（fail_label_1031）。3.0→1.6秒。
+//   失敗：扉が閉まりガラスが砕けて FAILED が叩きつく映像（fail_v10、手本はルパンの題字と源さんの砕け方、TOTAL なし）。3.0→1.6秒。
 //   確定：扉が開く途中から。TOTAL が出たら回転を飛ばして止まる直前へ。数字の計算を見せない（結果画面と重複）。7.1→2.7秒。
 export const TURNOVER = {
-  fail: { scenes: ['fail_first', 'fail_chain'], file: '../../../../effects/jp_teacher/06_failure/v9_1031/fail_v9.mp4', frames: 48, cueOffset: -24 },
+  fail: { scenes: ['fail_first', 'fail_chain'], file: '../../../../effects/jp_teacher/06_failure/v10_1101/fail_v10.mp4', frames: 48, cueOffset: -24, cueExtra: [{ f: 21, s: 'chain_n_slam', db: -3 }] },
   confirm: { scene: 'chain_confirm', skip: [[0, 60], [100, 150]], frames: 190 },
 };
 export function turnoverEnabled(search = globalThis.location?.search ?? '') { return new URLSearchParams(search).get('turnover') !== '0'; }
@@ -65,7 +65,7 @@ export function attachFxTrim(lcd, { controller, log = () => {} } = {}) {
   for (const n of FX_TRIM.fail.scenes) tail(n, FX_TRIM.fail.frames);
   const turn = turnoverEnabled();
   if (turn) {
-    for (const n of TURNOVER.fail.scenes) { const s = man.scenes[n]; if (s) { s.file = TURNOVER.fail.file; s.frames = TURNOVER.fail.frames; s.cueOffset = TURNOVER.fail.cueOffset; applied.push({ name: n, turnover: true }); } }
+    for (const n of TURNOVER.fail.scenes) { const s = man.scenes[n]; if (s) { s.file = TURNOVER.fail.file; s.frames = TURNOVER.fail.frames; s.cueOffset = TURNOVER.fail.cueOffset; s.cueExtra = TURNOVER.fail.cueExtra; applied.push({ name: n, turnover: true }); } }
     skip(TURNOVER.confirm.scene, TURNOVER.confirm.skip); tail(TURNOVER.confirm.scene, TURNOVER.confirm.frames); if (man.scenes[TURNOVER.confirm.scene]) man.scenes[TURNOVER.confirm.scene].dropSkippedCues = true;
   }
   // 規則の秒数（同じ rules はリセット後の新しい試合でも使われる）
