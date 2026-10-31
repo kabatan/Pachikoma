@@ -8,11 +8,12 @@
 import * as THREE from '../../web/vendor/three/three.module.js';
 import { layerTexture } from './lcd_split_1030.mjs';
 import { HOLE_X } from './tutorial_jp_overlay_1030.mjs';
+import { chainWhyFacts, chainWhyLineId, chainWhyOn } from './choice_why_1101.mjs';   // 11/01 継続の選択の台詞（ch16_*：成功で届く賞／ぜったい+30こ、失敗したとき残るもの）。?chainwhy=0 で旧
 
 const PX = 34, PY = 28, W = 1152, GROUND = 1262, CELL = 6, MG = 8 * CELL, BROWN = '#30180a', GOLD = '#f0b840', CREAM = '#fff6de';
 const TIP_Y = 1176;   // しっぽの先（穴の少し上。穴のLEDを隠さない）
 const ASK_SEC = 3, ASK_GATE = 1.5, ASK_MAX = 2, EXPRS = ['idle', 'joy', 'big_joy', 'surprise', 'oshii', 'sad', 'cheer', 'panic'];
-const LINE_EXPR = { time_start: 'surprise', jp8_wow: 'surprise', jp8_come: 'big_joy', jp8_last: 'joy', jp8_award: 'big_joy', jp8_hole: 'cheer', jp8_free: 'joy', jp8_go: 'cheer', jp8s: 'cheer', ch15_how: 'cheer', ch15s: 'cheer', jp9_go: 'cheer', jp9_good: 'big_joy', jp9_slow: 'cheer', jp9_half: 'cheer', jp9_close: 'panic', jp9_oshii: 'oshii', rl11_how: 'cheer', rl11_short: 'cheer', jp12_clock: 'cheer', jp12_noclock: 'oshii', ch13_next: 'joy', ch13_a: 'big_joy', ch13_safe: 'joy', ch13_pick: 'idle', ch13_noclock: 'surprise', ch14_rate: 'joy', ch14_again: 'panic', ch14_keep: 'joy', ask_jp: 'idle', ask_chain: 'idle' };
+const LINE_EXPR = { ch16_a_rank: 'big_joy', ch16_a_gain: 'big_joy', ch16_b_rank: 'joy', ch16_b_gain: 'joy', ch16n_a_rank: 'joy', ch16n_a_gain: 'joy', ch16n_b_rank: 'joy', ch16n_b_gain: 'joy', time_start: 'surprise', jp8_wow: 'surprise', jp8_come: 'big_joy', jp8_last: 'joy', jp8_award: 'big_joy', jp8_hole: 'cheer', jp8_free: 'joy', jp8_go: 'cheer', jp8s: 'cheer', ch15_how: 'cheer', ch15s: 'cheer', jp9_go: 'cheer', jp9_good: 'big_joy', jp9_slow: 'cheer', jp9_half: 'cheer', jp9_close: 'panic', jp9_oshii: 'oshii', rl11_how: 'cheer', rl11_short: 'cheer', jp12_clock: 'cheer', jp12_noclock: 'oshii', ch13_next: 'joy', ch13_a: 'big_joy', ch13_safe: 'joy', ch13_pick: 'idle', ch13_noclock: 'surprise', ch14_rate: 'joy', ch14_again: 'panic', ch14_keep: 'joy', ask_jp: 'idle', ask_chain: 'idle' };
 const JP_SEC = 22, CH_SEC = 16, GRACE = 8, SKIP_GAP = 0.4, SKIP_AGE = 0.8;
 const UPA_N = 12, UPA_FOOT = 1170, ARROW_W = 200, ARROW_H = 300, ARROW_AT = 0.35, HOLE_LINE = /^(jp8_hole|jp8s|ch15_how|ch15s)$/, CUT = 'chain_announce_cutin', CUT_SEC = 1.7;   // 説明の主役のうぱは大きく。穴を指す文は穴の横へ歩いて、大きな矢印で実際の穴を指す
 const SHOWPIECE = /^(roulette_|reward_|chain_success|chain_jp_land|jp_rush|jp_bridge|jp_land|fail|chain_announce_)/;
@@ -50,16 +51,17 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
   // ---- 数字 ----
   const vals = () => {
     const g = game(), r = g.rules, m = g.meterStatus, c = g.jackpotChain, [num, den] = String(r.ChainDisplayProbability ?? '2/3').split('/');
-    return { ADD_SEC: r.ExtraSeconds, ADD_BALLS: g.extraLoanBallsNow ?? r.ExtraLoanBalls, CLOCK: Math.round(g.secondsLeft), SEC: m ? Math.round(m.seconds) : 0, N: m?.threshold ?? 0, HOLE_COUNT: m?.targets?.length ?? 0, AWARD_MAX: Math.max(...r.JackpotAwards), AT_RISK: c?.pendingAward ?? 0, FIRST: c?.baseAward ?? 0, RATE_TEXT: { den, num }, PCT: Math.round((+num / +den) * 100) };
+    return { ADD_SEC: r.ExtraSeconds, ADD_BALLS: g.extraLoanBallsNow ?? r.ExtraLoanBalls, CLOCK: Math.round(g.secondsLeft), SEC: m ? Math.round(m.seconds) : 0, N: m?.threshold ?? 0, HOLE_COUNT: m?.targets?.length ?? 0, AWARD_MAX: Math.max(...r.JackpotAwards), AT_RISK: c?.pendingAward ?? 0, FIRST: c?.baseAward ?? 0, RATE_TEXT: { den, num }, PCT: Math.round((+num / +den) * 100), GAIN_MIN: Math.min(...r.JackpotAwards), RANK_IDX: chainWhyFacts(g)?.rankIdx ?? -1 };
   };
   // ---- 字を並べる ----
   const lineItems = (toks, sk, V) => {
-    const out = [], gl = (d, rb) => out.push(R.meta.glyph[sk + (rb ? 'r' : '') + d]);
+    const out = [], gl = (d, rb, k = sk) => out.push(R.meta.glyph[k + (rb ? 'r' : '') + d]);   // k：その行の大きさ（^ の行は X）
     for (const t of toks) {
       if (t.r) out.push(t.r);
       else if (t.v === 'RATE_TEXT') { for (const d of V.RATE_TEXT.den) gl(d, true); out.push(R.meta.rate[sk].kai); for (const d of V.RATE_TEXT.num) gl(d, true); out.push(R.meta.rate[sk].kai2); }
       else if (t.word && V[t.v] === 500) out.push(t.word);
-      else for (const d of String(V[t.v])) gl(d, t.rb);
+      else if (t.words) out.push(t.words[Math.max(0, V.RANK_IDX - 1)]);   // {RANK}：次の賞の名前（C賞〜S賞）
+      else for (const d of String(V[t.v])) gl(d, t.rb, t.sk ?? sk);
     }
     return out;
   };
@@ -225,8 +227,8 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
       const key = `${g._chainSerial ?? 0}:${g.jackpotChain.stage ?? 0}`;
       if (F.chKey !== key) {
         F.chKey = key; F.ch = { t: 0 }; F.tutAt = F.t; const stage = g.jackpotChain.stage ?? 0;
-        const say2 = stage > 0 ? ['ch14_again'] : ['ch13_a'];
-        startSeq(g.chainNeedsAdd ? [stage > 0 ? 'ch14_noclock' : 'ch13_noclock'] : say2);
+        const say2 = stage > 0 ? ['ch14_again'] : ['ch13_a'], why = chainWhyOn() ? chainWhyLineId(chainWhyFacts(g), { noclock: !!g.chainNeedsAdd }) : null;   // 11/01 継続の嬉しさ（H 規則のとき。事実は choice_why_1101）
+        startSeq(why && R.meta.lines[why] ? [why] : g.chainNeedsAdd ? [stage > 0 ? 'ch14_noclock' : 'ch13_noclock'] : say2);
       }
     }
     // ---- 時間切れの100円追加の画面：1セリフ。選ぶのは客、受付の秒と誤選択防止はそのまま ----
