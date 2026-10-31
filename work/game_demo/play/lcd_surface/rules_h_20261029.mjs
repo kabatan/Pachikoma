@@ -34,6 +34,20 @@ const LOOP_M = 5;
 const LOOP_OLD = new URLSearchParams(globalThis.location?.search ?? '').get('roulooploop') === 'old';
 const loopOf = (name, sc) => (LOOP_OLD || !sc?.hLoop ? [26, 38] : [sc.hLoop.a, sc.hLoop.b + sc.hLoop.shift]);
 const SLIDE_FRAMES = 36;                   // 停止コマの手前のこの数のコマから滑って止まる（= RouletteSlideSeconds 1.2秒 × 30fps）
+// 押した瞬間の継ぎ目（11/1 rlsmooth）：旧は押した位相に関係なく停止コマの手前 36 コマ（もう止まりかけ）へ飛んだので、回転中の速い絵から一気に止まりかけの絵へ飛んで見えた。
+//   新は押した位相と同じ位相の「最後の回」のコマ（＋シークで固まる間の分の先読み）へ入り、そのまま停止映像へ流れる＝回転の速度・図柄の位置が途切れない。
+//   入り先が停止コマの手前 RL_MAXREM コマより前なら RL_MAXREM コマ手前まで進める（長引かせすぎない）。シークで固まる間は白いブレーキ光を保ち、終わってからほどく。
+//   止まるまでの秒数（RouletteSlideSeconds）は押す前から「今押したら映像が止まるまで」に合わせ続ける（音の立ち上がり・停止音・配当を映像の停止コマと揃える）。?rlsmooth=0 で旧（36 コマ手前へ・1.2 秒固定）
+const RLSMOOTH = new URLSearchParams(globalThis.location?.search ?? '').get('rlsmooth') !== '0';
+const RL_MAXREM = 66, RL_BLEND = 8;        // 66 = 2.2 秒。RL_BLEND = 回の終わりの継ぎ目ブレンドのコマ数（tools の enc3.py の K と同じ）
+const rlEntry = (sc, t, look) => {          // 押した時の映像のコマ t（H の時間軸）→ 入るコマ
+  const h = sc.hLoop, n = h.b - h.a, tail = h.b + h.shift, last = tail - n;
+  const same = t < h.a || t >= tail ? t : last + ((t - h.a) % n);   // 最後の回の同じ位相（導入の途中・停止側なら今のまま）
+  let e = same + (t < h.a || t >= tail ? 0 : look);
+  e = Math.max(e, sc.stop_frame - RL_MAXREM);
+  if (e > tail - RL_BLEND && e < tail) e = tail;   // ブレンド途中へは入らない
+  return e;
+};
 // 選択画面の「継続」の札（右の札）の位置。字の幅は札の幅(枠いっぱい)の 90%。札の上半分（「続」の絵の上）に置く。
 //   cx,cy = 字の中心、w = 字の幅（枠の幅 × BADGE_RATIO）。3 状態の実測（1152x1268 の面）。切り替え中は choiceV20.transition の重みで補間する。
 const BADGE_RATIO = 0.9, BADGE_GLYPH = 625;   // BADGE_GLYPH = odds_badge_card.png の字の見える幅(px)
@@ -89,7 +103,12 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
       const rr = controller.game.rules; rr.JpTutorialSeconds = TUT.secs; rr.JpTutorialEvery = TUT.every;
     } catch (e) { console.warn('[rules-h] tutorial overlay', e); tutOverlay = null; }
   }
-  const S = { wall: 0, normalT: 0, presses: 0, addContinue: false, clock: 0, plan: null, press: null, flashAt: -9, jpVideo: null, roulette: null, events: [], loops: 0, absorbed: 0, introFixes: 0, badgeRev: 0, badgeKey: null, badgeGpu: false };
+  const S = { wall: 0, normalT: 0, presses: 0, addContinue: false, clock: 0, plan: null, press: null, flashAt: -9, flashSoft: false, gpuFlash: false, look: 6, slideBase: null, jpVideo: null, roulette: null, events: [], loops: 0, absorbed: 0, introFixes: 0, badgeRev: 0, badgeKey: null, badgeGpu: false };
+  const brakeAlpha = () => {   // ブレーキ光の濃さ（2D の重ね描きと同じ曲線。押した直後と、シークで固まっている間は保ち、あとはほどく）
+    const fa = S.clock - S.flashAt, bh = S.flashSoft ? 0.02 : BRAKE.hold, bf = S.flashSoft ? 0.35 : BRAKE.fade, ba = S.flashSoft ? 0.5 : 1;
+    if (fa < 0 || fa >= bh + bf) return 0;
+    const k = (fa < bh ? 1 : 1 - (fa - bh) / bf) * ba; return fa < bh ? 0.95 * ba * ba : 0.95 * k * k;
+  };
   const badgeCanvas = document.createElement('canvas'); badgeCanvas.width = W; badgeCanvas.height = H; const bctx = badgeCanvas.getContext('2d');   // 2/3 の札の GPU 層用（液晶の見える範囲と同じ大きさ）
   const note = (k, d = {}) => { S.events.push({ k, at: +S.clock.toFixed(2), ...d }); if (S.events.length > 200) S.events.shift(); log(k, d); };
 
@@ -121,7 +140,7 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     } else if (action === 'rouletteStopPress') {
       S.press = { at: S.clock, byAuto: !!e.byAuto, applied: false };
       note('press', { byAuto: !!e.byAuto, scene: model.name });
-    } else if (action === 'rouletteStopped') { note('stopped', { payout: e.payout, award: e.award }); S.roulette = null; }
+    } else if (action === 'rouletteStopped') { note('stopped', { payout: e.payout, award: e.award }); S.roulette = null; if (S.slideBase != null && controller.game.rules) { controller.game.rules.RouletteSlideSeconds = S.slideBase; S.slideBase = null; } }
   });
 
   // ボタンの押下（'fire' の操作）。連打中の押下を、受け付けられたかどうかに関わらず数える（うぱの声かけの判定用）
@@ -199,8 +218,16 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
       const ro = g.rouletteStatus;
       if (S.press && !S.press.applied) {
         // 押した瞬間：停止コマの手前 36 コマへ。ここから 1.2 秒で止まる。つなぎは白いブレーキ光で隠す
-        S.press.applied = true; S.flashAt = S.clock; v.currentTime = Math.max(0, (sc.stop_frame - SLIDE_FRAMES) / man.fps); note('slide', { from: sc.stop_frame - SLIDE_FRAMES });
+        S.press.applied = true; S.flashAt = S.clock; S.flashSoft = false;
+        if (RLSMOOTH && sc.hLoop && !LOOP_OLD) {
+          const e = rlEntry(sc, t, S.look), need = Math.abs(e - t) > 1.5;
+          if (need) { v.currentTime = e / man.fps; S.press.seek = { t0: S.clock, e }; } else S.flashSoft = true;   // 流れのまま入れるならシークも白も要らない（軽い光だけ）
+          note('slide', { from: +e.toFixed(1), t: +t.toFixed(1), seek: need });
+        } else { v.currentTime = Math.max(0, (sc.stop_frame - SLIDE_FRAMES) / man.fps); note('slide', { from: sc.stop_frame - SLIDE_FRAMES }); }
       } else if (!S.press && (!ro || ro.stage === 'spinning')) {
+        if (RLSMOOTH && sc.hLoop && !LOOP_OLD && ro?.stage === 'spinning' && g.rules) {   // 今押したら映像が止まるまでの秒数に、規則の滑る秒数を合わせておく
+          S.slideBase ??= g.rules.RouletteSlideSeconds; g.rules.RouletteSlideSeconds = Math.min(3.5, Math.max(0.8, (sc.stop_frame - rlEntry(sc, t, S.look)) / man.fps));
+        }
         const [la, lb] = loopOf(name, sc);
         if (t >= lb) {
           // 回転を繰り返す（押されるまで）。行き過ぎた分(最大 4 コマ)は始めに足して位相を保つ。タイムラインの時刻も同時に合わせ、jp_surface 側の巻き戻し検出による 2 度目のシークを防ぐ
@@ -208,7 +235,18 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
           v.currentTime = to; model.time = to; model.lastF = Math.floor(to * man.fps + 1e-6) - 1; S.loops++;
         }
       }
+      if (S.press?.seek && !S.press.seek.done) {   // シークで固まっている間は白を保ち、終わったらほどく。固まった長さは次の先読みに使う
+        const sk = S.press.seek, el = S.clock - sk.t0;
+        if ((v.seeking || v.readyState < 2) && el < 1.5) S.flashAt = S.clock;
+        else { sk.done = true; S.flashAt = S.clock - (BRAKE.hold - 0.05); S.look = Math.min(18, Math.max(3, Math.round(el * man.fps) + 1)); note('seeked', { stall: +el.toFixed(3), look: S.look }); }
+      }
     } else if (!/^(roulette|jp_rush|jp_bridge)/.test(name) && S.press && !S.roulette) S.press = null;
+    // 白いブレーキ光を GPU の映像経路へも出す（11/1）：旧は 2D の液晶 canvas にだけ描いていて、GPU 合成（既定）では見えず、固まりと飛びがそのまま見えていた。映像モデルの flash('hit'=白)へ同じ濃さを書く。?rlsmooth=0 で旧（2D のみ）
+    if (RLSMOOTH) {
+      const al = brakeAlpha();
+      if (al > 0) { model.flash = 'hit'; model.flashAt = model.clock - 0.1 * (1 - al); S.gpuFlash = true; }
+      else if (S.gpuFlash) { S.gpuFlash = false; model.flashAt = -Infinity; }
+    }
     return v;
   };
 
@@ -271,12 +309,12 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
     if (g.secondsLeft <= 0 && (st || g.rouletteStatus) && !S.zeroNoted) { S.zeroNoted = true; note('clockZero', { meter: st?.stage ?? null, roulette: g.rouletteStatus?.stage ?? null }); }
     else if (g.secondsLeft > 0) S.zeroNoted = false;
     // ルーレットの押した瞬間：白いブレーキ光（つなぎの二重像を隠す）。全面の白を保ってからほどく
-    const fa = S.clock - S.flashAt;
-    if (fa >= 0 && fa < BRAKE.hold + BRAKE.fade) {
-      const k = fa < BRAKE.hold ? 1 : 1 - (fa - BRAKE.hold) / BRAKE.fade, gr = ctx.createRadialGradient(W / 2, H * 0.5, 40, W / 2, H * 0.5, 620);
+    const fa = S.clock - S.flashAt, bh = S.flashSoft ? 0.02 : BRAKE.hold, bf = S.flashSoft ? 0.35 : BRAKE.fade, ba = S.flashSoft ? 0.5 : 1;
+    if (fa >= 0 && fa < bh + bf) {
+      const k = (fa < bh ? 1 : 1 - (fa - bh) / bf) * ba, gr = ctx.createRadialGradient(W / 2, H * 0.5, 40, W / 2, H * 0.5, 620);
       gr.addColorStop(0, `rgba(255,255,255,${0.95 * k})`); gr.addColorStop(0.5, `rgba(255,236,200,${0.55 * k})`); gr.addColorStop(1, 'rgba(255,200,120,0)');
       ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = `rgba(255,255,255,${(fa < BRAKE.hold ? 0.95 : 0.95 * k * k)})`; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = `rgba(255,255,255,${(fa < bh ? 0.95 * ba * ba : 0.95 * k * k)})`; ctx.fillRect(0, 0, W, H);
     }
     // 継続の告知枠「継続できるよ!」を、画面いっぱいの 2/3 の叩きつけに置き換える
     if (name === 'chain_offer') {
