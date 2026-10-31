@@ -51,6 +51,10 @@ function panicLamp(o, c) {
   const h = heart(frac((x.beat ?? c.clock) / P) * P, P);
   const col = lv === 1 ? AMB : RED;
   // 頭と足は心拍に合わせて強く、左右の柱は回転灯のように上下へ流れる
+  if (x.hz > 0) {   // ハザード：側面の縦長の電飾（柱 3〜6）が赤と暗転を交互に。頭・口・足は弱く。穴のランプには触れない
+    const hz = x.hz, hv = x.hzV ?? 0, gn = globalThis.__jpLedGain ?? 1;
+    for (let i = 0; i < 8; i++) { const side = i >= 3 && i <= 6; reg(o, i, side ? 0.02 + hv * (0.6 + 0.5 * hz) : (0.04 + hv * 0.7 * hz) * gn, RED); }
+  } else
   for (let i = 0; i < 8; i++) { const sweep = .5 + .5 * Math.cos(TAU * (c.clock * (.9 + .3 * lv) - [0, .04, .08, .8, .65, .2, .35, .5][i])); reg(o, i, (.08 + 1.0 * pw * h + .3 * pw * sweep) * (globalThis.__jpLedGain ?? 1), col); }
   // 液晶の見える範囲へ回り込む光(rings・white)は出さない：背景（竜宮）を染めない
   for (let j = 0; j < 4; j++) o.aR[j] = 0;
@@ -73,6 +77,8 @@ function sfx(engine, kind, vol = -9) {
     if (kind === 'lub') { tone(70, 38, .22, 1.0); tone(140, 60, .09, .35, 'triangle'); }
     else if (kind === 'dub') { tone(58, 34, .2, .7); }
     else if (kind === 'buon') { tone(150, 88, .3, .32, 'sawtooth'); tone(75, 55, .3, .5); }
+    else if (kind === 'alarm') { tone(1180, 1180, .13, .42, 'square'); tone(590, 590, .13, .3, 'sawtooth'); }     // 警報（ピッ）：赤の点滅の頭に合わせて
+    else if (kind === 'alarm2') { tone(880, 880, .13, .42, 'square'); tone(440, 440, .13, .3, 'sawtooth'); }     // 二音（ピー・ポー）の低い方
     setTimeout(() => { try { out.disconnect(); } catch { } }, 1200);
   } catch { }
 }
@@ -131,7 +137,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
   if (SEAL || SIDE) TX.y += 110;   // 字の行は画面の下へ下ろす（扉の全体を見せる）
   let CD = null;   // 残り3・2・1秒の巨大な数字（ember 面の立体数字・Blender SCALE=8）
   try { const d = new URL('count_digits/', A), meta = await (await fetch(new URL('glyphs.json', d))).json(); CD = { meta, imgs: {} }; for (const k of ['1', '2', '3']) CD.imgs[k] = await img(new URL(meta.glyphs[k].file, d).href); } catch (e) { CD = null; console.warn('[jp-hud] countdown assets', e); }
-  const S = { brokeAt: [], on: false, t: 0, show: 0, enterAt: -9, exitAt: -9, clock: 0, lastCount: 0, countChange: null, hitAt: -9, missAt: -9, lvl: 0, beatT: 0, beatIdx: -1, dubDone: true, cue: false, fx: [], shownKey: null, events: [] };
+  const S = { evK: 0, evT: 0, evHold: -9, cutVis: false, hz: 0, hzV: 0, hzT: 0, hzPhase: 0, hzOnPrev: false, hzK: 0, brokeAt: [], on: false, t: 0, show: 0, enterAt: -9, exitAt: -9, clock: 0, lastCount: 0, countChange: null, hitAt: -9, missAt: -9, lvl: 0, beatT: 0, beatIdx: -1, dubDone: true, cue: false, fx: [], shownKey: null, events: [] };
   const note = (k, d = {}) => { S.events.push({ k, at: +S.clock.toFixed(2), ...d }); if (S.events.length > 60) S.events.shift(); log('jphud:' + k, d); };
 
   // ---- 動かない絵の texture ----
@@ -141,6 +147,11 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
   const vigC = mk(288, 317); { const x = vigC.getContext('2d'); x.save(); x.translate(144, 158.5); x.scale(1, 317 / 288); const g = x.createRadialGradient(0, 0, 20, 0, 0, 150);
     g.addColorStop(0, 'rgba(160,0,8,0)'); g.addColorStop(0.76, 'rgba(170,0,10,0.0)'); g.addColorStop(0.9, 'rgba(225,8,16,0.38)'); g.addColorStop(0.97, 'rgba(235,10,16,0.85)'); g.addColorStop(1, 'rgba(170,0,8,1.0)'); x.fillStyle = g; x.fillRect(-150, -170, 300, 340); x.restore(); }   // 縁へ向かって赤くなる（四辺とも。中央は透明）
   T.vig = layerTexture(THREE, vigC);
+  // 10/31 ハザード（監督「焦る演出・赤い点滅」）：液晶の縁の枠。赤（強い）と暗転（黒紫）を交互に出す。四辺の枠だけ・中央は透明＝背景の扉は染めない
+  const hzFrame = (rgb, band, pow) => { const c = mk(288, 317), x = c.getContext('2d'), im = x.createImageData(288, 317);
+    for (let yy = 0; yy < 317; yy++) for (let xx = 0; xx < 288; xx++) { const d = Math.min(xx, 287 - xx, yy, 316 - yy), a = d >= band ? 0 : (1 - d / band) ** pow, k = (yy * 288 + xx) * 4; im.data[k] = rgb[0]; im.data[k + 1] = rgb[1]; im.data[k + 2] = rgb[2]; im.data[k + 3] = Math.round(255 * a); }
+    x.putImageData(im, 0, 0); return layerTexture(THREE, c); };
+  T.hzR = hzFrame([255, 18, 22], 30, 1.5); T.hzD = hzFrame([12, 0, 18], 34, 1.2);
   // 警告灯の光束（回転灯。光源のにじみ＋にじんだ扇形の光）
   const beamC = mk(900, 900); { const x = beamC.getContext('2d'), tmp = mk(900, 900), t = tmp.getContext('2d');
     const g = t.createRadialGradient(450, 450, 10, 450, 450, 430); g.addColorStop(0, 'rgba(255,90,60,0.95)'); g.addColorStop(0.35, 'rgba(255,40,30,0.55)'); g.addColorStop(1, 'rgba(255,20,10,0)');
@@ -348,6 +359,9 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
         if (a < 1) { mt.save(); mt.globalCompositeOperation = 'lighter'; g = mt.createLinearGradient(0, y0 + ye - 14, 0, y0 + ye + 8); g.addColorStop(0, 'rgba(255,230,160,0)'); g.addColorStop(0.7, 'rgba(255,240,200,0.9)'); g.addColorStop(1, 'rgba(255,200,100,0)'); mt.fillStyle = g; mt.fillRect(x0 + c[0][0], y0 + ye - 14, c[1][0] - c[0][0], 22); mt.restore(); } }
       if (lit < N) { const c = m.cells[lit], pu = 0.5 + 0.5 * Math.sin(S.clock * 5.5), red = lvl >= 2 ? clamp(0.5 * pw * (0.3 + 0.7 * heartV)) : 0;   // 次に光る区切りは脈打つ（残り少ないと赤い警報）
         mt.save(); mt.globalCompositeOperation = 'lighter'; mt.fillStyle = `rgba(${150 + red * 105 | 0},${60 - red * 40 | 0},${220 - red * 170 | 0},${(0.10 + 0.14 * pu + 0.3 * red).toFixed(3)})`; mt.fillRect(x0 + c[0][0], y0 + c[0][1], c[1][0] - c[0][0], c[2][1] - c[0][1]); mt.restore(); }
+      if (S.hz > 0) { const hv = S.hzV, hz = S.hz;   // ハザード：柱も赤と暗転を交互に（柱の画素の上だけ）
+        mt.save(); mt.globalCompositeOperation = 'source-atop'; mt.fillStyle = `rgba(255,24,20,${(hv * (0.35 + 0.4 * hz)).toFixed(3)})`; mt.fillRect(x0, y0, m.w, m.h); mt.fillStyle = `rgba(8,0,14,${((1 - hv) * (0.25 + 0.4 * hz)).toFixed(3)})`; mt.fillRect(x0, y0, m.w, m.h); mt.restore();
+        mt.save(); mt.globalCompositeOperation = 'lighter'; g = mt.createLinearGradient(ix - 20, 0, ix + 80, 0); g.addColorStop(0, `rgba(255,30,20,${(0.5 * hv * hz).toFixed(3)})`); g.addColorStop(1, 'rgba(255,30,20,0)'); mt.fillStyle = g; mt.fillRect(ix - 20, y0 + 40, 100, m.h - 80); mt.restore(); }
       mt.restore();
     }
     T.met.needsUpdate = true;
@@ -418,7 +432,7 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     if (want && !S.on) { S.on = true; S.enterAt = S.clock; S.exitAt = -9; S.brokeAt = []; S.lastCount = st.count | 0; S.countChange = null; S.fx.length = 0; note('enter', { name }); }
     else if (!want && S.on) { S.on = false; S.exitAt = S.clock; note('exit', { name, count: st?.count }); setCue(false); }
     S.name = name; S.cutT = !OLD && /_b\d+$/.test(name) ? (model.time ?? 0) : -1;   // 鎖が切れるカットイン（緑の帯「あと◯本」）の間は、字の行を一時的に消す（同じ「あと」が二重に出ない）
-    if (!S.on && S.clock - S.exitAt > 0.4) { S.show = 0; S.st = null; S.lvl = 0; setCue(false); return; }
+    if (!S.on && S.clock - S.exitAt > 0.4) { S.show = 0; S.st = null; S.lvl = 0; S.hz = 0; S.hzV = 0; setCue(false); return; }
     S.show = 1;
     if (S.on) {
       S.st = { threshold: st.threshold, count: st.count, timeLeft: st.timeLeft };
@@ -427,14 +441,26 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
       S.lastCount = c;
       const lvl = panicLevel(st); if (lvl !== S.lvl) { note('level', { lvl, t: +st.timeLeft.toFixed(2) }); }
       S.lvl = lvl;
+      { // ハザードの強さと拍：残り約10秒から段階的に（0.35→0.7）、5秒以下で最大。点滅は残り秒が減るほど速い（周期 0.9→0.3秒）
+        const t = st.timeLeft; S.hz = lvl > 0 && t <= 10.5 ? (t > 5 ? 0.35 + 0.35 * (10 - t) / 5 : 1) : 0;
+        if (S.hz > 0) { const per = 0.9 - 0.6 * clamp((10 - t) / 8.5); S.hzT += dt / per; const on = frac(S.hzT) < 0.5; S.hzV += ((on ? 1 : 0) - S.hzV) * Math.min(1, dt * 45);
+          if (on && !S.hzOnPrev && SND && S.hz >= 0.5) { S.hzK ^= 1; sfx(eng(), lvl >= 3 && S.hzK ? 'alarm2' : 'alarm', lvl >= 3 ? -8 : -11); }
+          S.hzOnPrev = on; } else { S.hzV = 0; S.hzOnPrev = false; S.hzT = 0; }
+      }
       { const n = lvl >= 3 ? Math.ceil(st.timeLeft - 1e-6) : 0; if (n >= 1 && n <= 3 && n !== S.lastCd) { S.lastCd = n; tickFx(n); note('tick', { n }); } else if (!n) S.lastCd = 0; }
       // 心拍
       if (lvl >= 1) {
         const P = PANIC.period[lvl]; S.beatT += dt; if (S.beatT >= P) { S.beatT -= P; S.dubDone = false; if (lvl >= 2 && SND) { sfx(eng(), 'lub'); if (lvl >= 3) sfx(eng(), 'buon', -13); } }
         if (!S.dubDone && S.beatT >= 0.26 * P) { S.dubDone = true; if (lvl >= 2 && SND) sfx(eng(), 'dub'); }
       } else { S.beatT = 0; S.dubDone = true; }
-      if (LED && lvl >= 2) setCue(true, { lvl, beat: S.beatT + 0 }); else setCue(false);
+      if (LED && S.hz > 0) setCue(true, { lvl: Math.max(lvl, 1), beat: S.beatT + 0, hz: S.hz, hzV: S.hzV }); else setCue(false);
     }
+    // 字の行の退避（10/31 検査B）：鎖が切れるカットイン（緑・青・赤の帯「あと◯本」）の絵が出ている間と、残り3秒の巨大数字が出ている間は、時計と「あと◯個」を下へ避ける（消さない＝残り時間はいつも読める）。
+    //   カットインのない b（続けて入って帯が出る前に次へ飛ぶ b1 など）では動かさない：帯が出る時刻(0.74秒)から。b が続く間は戻さない（上下に揺れない）。
+    { const inB = /_b\d+$/.test(name), ct = S.cutT; S.cutVis = inB && ct >= 0.74;
+      if (inB) { S.evHold = S.clock; S.evT = (ct >= 0.74 || S.evK > 0.5) ? 1 : 0; } else S.evT = S.clock - S.evHold < 0.25 ? 1 : 0;
+      if (CD && S.on && S.lvl >= 3 && !S.cutVis) S.evT = 1;
+      S.evK += (S.evT - S.evK) * Math.min(1, dt * 9); }
     // 数字・火花の canvas
     const st2 = S.st; if (st2) { const lvl = S.lvl, P = PANIC.period[lvl] || 1, h = lvl >= 1 ? heart(S.beatT, P) : 0; drawText(st2, lvl, h, PANIC.power[lvl]); if (METER) drawMeter(st2, lvl, h, PANIC.power[lvl]); }
     if (S.fx.length || S.fxDirty || (S.on && (S.st?.count | 0) > 0)) { drawFx(); S.fxDirty = S.fx.length > 0; }
@@ -465,7 +491,12 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     // 縁の赤・警告灯（前面のみ。背景は染めない）
     if (lvl >= 1 && S.on) {
       const va = lvl === 1 ? 0.28 + 0.25 * Math.sin(ck * TAU * 0.9) ** 2 : clamp(0.3 + 0.8 * pw * h + 0.25 * pw);
-      out.push({ tex: T.vig, w: 288, h: 317, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 4, alpha: clamp(va), add: false });
+      if (S.hz > 0) {   // 縁の赤と暗転の交互（四辺の枠のみ）
+        const hv = S.hzV, hz = S.hz;
+        out.push({ tex: T.hzD, w: 288, h: 317, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 4, alpha: clamp((1 - hv) * (0.3 + 0.6 * hz)), add: false });
+        out.push({ tex: T.hzR, w: 288, h: 317, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 4, alpha: clamp(hv * (0.35 + 0.65 * hz)), add: false });
+        if (hz >= 0.7) out.push({ tex: T.hzR, w: 288, h: 317, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 4, alpha: clamp(hv * 0.7), add: true });
+      } else out.push({ tex: T.vig, w: 288, h: 317, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 4, alpha: clamp(va), add: false });
       if (lvl >= 2) {
         const al = clamp(0.8 + 0.5 * pw * (0.4 + 0.6 * h)), rot = ck * TAU * (0.8 + 0.25 * lvl);
         out.push({ tex: T.beam, w: 900, h: 900, ax: 450, ay: 450, x: PX + 20, y: PY + 1010, rot, sc: 1.9, alpha: al, add: true });
@@ -477,14 +508,14 @@ export async function attachJpHud(lcd, { controller, log = () => { } } = {}) {
     { const ty = -grp.dy, ta = ck - (S.tickAt ?? -9), sh = ta < 0.5 ? Math.exp(-ta * 9) : 0;
       const ct = S.cutT, cutA = ct < 0 ? 1 : clamp(1 - clamp((ct - 0.7) / 0.12) + clamp((ct - 2.05) / 0.15));
       if (SEAL || SIDE) out.push({ tex: T.met, w: MT.w, h: MT.h, ax: 0, ay: 0, x: PX + MT.x + grp.dx, y: PY + MT.y + ty, rot: 0, sc: 1, alpha: vis * (SIDE ? 0.45 + 0.55 * cutA : cutA) });
-      out.push({ tex: T.txt, w: TX.w, h: TX.h, ax: 0, ay: 0, x: PX + TX.x + grp.dx + Math.sin(ck * 61) * 7 * sh, y: PY + TX.y + ty * 0.8 + Math.cos(ck * 53) * 6 * sh, rot: 0, sc: 1, alpha: vis * cutA });
+      out.push({ tex: T.txt, w: TX.w, h: TX.h, ax: 0, ay: 0, x: PX + TX.x + grp.dx + Math.sin(ck * 61) * 7 * sh, y: PY + TX.y + ty * 0.8 + Math.cos(ck * 53) * 6 * sh + 170 * S.evK * S.evK * (3 - 2 * S.evK), rot: 0, sc: 1, alpha: vis });
       if (ARROW) out.push({ tex: T.met, w: MT.w, h: MT.h, ax: 0, ay: 0, x: PX + MT.x + grp.dx + Math.sin(ck * 59) * 6 * sh, y: PY + MT.y + ty + Math.cos(ck * 47) * 6 * sh, rot: 0, sc: 1, alpha: vis }); }
     // 残り3秒から：巨大な数字が毎秒叩きつけられる（心拍と同じ拍で脈打つ）
-    if (CD && S.on && S.st && lvl >= 3) {
+    if (CD && S.on && S.st && lvl >= 3 && !S.cutVis) {   // 巨大数字は、カットインの帯が出ている間は出さない（帯が優先。音・ハザードは続く）。出すときは小さめにして、下へ避けた字の行と重ねない
       const n = Math.ceil(S.st.timeLeft - 1e-6), tx = T['cd' + n];
       if (tx && n >= 1 && n <= 3) {
-        const u = n - S.st.timeLeft, g = CD.meta.glyphs[String(n)], hh = 640 / g.h, slam = u < 0.12 ? 1.8 - 0.8 * (u / 0.12) ** 2 : 1 + 0.06 * h * pw - 0.05 * clamp((u - .12) / .8);
-        out.push({ tex: tx, w: g.w, h: g.h, ax: g.w / 2, ay: g.h / 2, x: PX + W / 2 + Math.sin(u * 90) * 10 * Math.exp(-u * 12), y: PY + 700, rot: 0, sc: hh * slam, alpha: Math.min(1, u / 0.02), add: false });
+        const u = n - S.st.timeLeft, g = CD.meta.glyphs[String(n)], hh = 520 / g.h, slam = u < 0.12 ? 1.8 - 0.8 * (u / 0.12) ** 2 : 1 + 0.06 * h * pw - 0.05 * clamp((u - .12) / .8);
+        out.push({ tex: tx, w: g.w, h: g.h, ax: g.w / 2, ay: g.h / 2, x: PX + W / 2 + Math.sin(u * 90) * 10 * Math.exp(-u * 12), y: PY + 620, rot: 0, sc: hh * slam, alpha: Math.min(1, u / 0.02), add: false });
       }
     }
     return out;

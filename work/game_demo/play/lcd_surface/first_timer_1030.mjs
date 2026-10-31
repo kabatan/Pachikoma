@@ -201,8 +201,9 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
     if (S.near) {
       const N = S.near, m = lcd.jp?.model, failing = !!m?.active && /^fail_/.test(m.name ?? '');
       if (failing) N.seen = true;
+      if (N.seen && !failing && N.gone == null) N.gone = S.clock;   // 10/31 検査B：失敗の映像（薄れていく TOTAL の板）が消えてから「あと◯本！もう少し！」を出す（重ねない）
       if (N.start < 0) {
-        if ((N.seen && !failing) || (!N.seen && S.clock - N.armed > 6)) {
+        if ((N.seen && !failing && S.clock - N.gone >= 0.9) || (!N.seen && S.clock - N.armed > 6)) {
           if (g.secondsLeft > 0 && ['Ready', 'Flight', 'Effect'].includes(g.phase) && !m?.active) { N.start = S.clock; fx.playNearMissSfx(eng()); note('near', { rem: N.rem }); } else S.near = null;
         } else if (S.clock - N.armed > 12) S.near = null;
       }
