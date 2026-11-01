@@ -33,12 +33,23 @@ export function createFrameFaultBoundary({recover,onFault,onRecovered=()=>{}}={}
 const recoveryBoundaries=new WeakSet();
 // Install last, outside Choice/final/timer wrappers. The normal owner alone
 // supplies the recovered image; stale wrappers must not paint or publish it.
-export function installLcdRecoveryBoundary(lcd,{onCleared=()=>{}}={}) {
+export function installLcdRecoveryBoundary(lcd,{onCleared=()=>{},getPhase=null,idleSeconds=6}={}) {
   if(recoveryBoundaries.has(lcd))return lcd;
   const gpu=Object.getOwnPropertyDescriptor(lcd,'gpuPanelSource');
   if(typeof lcd.frame!=='function'||typeof lcd.onEvent!=='function'||typeof lcd.prepare!=='function'||typeof lcd.renderRecoveredFrame!=='function'||!gpu?.configurable||typeof gpu.get!=='function')throw TypeError('LCD recovery boundary requires owner APIs and a configurable GPU getter');
   const frame=lcd.frame,onEvent=lcd.onEvent,prepare=lcd.prepare;
+  // 11/1 不具合修正：復旧モードは 'attract'（reset）でしか解けない。待機中（客のいない間）に表示エラーが起きると、次の客の ticket/howto も捨てられ、その客のゲームの間ずっと演出が出ない。
+  //   (1)待機フェーズのまま idleSeconds 秒たったら復旧モードを解いて 'attract' を流し直す（最大3回、再発して止まり続けない）(2)待機で来た ticket/howto でも解く。?recoveridle=0 で従来
+  const IDLE_CLEAR=new URLSearchParams(globalThis.location?.search??'').get('recoveridle')!=='0';
+  let idleT=0,idleClears=0;
   lcd.frame=function(dt,...args){
+    if(this.displayRecoveryActive&&IDLE_CLEAR&&typeof getPhase==='function'&&idleClears<3){
+      let ph=null;try{ph=getPhase();}catch{}
+      if(ph==='Attract'){
+        idleT+=dt;
+        if(idleT>=idleSeconds&&typeof this.clearDisplayRecovery==='function'&&this.clearDisplayRecovery()){idleT=0;idleClears++;try{onCleared();}catch{}try{onEvent.call(this,'attract');}catch{}}
+      }else idleT=0;
+    }else idleT=0;
     if(this.displayRecoveryActive)return this.renderRecoveredFrame(dt);
     const result=frame.call(this,dt,...args);
     if(this.displayRecoveryActive)return this.renderRecoveredFrame(0);
@@ -47,7 +58,7 @@ export function installLcdRecoveryBoundary(lcd,{onCleared=()=>{}}={}) {
   // 復旧モードの間は合図を捨てる。ただし待機へ戻る 'attract'（reset）では復旧モードを解き、その合図から通常に戻す（次の客へ持ち越さない）
   lcd.onEvent=function(...args){
     if(this.displayRecoveryActive){
-      if(args[0]==='attract'&&typeof this.clearDisplayRecovery==='function'&&this.clearDisplayRecovery()){try{onCleared();}catch{}}
+      if((args[0]==='attract'||IDLE_CLEAR&&(args[0]==='ticket'||args[0]==='howto'))&&typeof this.clearDisplayRecovery==='function'&&this.clearDisplayRecovery()){try{onCleared();}catch{}}
       else return;
     }
     return onEvent.apply(this,args);
