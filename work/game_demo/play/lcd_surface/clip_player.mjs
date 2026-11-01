@@ -13,6 +13,8 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
   // 11/1 最適化：クロスフェード（0.12秒）の間、出ていく側の映像を止めて最後のコマを保持し、デコードを 1 本に（?fadefreeze=0 で従来＝2 本同時に流す）。入る側が最初のコマを出すまでは出ていく側は動き続ける
   const FREEZE = new URLSearchParams(globalThis.location?.search??'').get('fadefreeze')!=='0';let frozenCur=null;
   // 11/1 不具合修正：8秒で読めなかった映像(s.failed)が同じ名前のまま二度と読み直されず、その演出が以後出ない／再生中の decode error で止まったまま。新しい要求(request/prefetch/setIdle)で失敗した要素を最大2回まで読み直し、current/incoming が error になったら src を読み直す（最大3回）。?cliprecover=0 で従来
+  // 11/1 起動修正：遅い回線で idle0 が8秒以内に loadeddata に届かず「idle0 unavailable」で起動失敗／他の映像も諦めて以後出ない。読み込み中(error でなく networkState=LOADING)なら8秒を延ばす（待機映像は最大10回=約90秒、他は2回）。?clipwait=0 で従来
+  const CLIPWAIT = new URLSearchParams(globalThis.location?.search??'').get('clipwait')!=='0';
   const RECOVER = new URLSearchParams(globalThis.location?.search??'').get('cliprecover')!=='0';
   let current = null, incoming = null, idleName = 'idle0', fade = 0, manual = false, seq = 0, clock = 0, generation = 0;
   const emit = (kind, data) => record({kind, at: clock, wall: performance.now(), ...data});
@@ -38,7 +40,7 @@ export function createClipPlayer({base, files, onError, record = () => {}}) {
       const done = () => {cleanup();s.ready=s.v.readyState>=2;emit('decoded',{name,ms:performance.now()-started});resolve();};
       const bad = () => {cleanup();s.failed=true;onError(`${name}: video load failed`);resolve();};
       s.cancel=()=>{cleanup();resolve();};s.failed=false;
-      timer=setTimeout(bad,8000);s.v.addEventListener('loadeddata',done,{once:true});s.v.addEventListener('error',bad,{once:true});
+      let waits=0;const arm=()=>{timer=setTimeout(()=>{if(CLIPWAIT&&waits<(name.startsWith('idle')?10:2)&&!s.v.error&&s.v.networkState===2){waits++;arm();return;}bad();},8000);};arm();s.v.addEventListener('loadeddata',done,{once:true});s.v.addEventListener('error',bad,{once:true});
       s.v.src=new URL(files[name],base).href;s.v.loop=name.startsWith('idle');s.v.load();
     });return s;
   }
