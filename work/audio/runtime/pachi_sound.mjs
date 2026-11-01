@@ -38,11 +38,25 @@ function beginContactBank(engine) {
   contactBanks.set(engine,state);engine.dispose = disposeHook;
   return state;
 }
+// 11/1 起動修正：下ごしらえ（約10秒の合成）を別スレッドで作り、起動を待たせない（出来上がるまでは従来の都度合成）。失敗したら従来の主スレッドで作る。?pachibankworker=0 で従来（起動中に主スレッドで作って待つ）
+const BANKWORKER = new URLSearchParams(globalThis.location?.search ?? '').get('pachibankworker') !== '0' && typeof Worker !== 'undefined';
+function buildBankInWorker(sr) {
+  return new Promise((resolve, reject) => {
+    let w; try { w = new Worker(new URL('./pachi_bank_worker_1101.mjs', import.meta.url), { type: 'module' }); } catch (error) { reject(error); return; }
+    w.onmessage = e => { w.terminate(); e.data?.ok ? resolve(e.data) : reject(new Error(e.data?.error ?? 'worker bank not ready')); };
+    w.onerror = e => { w.terminate(); reject(new Error(e.message || 'worker error')); };
+    w.postMessage({ sr, maxBytes: 160 * 1024 * 1024 });
+  });
+}
 async function prepareContactBank(engine,state,sr) {
   await state.previousDrain;state.assertCurrent();state.building = true;
   let prepared;
   try {
-    prepared = await preparePachiContact(sr,{yield:idle,maxBytes:160*1024*1024,isDisposed:state.isDisposed});
+    if (BANKWORKER) {
+      try { const r = await buildBankInWorker(sr); state.assertCurrent(); prepared = await preparePachiContact(sr,{yield:idle,maxBytes:160*1024*1024,isDisposed:state.isDisposed,prefilled:r.bank}); if (!prepared.stats.ready) { prepared.dispose(); prepared = undefined; } }
+      catch (error) { if (state.isDisposed()) throw error; console.warn('[pachi-bank-worker] 主スレッドで作り直します', error); prepared = undefined; }
+    }
+    prepared ??= await preparePachiContact(sr,{yield:idle,maxBytes:160*1024*1024,isDisposed:state.isDisposed});
     state.stats = prepared.stats;
     if (state.isDisposed()) throw Error('Pachi contact installation cancelled');
     if (!prepared.stats.ready) {
@@ -67,7 +81,8 @@ export async function installPachiSound(engine, { bgmUrl = new URL('../bgm/user/
   for (const [name, make] of Object.entries(CUE_MAKERS)) { engine.buffers.set(name, toBuffer(ctx, make(sr))); await idle(); contactBank.assertCurrent(); }
   // 玉・釘・部品の接触。実機の玉の音は200〜1600Hzにも厚みがある(測定)ので、物理側の高域通過を3kHzから下げて残す
   contactBank.assertCurrent();engine.modalSynth = pachiContact; engine.cache.clear();
-  await prepareContactBank(engine,contactBank,sr);contactBank.assertCurrent();
+  if (BANKWORKER) prepareContactBank(engine,contactBank,sr).catch(error => { if (!contactBank.isDisposed()) console.warn('[pachi-contact-bank]', error); });   // 起動を待たせない
+  else { await prepareContactBank(engine,contactBank,sr);contactBank.assertCurrent(); }
   engine.physicalHP.frequency.value = 120;
   for (let n = 1; n <= 8; n++) { engine.payoutCache.set(n, toBuffer(ctx, payoutBuffer(sr, n))); await idle(); contactBank.assertCurrent(); }
 

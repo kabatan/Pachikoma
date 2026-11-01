@@ -442,7 +442,7 @@ export function pachiPayout(count, sr = 48000) { const [L, R] = payoutBuffer(sr,
 
 
 // Boot-only exact click prefixes. The full-contact AudioBuffer cache remains separate.
-export async function preparePachiContact(sr = 48000, { yield: yieldControl = () => new Promise(resolve => setTimeout(resolve, 0)), maxBytes = 160 * 1024 * 1024, isDisposed = () => false } = {}) {
+export async function preparePachiContact(sr = 48000, { yield: yieldControl = () => new Promise(resolve => setTimeout(resolve, 0)), maxBytes = 160 * 1024 * 1024, isDisposed = () => false, prefilled = null } = {}) {   // prefilled: 別スレッド(pachi_bank_worker_1101.mjs)が同じ関数で作って exportBank() した結果。渡すと計算せずそのまま使う（出力は完全に同じ）
   const seeds = new Set();
   for (let v = 0; v < 7; v++) for (let speed = 1; speed <= 50; speed++) for (let impulse = 0; impulse <= 100; impulse++) seeds.add(1000 + v * 97 + speed * 13 + impulse * 2);
   const orderedSeeds = [...seeds].sort((a, b) => a - b), materials = Object.keys(SOFT), bank = new Map();
@@ -472,11 +472,16 @@ export async function preparePachiContact(sr = 48000, { yield: yieldControl = ()
     return o;
   };
   const api = { synth, dispose, stats };
+  api.exportBank = () => { const out = {}, transfers = []; for (const [material, entries] of bank) { out[material] = [...entries]; for (const [, a] of entries) transfers.push(a.buffer); } return { bank: out, transfers }; };
   if (!Number.isInteger(sr) || sr <= 0) { stats.skipped = 'sample-rate'; return api; }
   const requiredBytes = materials.reduce((sum, material) => sum + Math.ceil(sr * SOFT[material].len) * 4 * orderedSeeds.length, 0);
   stats.requiredBytes = requiredBytes;
   if (requiredBytes > limit) { stats.skipped = 'budget'; return api; }
   const started = performance.now();
+  if (prefilled) {
+    for (const material of materials) { const list = prefilled[material]; if (!list || list.length !== orderedSeeds.length) { dispose(); stats.skipped = 'prefilled-mismatch'; return api; } const entries = new Map(list); bank.set(material, entries); for (const [, a] of list) { stats.entries++; stats.bytes += a.byteLength; } }
+    stats.ready = true; stats.buildMs = 0; return api;
+  }
   try {
     for (const material of materials) {
       const p = SOFT[material], entries = new Map(); bank.set(material, entries);
