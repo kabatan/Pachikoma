@@ -57,6 +57,27 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   let push=null;if(query.get('attractpush')!=='0'){try{push=await createAttractPush({px:PX,py:PY});}catch(e){console.error('attract push: '+(e?.message??e));errors.push('attract push: '+(e?.message??e));}}
   let active=false,kind=null,manual=false,time=0,published=false,cur=sources.attract;
   const paint=skipEnabled?suppressCanvasPaint(ctx):{stats:{skipped:0},run:fn=>fn(),dispose(){}};
+  // 11/1 復旧（?attractretry=0 で無し）: 待機・説明の映像が PIPELINE_ERROR_DECODE 等で error になると readyState が戻らず、タイトルが黒のまま・説明が出なくなる（10/31 153a11b は旧 attract_surface_20261029 にだけ入っていて既定のこの面には無かった）。
+  // error で src を読み直す（最大3回、150ms×回数待つ。5秒再生できたら回数を戻す）。読み直せたら先頭から再生を再開する。
+  const retryOn=query.get('attractretry')!=='0';
+  const recoverSrc=s=>{
+    const r=s.rec??=({tries:0,max:3,recovered:0,failed:false,pending:false,src:s.v.currentSrc||s.v.src});
+    if(!retryOn||disposed||r.pending)return;
+    if(r.tries>=r.max){r.failed=true;return;}
+    r.tries++;r.pending=true;
+    setTimeout(()=>{
+      r.pending=false;if(disposed)return;
+      const src=r.src||s.v.currentSrc||s.v.src;if(!src)return;
+      try{s.heldFrame?.close();}catch{}s.heldFrame=null;s.heldRevision=-1;s.fallbackKey=null;
+      const ok=()=>{s.v.removeEventListener('loadeddata',ok);r.recovered++;errors.push('video recovered: '+src.split('/').pop());try{s.v.currentTime=0;}catch{}if(active&&cur===s&&!manual)s.v.play().catch(()=>{});};
+      s.v.addEventListener('loadeddata',ok,{once:true});
+      try{s.v.removeAttribute('src');s.v.load();s.v.src=src;s.v.load();}catch(e){errors.push('video reload: '+(e?.message??e));}
+    },150*r.tries);
+  };
+  for(const s of all){
+    s.v.addEventListener('error',()=>recoverSrc(s));
+    s.v.addEventListener('playing',()=>{setTimeout(()=>{if(!s.v.paused&&!s.v.error&&s.rec)s.rec.tries=0;},5000);});
+  }
   const refresh=()=>{
     const s=cur;if(!s.gpu)return;const v=s.v;
     if(typeof v.requestVideoFrameCallback!=='function'){
@@ -92,6 +113,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
       if(active){cur=sources[k];time=0;cur.v.currentTime=0;}
     }
     if(active&&!manual&&cur.v.paused&&!cur.v.ended)cur.v.play().catch(()=>{});
+    if(active&&cur.v.error)recoverSrc(cur);   // error の通知を取りこぼしても毎フレームの確認で読み直す（最大3回、?attractretry=0 で無し）
   };
   lcd.frame=(dt,F)=>{
     sync();
@@ -132,7 +154,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
     try{warm[k]=await withRestored2D(ctx,()=>warmPausedVideo(sources[k].v,v=>{ctx.drawImage(v,PX,PY,W,H);}));}
     catch(e){warm[k]={skipped:true,reason:String(e?.message??e)};}
   }
-  lcd.attractSurface={video:sources.attract.v,manifest:man,errors,
+  lcd.attractSurface={video:sources.attract.v,manifest:man,errors,get recovery(){return Object.fromEntries(Object.entries(sources).map(([k,s])=>[k,s?.rec??null]));},
     tutorial:sources.tutorial?{video:sources.tutorial.v,manifest:tman,duration:tman.duration,durationShort:sources.tutorialShort?sman.duration:null,warm}:null,
     get kind(){return kind;},get sceneKey(){return active&&isTut(kind)?(cur.man.lightScene??null):null;},get active(){return active;},get time(){return manual?time:cur.v.currentTime;},
     connectGpu(options){

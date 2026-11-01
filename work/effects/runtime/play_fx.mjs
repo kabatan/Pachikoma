@@ -15,6 +15,7 @@ import { ballCountToDigits } from '../../assembly/pack_envcheck/seg_digits.mjs';
 import { makeBoardWash } from './board_wash.mjs';
 import { createSplitCompositor } from '../../game_demo/play/lcd_surface/lcd_split_1030.mjs';   // 液晶板の重ね合わせ描画(スタッフ待ち・継続の転送削減)
 const WARM_ON = !(typeof location !== 'undefined' && new URLSearchParams(location.search).get('splitwarm') === '0');
+const SPLIT_RETRY = new URLSearchParams(globalThis.location?.search ?? '').get('splitretry') !== '0';
 const SPLIT_CHECK = new URLSearchParams(globalThis.location?.search ?? '').has('splitcheck');   // 検証用: 分割と全面canvasを同時に用意し、__splitAB で切り替えて比べる
 import { installBallLights } from './ball_light.mjs';
 
@@ -215,6 +216,9 @@ export async function connectPlayEffects({ hr, bus, getSnapshot, lightingSources
       if (last.lcd) {
         if (!plate) plate = lcdMesh(hr, last.lcd, { gain: lcdGain });
         if (WARM_ON && lcd?.splitWarmers && lcd.attractSurface?.active && ++warmFrames > 60) { const w = lcd.splitWarmers.find(x => !x.done); if (w) { try { const t0 = performance.now(); w.step(hr.renderer); if (window.__perfprobe) (window.__warmLog ??= []).push([w.name, +(performance.now() - t0).toFixed(1)]); } catch (e) { w.done = true; console.warn('[splitwarm] 事前準備を止めます', w.name, e); } } }   // 待機(attract)中の空き時間に、1フレームに1手だけ
+        {   // 11/1 不具合修正：splitBroken（合成が1回でも例外になると立つ旗）が二度と戻らず、JPの札・時計・初見向けの重ね描きが以後の客すべてで出なくなる。待機(次の客)に戻ったら旗を戻して再挑戦する（?splitretry=0 で従来＝戻さない）
+          if (lcd.splitBroken && SPLIT_RETRY && lcd.attractSurface?.active) { lcd.splitBroken = false; lcd.splitBrokenResets = (lcd.splitBrokenResets ?? 0) + 1; }
+        }
         {   // 重ね合わせ描画: 動かない絵は一度だけ送り、動く絵は行列だけ更新する。小さな render target へ合成して uT に渡す(液晶 canvas 7.5MB の毎回転送を省く)。層を出す画面だけ(?staffsplit=0 等で各画面が無効化)
           let layers = null;
           if (!lcd?.displayRecoveryActive && lcd?.splitSources?.length) for (const f of lcd.splitSources) { layers = f(); if (layers) break; }
