@@ -1,4 +1,5 @@
 import {createCaptureLeaseStore} from './choice_capture_lease_1029.mjs';
+import {reviveVideo} from './video_revive_1101.mjs';
 import {warmPausedVideo,withRestored2D} from './startup_warm.mjs';
 // v20 production choice, independent of the JP/confirm/failure implementations.
 // Sources are served verbatim; all three loops share their playback phase.
@@ -70,6 +71,7 @@ export async function attachChoiceSurface(lcd,{getState,controller,canvas,onInpu
       v.addEventListener('loadeddata',done,{once:true});v.addEventListener('error',bad,{once:true});
       v.src=new URL(`../../../effects/jp_teacher/05_choice/r2/stills/v21_nodigit/choice_${state}_v21_nodigit.mp4`,import.meta.url).href;v.load();
     });
+    reviveVideo(v,{label:'choice-'+state});   // 11/1 error で src を読み直す（?videorevive=0 で無し）
   }
   countdown=await createChoiceCountdown(lcd.canvas,()=>controller?.game.choiceLeft);
   // 左の札(確定)の TOTAL と連×N: いま確定した場合の額(確定済みの JP 合計＋積み増し)を実行時に重ねる。映像は桁なしの版。

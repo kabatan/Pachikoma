@@ -1,6 +1,7 @@
 // Approved left_v1 absolute score + v22 right loop, native 1152x1268 / 30fps.
 // The rules own the 30s offer and credit/loan; this module owns only LCD pixels.
 import * as THREE from '../../web/vendor/three/three.module.js';
+import {reviveVideo} from './video_revive_1101.mjs';
 import {layerTexture} from './lcd_split_1030.mjs';
 import {createTimeupTotal} from './total_digits_20261029.mjs';
 // 継続(時間切れの動画)の転送削減(10/30): 動画を VideoTexture で直接 GPU へ、字や板は小さい層で重ねる。?timeupvideo=0 で従来(液晶 canvas を毎回全面転送)
@@ -23,6 +24,7 @@ export async function attachTimeupSurface(lcd,{controller,canvas,onInput,unlock,
     const timer=setTimeout(bad,30000);v.addEventListener('loadeddata',done,{once:true});v.addEventListener('error',bad,{once:true});
     v.src=new URL(manifest.file,manifestUrl).href;v.load();
   });
+  reviveVideo(v,{label:'timeup'});   // 11/1 error で src を読み直す（?videorevive=0 で無し）
   const first=document.createElement('canvas'),held=document.createElement('canvas');
   for(const c of [first,held]){c.width=W;c.height=H;c.getContext('2d').drawImage(v,0,0,W,H);}
   const heldCtx=held.getContext('2d');

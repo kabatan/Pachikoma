@@ -1,4 +1,5 @@
 import {createFinalResultRenderer} from './final_result_renderer_20261029.mjs';
+import {reviveVideo} from './video_revive_1101.mjs';
 import {createDailyResultBest,finalResultState} from './final_result_state_20261029.mjs';
 const W=1152,H=1268,PX=34,PY=28,DURATION=350/30;
 // 10/31 回転率：TOTAL が止まる直前（150コマ）から始める。玉数→賞のメーター→メダル（開始2.1秒後）。映像の終わりで待機へ、メダルの1.2秒後からボタンで閉じられる。?resultskip=0 で従来（頭から11.7秒・25秒で待機）
@@ -9,6 +10,7 @@ export async function attachFinalResultSurface(lcd,{controller,finalResultImageF
  const man=await response.json(),base=new URL('.',manifestUrl),video=document.createElement('video'),errors=[];
  video.muted=true;video.playsInline=true;video.preload='auto';
  await new Promise((resolve,reject)=>{const done=()=>{clearTimeout(timer);video.removeEventListener('loadeddata',done);video.removeEventListener('error',bad);resolve();},bad=()=>{clearTimeout(timer);video.removeEventListener('loadeddata',done);video.removeEventListener('error',bad);reject(Error('final result video unavailable'));},timer=setTimeout(bad,30000);video.addEventListener('loadeddata',done,{once:true});video.addEventListener('error',bad,{once:true});video.src=new URL(man.file,base).href;video.load();});
+ reviveVideo(video,{label:'final-result'});   // 11/1 error で src を読み直す（?videorevive=0 で無し）
  let renderer=null,gpuMode=false;const initErrors=[];
  if(finalResultImageFactory){try{renderer=await finalResultImageFactory({base,man,video});if(!renderer?.render||!renderer?.prewarm||!renderer?.compose||!renderer?.setHudCanvas||!renderer?.materializeTo||!renderer?.surface)throw Error('Invalid final result GPU factory API');gpuMode=true;}catch(error){renderer?.dispose?.();renderer=null;const message='final GPU factory: '+String(error?.message??error);errors.push(message);initErrors.push(message);}}
  const gpuRenderer=gpuMode?renderer:null;   // 10/31 保険で旧の描画へ落ちても、次の客では GPU 合成へ戻す（同じ客の中では落ちたまま）
