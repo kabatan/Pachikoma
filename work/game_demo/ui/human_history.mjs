@@ -2,6 +2,11 @@
 // 各更新を localStorage に先に残し、サーバーへ送る。通信失敗分は次回起動時に再送する。
 const STORAGE_KEY = 'pachikoma-human-play-pending';
 const MAX_EVENTS = 2000;
+// 11/1 不具合修正：サーバーが /api/human-play を受け付けない（Windows の serve.ps1 は 404）と、送れなかった全プレイの記録が this.pending に溜まり続け、
+// 保存のたびに pending 全体を JSON.stringify（客が増えるほど重くなる）していた。404/405/501/403 は「受け口が無い」とみなして以後保存・送信を止め、溜まった分を捨てる。
+// その他の 4xx（400/413/415）はその記録だけ捨てる。再送待ちは新しい MAX_PENDING 件まで。?historycap=0 で従来。
+const CAP = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('historycap') !== '0'; } catch { return true; } })();
+const MAX_PENDING = 4;
 
 function snapshot(game) {
   return {
@@ -34,6 +39,8 @@ export class HumanHistory {
     } catch { /* ブラウザ以外では何もしない */ }
     try { this.pending = JSON.parse(storage?.getItem(STORAGE_KEY) || '{}'); }
     catch { this.pending = {}; }
+    this.gone = false;
+    if (CAP) this._trim();
     for (const doc of Object.values(this.pending)) this._enqueue(doc);
   }
 
@@ -105,10 +112,17 @@ export class HumanHistory {
     this._dirty = false;
     const game = this._game, doc = this.active;
     doc.updatedAt = this.now().toISOString(); doc.result = snapshot(game); doc.revision++;
+    if (CAP && this.gone) return;   // 受け口が無いと分かった後は、複製も保存も送信もしない
     const copy = JSON.parse(JSON.stringify(doc));
     this.pending[doc.playId] = copy;
+    if (CAP) this._trim();
     this._persist();
     this._enqueue(copy);
+  }
+
+  _trim() {   // 再送待ちは新しい MAX_PENDING 件まで（挿入順＝古い順に捨てる）
+    const keys = Object.keys(this.pending);
+    while (keys.length > MAX_PENDING) delete this.pending[keys.shift()];
   }
 
   _persist() {
@@ -124,7 +138,14 @@ export class HumanHistory {
         const response = await this.transport(this.endpoint, {
           method: 'POST', headers: { 'content-type': 'application/json' }, body, ...(keepalive && body.length < 60000 ? { keepalive: true } : {}),
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (CAP && response.status >= 400 && response.status < 500 && ![408, 425, 429].includes(response.status)) {
+            if ([403, 404, 405, 501].includes(response.status)) { this.gone = true; this.pending = {}; }
+            else if (this.pending[doc.playId]?.revision === doc.revision) delete this.pending[doc.playId];
+            this._persist();
+          }
+          return;
+        }
         await response.text();
         if (this.pending[doc.playId]?.revision === doc.revision) {
           delete this.pending[doc.playId]; this._persist();
