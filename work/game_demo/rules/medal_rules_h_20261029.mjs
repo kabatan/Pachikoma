@@ -16,6 +16,7 @@ const sum = (a) => a.reduce((x, y) => x + y, 0);
 const isNum = (x) => Number.isFinite(x);
 const LANES = [1, 2, 3, 4, 5, 6, 7];
 
+const CONFIRM_ENDS = new URLSearchParams(globalThis.location?.search ?? '').get('confirmend') !== '0';
 export class MedalRules extends GRules {
   constructor(o = {}) {
     super(o);
@@ -524,7 +525,11 @@ export class MedalGame extends GGame {
   get chainAnnouncing() { return this.phase === MedalPhase.ChainChoice && (this.announceLeft ?? 0) > 1e-9; }
   chooseChain(continueChain) {
     if (this.chainAnnouncing) return false;   // 告知中は選べない（ボタンの押し残しで確定・継続が走らない）
-    if (!continueChain) return super.chooseChain(false);
+    if (!continueChain) {   // 11/01 監督: 確定した人に追加をもう一度聞かない。時計が尽きたらそのまま計数へ（?confirmend=0 で従来）
+      const ok = super.chooseChain(false);
+      if (ok && CONFIRM_ENDS) this._confirmEnds = true;
+      return ok;
+    }
     if (!this.rules.R3Enabled || this.phase !== MedalPhase.ChainChoice || !this.jackpotChain?.choicePending) return false;
     if (this.endPending && !this.rules.ChainContinueNeedsAddAtZero) return false;   // （追加の仕組みでは、選択が出ている間は終了待ちを無視する）
     if (this.secondsLeft <= 0) return this._requestChainAdd();   // 時計0: 続けるには100円の追加（スタッフの確認）が要る
@@ -605,6 +610,7 @@ export class MedalGame extends GGame {
   }
 
   // ---------- 進行 ----------
+  start() { this._confirmEnds = false; return super.start(); }
   advance(dt) {
     if (this.phase === 'StaffWait') return super.advance(dt);
     if (!Number.isFinite(dt) || dt < 0) throw new RangeError('seconds');
@@ -624,6 +630,7 @@ export class MedalGame extends GGame {
       if (this.meter) this._advanceMeter(s); else this._advanceRoulette(s);
     }
     if (left > 1e-12 || dt === 0) super.advance(left);
+    if (this._confirmEnds && this.phase === MedalPhase.Continue) this.finish();
     this._resumeJpMeter();
   }
   /** 慎重すぎる客への助言（10/30）：撃てる状態（Ready・空の盤・時間に余裕・JP/継続/メーター/ルーレットの外）のときだけ、seconds 秒の中断を始める。始めたら true。 */
@@ -645,6 +652,7 @@ export class MedalGame extends GGame {
   _startJpMeter() {
     const r = this.rules, targets = LANES.filter((d) => !this._lamps.has(d)), cfg = r.jpMeterFor(targets[0]);   // 残りは1穴。穴ごとの秒・しきい値
     const tuned = this._clockTunedJp(cfg);
+    this._confirmEnds = false;
     this._startMeter('jp', { targets, threshold: tuned.Threshold, seconds: tuned.Seconds, intro: r.JpMeterIntroSeconds });
   }
   /** 案C：いまの残り時計に合わせたJPチャンスの秒・個数（ClockTune が無ければそのまま）。 */
