@@ -38,6 +38,7 @@ export async function attachFirstTimer(lcd, { controller, log = () => {} } = {})
   const SLOT = { fullAdd: [0, 0, W, H], full: [0, 0, W, H], band: [0, 360, W, 340], dup: [0, 660, W, 260], prompt: [0, 300, W, 760] };   // 札ごとの範囲(panel 座標)
   const use = (name, addName) => { if (!sp.on) return; const sl = sp.slots[name]; sl.used = true; ctx = sl.x; if (addName) { const sa = sp.slots[addName]; sa.used = true; ctxA = sa.x; } else ctxA = sl.x; };
   const sp = { on: false, fail: false, slots: null };
+  (lcd.splitResetHooks ??= []).push(() => { sp.fail = false; });   // 11/1 待機に戻ったら分割描画の失敗の旗を戻して再挑戦（play_fx が呼ぶ。?splitretry=0 で呼ばない）
   const F = { 1: on(1), 2: on(2), 3: on(3), 4: on(4), 5: on(5) };
   if (!Object.values(F).some(Boolean)) return lcd;
   const mainCtx = lcd.canvas.getContext('2d');

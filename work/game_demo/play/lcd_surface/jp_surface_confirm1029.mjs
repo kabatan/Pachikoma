@@ -219,14 +219,17 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
   let startupWarmPromise=null;
   const load=(slot,name,recordLoad=true)=>{
     if(!name||!man.scenes[name])return Promise.resolve();
-    if(slot.name===name)return slot.promise??Promise.resolve();
+    if(slot.name===name&&!(slot.failed&&LOADRETRY))return slot.promise??Promise.resolve();
+    if(slot.name!==name)slot.tries=0;slot.failed=false;
     slot.cancel?.();slot.v.pause();if(slot.preroll){slot.preroll=false;try{slot.v.playbackRate=1;}catch{}}slot.name=name;slot.generation=(slot.generation??0)+1;slot.ready=false;
     const at=performance.now(),report=recordLoad?record:()=>{};report('load',{name});
     slot.promise=new Promise(resolve=>{
+      let timer;
       const cleanup=()=>{clearTimeout(timer);slot.v.removeEventListener('loadeddata',done);slot.v.removeEventListener('error',bad);slot.cancel=null;};
-      const done=()=>{cleanup();slot.ready=slot.v.readyState>=2;report('decoded',{name,ms:performance.now()-at});resolve();};
-      const bad=()=>{cleanup();if(recordLoad){errors.push(name+':video');report('error',{name});}resolve();if(recordLoad&&model.active&&model.name===name)model.stop('video_error');};
-      const timer=setTimeout(bad,8000);slot.cancel=()=>{cleanup();resolve();};slot.v.addEventListener('loadeddata',done,{once:true});slot.v.addEventListener('error',bad,{once:true});
+      const done=()=>{cleanup();slot.ready=slot.v.readyState>=2;slot.failed=false;slot.tries=0;report('decoded',{name,ms:performance.now()-at});resolve();};
+      const bad=()=>{cleanup();slot.failed=true;if(recordLoad){errors.push(name+':video');report('error',{name});}resolve();if(recordLoad&&model.active&&model.name===name)model.stop('video_error');};
+      // 11/1 不具合修正：遅い機種で8秒以内に loadeddata が来ないと bad になり、JPの導入が丸ごと止まる(model.stop)／スロットが「名前あり・未準備」のまま二度と読み直されず、看守も止まって背景のまま固まる。読み込み中(error でない)なら8秒を最大2回延ばし、失敗したスロットは次の reserve で最大2回読み直す。?jploadwait=0 で従来
+      let waits=0;const arm=()=>{timer=setTimeout(()=>{if(LOADRETRY&&waits<2&&!slot.v.error&&slot.v.networkState===2){waits++;arm();return;}bad();},8000);};arm();slot.cancel=()=>{cleanup();resolve();};slot.v.addEventListener('loadeddata',done,{once:true});slot.v.addEventListener('error',bad,{once:true});
       slot.v.src=new URL(man.scenes[name].file,base).href;slot.v.load();
     });return slot.promise;
   };
@@ -244,7 +247,8 @@ export async function createJpSurface({manifestUrl,onCue=()=>{},log=()=>{},getSt
       if(!slot.ready){slot.pinned=false;slot.name=null;slot.promise=null;slots.splice(slots.indexOf(slot),1);filePinned.splice(filePinned.indexOf(slot),1);out.push({name:n,ok:false});}else out.push({name:n,ok:true});}
     return out;
   }
-  const reserve=(name)=>{let slot=slots.find(s=>s.name===name);
+  const LOADRETRY=new URLSearchParams(typeof location==='undefined'?'':location.search).get('jploadwait')!=='0';
+  const reserve=(name)=>{let slot=slots.find(s=>s.name===name);if(LOADRETRY&&slot&&slot.failed&&!slot.pinned&&(slot.tries??0)<2){slot.tries=(slot.tries??0)+1;load(slot,name);}
     if(!slot&&filePinned.length){const f=man.scenes[name]?.file;const fp=f&&filePinned.find(x=>x.pinFile===f&&x.ready&&x!==current&&x!==visible&&x!==previous);if(fp){fp.name=name;fp.generation=(fp.generation??0)+1;slot=fp;}}
     if(!slot){slot=slots.find(s=>!s.pinned&&s!==current&&s!==visible&&s!==previous&&s.name===null)??slots.find(s=>!s.pinned&&s!==current&&s!==visible&&s!==previous);if(slot)load(slot,name);}return slot;};
   if(pinned){await load(pinned,'chain_success',false);if(!pinned.ready){errors.push('chain_success:startup');pinned.pinned=false;pinned.name=null;pinned.promise=null;}}

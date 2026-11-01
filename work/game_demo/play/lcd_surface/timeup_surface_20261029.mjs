@@ -55,6 +55,7 @@ export async function attachTimeupSurface(lcd,{controller,canvas,onInput,unlock,
   };
   // ---- 分割描画(継続) ----
   const sp={layers:null,vtex:null,ptex:new Map(),rowTex:null,rowKey:null,enterAt:0,wasSplit:false,fail:false,media:null,framesHooked:false,splitNow:false};
+  (lcd.splitResetHooks??=[]).push(()=>{sp.fail=false;});   // 11/1 待機に戻ったら分割描画の失敗の旗を戻して再挑戦（?splitretry=0 で呼ばない）
   const hookFrames=()=>{if(sp.framesHooked||!v.requestVideoFrameCallback)return;sp.framesHooked=true;const cb=(t,meta)=>{sp.media=meta.mediaTime;if(!disposed)v.requestVideoFrameCallback(cb);};v.requestVideoFrameCallback(cb);};
   const buildLayers=(dt)=>{
     sp.vtex??=layerTexture(THREE,v);hookFrames();

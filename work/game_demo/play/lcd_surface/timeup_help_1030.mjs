@@ -114,6 +114,7 @@ export async function attachTimeupHelp(lcd, { controller } = {}) {
   const SPLIT_CHECK = new URLSearchParams(globalThis.location?.search ?? '').has('splitcheck');
   const BLK = [null, [20, 0, 1100, 160], [20, 230, 480, 340], [630, 190, 500, 340], [820, 360, 290, 140], [20, 690, 1090, 170]];   // [x,y,w,h] 札ごとの小さい canvas の範囲(panel 座標)
   const sp = { on: false, fail: false, c: [], t: [], key: [], };
+  (lcd.splitResetHooks ??= []).push(() => { sp.fail = false; });   // 11/1 待機に戻ったら分割描画の失敗の旗を戻して再挑戦（play_fx が呼ぶ。?splitretry=0 で呼ばない）
   const T_SETTLED = 10;
   function buildSplit() {
     const game = g(), f = continueFacts(game), left = Math.ceil(game.offerLeft ?? 0), k2 = JSON.stringify([f.top, f.rankName, f.need, f.ctx, f.lamps, f.extra]);

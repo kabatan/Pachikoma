@@ -180,6 +180,7 @@ export async function attachStaffCall(lcd, { controller, canvas = null } = {}) {
   // ---- スタッフ待ちの分割描画(転送削減) ----
   // 下の el* は drawCall の該当部分を「入りの動きが終わった後(k=1)」の状態で別 canvas へ描く。drawCall 本体は変えない(検証と戻し用)。
   const sp = { stage: 0, layers: null, fail: false, tex: {}, cv: {}, panelKey: null, built: false };
+  (lcd.splitResetHooks ??= []).push(() => { sp.fail = false; });   // 11/1 待機に戻ったら分割描画の失敗の旗を戻して再挑戦（play_fx が呼ぶ。?splitretry=0 で呼ばない）
   const spCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = Math.ceil(w); c.height = Math.ceil(h); return c; };
   const spTex = (key, canvas, opts) => { const t = layerTexture(THREE, canvas, opts); sp.tex[key] = t; sp.cv[key] = canvas; return t; };
   // 静止片: 液晶座標(panel 座標 = canvas から (PX,PY) を引いた座標)の矩形 rx,ry,rw,rh

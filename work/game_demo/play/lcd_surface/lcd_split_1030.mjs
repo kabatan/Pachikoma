@@ -123,6 +123,23 @@ function splitBounds(layers) {
   x0 = Math.max(0, Math.floor(x0) - 2); y0 = Math.max(0, Math.floor(y0) - 2); x1 = Math.min(CANVAS_W, Math.ceil(x1) + 2); y1 = Math.min(CANVAS_H, Math.ceil(y1) + 2);
   return (x1 > x0 && y1 > y0) ? [x0, y0, x1 - x0, y1 - y0] : null;
 }
+const SPLIT_FIT = splitParam('splitfit') !== '0';
+function fitLayers(layers) {   // 先頭（基底の層）は残す。加算(add)の層を後ろから外して SPLIT_N 枚に収める。足りなければ後ろから切る
+  const x = layers.slice();
+  for (let i = x.length - 1; i >= 1 && x.length > SPLIT_N; i--) if (x[i].add) x.splice(i, 1);
+  if (typeof window !== 'undefined') window.__splitFitCount = (window.__splitFitCount ?? 0) + 1;
+  return x;
+}
+function noteLayerCount(layers) {   // 計測用。場面（ゲームの段階＋メーター）ごとに最大の層数と、超過（SPLIT_N 超）した回数・そのとき加算層がいくつ外せたかを数える
+  try {
+    if (typeof window === 'undefined') return;
+    const g = window.__play?.app?.ctrl?.game, m = g?.meter, key = (g?.phase ?? '?') + '|' + (m ? m.kind + ':' + m.stage : '-') + '|' + (window.__lcdSurface?.current?.mode ?? '');
+    const S = (window.__splitLayerScenes ??= {}), r = (S[key] ??= { max: 0, n: 0, over: 0, addMax: 0, lost: 0 });
+    const n = layers.length; let add = 0; for (let i = 1; i < n; i++) if (layers[i].add) add++;
+    r.n++; if (n > r.max) r.max = n; if (add > r.addMax) r.addMax = add;
+    if (n > SPLIT_N) { r.over++; const lost = Math.max(0, n - SPLIT_N - add); if (lost > r.lost) r.lost = lost; }
+  } catch {}
+}
 const SPLIT_FUSE = splitParam('lcdfuse');   // '0' で従来、'check' は新旧を両方描いて読み比べる（検証用）
 const lowPerf = () => { const q = globalThis.window?.__prebakeRelight?.quality; return !!q && (q.lightHalf || q.index >= 2); };
 export function createSplitCompositor(T, renderer, opts = {}) {
@@ -177,6 +194,8 @@ export function createSplitCompositor(T, renderer, opts = {}) {
     texture: target.texture,
     compose(layers) {
       if (disposed || !layers) return null;
+      if (layers.length >= 9) noteLayerCount(layers);   // 11/1 計測：9枚以上の場面を window.__splitLayerScenes に記録（場面ごとの最大枚数・落ちた枚数）
+      if (SPLIT_FIT && layers.length > SPLIT_N) layers = fitLayers(layers);   // 11/1 層が12枚を超えると後ろの層（数字・火花・吹き出し等、手前に出るもの）が黙って落ちる。超えたら加算の光を後ろから先に外す（?splitfit=0 で従来＝後ろから切る）
       if (renderer.getRenderTarget() !== null) return null;   // フレーム境界(既定の描画先)でだけ
       if (altMode) { prevBackup.set(prev); backupValid = prevValid; }   // 隔フレームで省いたコマの値は「描いた内容」として覚えない
       const same = skipMode !== 'off' || altMode ? unchanged(layers) : false;
