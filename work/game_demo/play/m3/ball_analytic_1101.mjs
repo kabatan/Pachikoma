@@ -212,5 +212,15 @@ void main() {
   }
   const scr = new Float32Array(maxBalls * 3);
 
-  return { compose, stats, dispose() { out?.dispose(); depthRT?.dispose(); tiles.dispose(); data.dispose(); mat.dispose(); matT.dispose(); tileGeo.dispose(); depthMat.dispose(); } };
+  // リンク失敗（D3D のシェーダ変換など）の検出：描いたあとの各プログラムの診断と LINK_STATUS（最初の 1 回だけ GL に問い合わせる）
+  const checked = new Set();
+  function healthy() {
+    for (const m of [mat, matT, depthMat]) {
+      const p = r.properties.get(m)?.currentProgram; if (!p) continue;
+      if (p.diagnostics?.runnable === false) return false;
+      if (!checked.has(p)) { checked.add(p); const gl = r.getContext(); if (p.program && gl.getProgramParameter(p.program, gl.LINK_STATUS) === false) return false; }
+    }
+    return true;
+  }
+  return { compose, stats, healthy, dispose() { out?.dispose(); depthRT?.dispose(); tiles.dispose(); data.dispose(); mat.dispose(); matT.dispose(); tileGeo.dispose(); depthMat.dispose(); } };
 }
