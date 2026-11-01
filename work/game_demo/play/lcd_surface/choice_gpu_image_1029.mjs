@@ -1,4 +1,5 @@
 import {readBytes,flippedCanvas} from './readback_scratch_1030.mjs';
+import {registerGpuRetry} from './gpu_retry_1101.mjs';
 // Perf-only choice backend: caller owns three decoders, phase, clock and inputs.
 // This backend borrows only the one/two videos selected by the original owner.
 const W=1152,H=1268,PW=1240,PH=1510,PX=34,PY=28;
@@ -62,6 +63,7 @@ export function createChoiceGpuImage({THREE:T,renderer:r,width=PW,height=PH,visi
    });warmStats.completed=true;return {...warmStats,sceneKinds:[...warmStats.sceneKinds]};}
    finally{for(const [u,value]of saved)u.value=value;for(const t of temporary)release(t);}
   },
+  retryAfterFailure(){if(disposed||!failed)return false;failed=false;rawValid=false;status='initial';stats.retries=(stats.retries??0)+1;return true;},   // 11/1 待機に戻ったら failed を戻して GPU 経路へ再挑戦（?gpuretry=0 で戻さない）
   setEnabled(on){live();enabled=!!on;if(!enabled)status='disabled';return enabled;},
   render(s){live();if(!enabled){status='disabled';stats.disabledFrames++;return null;}if(failed)return null;const layers=s?.layers;if(s?.owner!=='choice'||!layers?.length||layers.length>2||layers[0].alpha!==1||layers.some(l=>(!l.video&&!l.surface)||!Number.isFinite(l.alpha)||l.alpha<0||l.alpha>1)){stats.unsupportedFrames++;status='unsupported';return null;}
    if(layers.some(l=>l.video&&(l.video.readyState<2||l.video.seeking||!l.video.videoWidth||!l.video.videoHeight))){stats.waitingFrames++;status='waiting';return rawValid?surface:null;}
@@ -83,6 +85,6 @@ export function createChoiceGpuImage({THREE:T,renderer:r,width=PW,height=PH,visi
   renderHandoff({source,bridge=null,held,alpha}){live();if(!enabled||failed||(held&&held.context!==context)||!source)return null;try{boundary();const layer=source.texture?{surface:source}:{canvas:source};const isNative=s=>s?.width===W&&s?.height===H;if(source.texture&&source.context!==context)throw Error('Foreign handoff source');if(bridge?.lease&&bridge.lease.context!==context)throw Error('Foreign inner bridge');for(const [v,e]of videos){release(e.texture);videos.delete(v);stats.videoTexturesDisposed++;}handoffMode=true;zeroOverrideApplied=false;retainedTotalRevision=null;hu.scene.value=texture(layer,true);hu.sceneNative.value=isNative(source)?1:0;hu.bridge.value=bridge?.lease?.texture??dummy;hu.bridgeNative.value=isNative(bridge?.lease)?1:0;hu.innerAlpha.value=bridge?.alpha??0;hu.held.value=held?.texture??dummy;hu.outerAlpha.value=Math.max(0,Math.min(1,alpha));rawValid=true;bodyRevision++;contentRevision++;status='handoff';return surface;}catch(e){return fail(e,'handoff');}},
   endHandoff(){live();if(!handoffMode)return;handoffMode=false;rawValid=false;hu.scene.value=hu.bridge.value=hu.held.value=dummy;status='idle';},
   diagnostics(){return {...stats,failures:stats.failures.map(e=>({...e})),boundary:{...stats.boundary},enabled,disposed,failed,status,rawValid,bodyRevision,overlayRevision,compositeRevision,contentRevision,countdownValue,totalRevision,retainedTotalRevision,zeroOverrideApplied,handoffMode,completed:last?{...last,layers:last.layers.map(l=>({...l}))}:null,overlays:Object.fromEntries([...crops].map(([k,v])=>[k,v.stamp?{...v.stamp}:null])),videoTextures:videos.size,videoControlsOwned:0,contextsCreated:0,targetBytes:W*H*4+PW*PH*4,pool:{slots:pool.length,live:pool.filter(s=>s.busy).length,targetBytes:2*W*H*4+2*PW*PH*4},patchTargetBytes:patchTarget?patchTarget.width*patchTarget.height*4:0,warm:{...warmStats,sceneKinds:[...warmStats.sceneKinds]}};},
-  dispose(){if(disposed)return;disposed=true;for(const lease of [...leases])lease.release();for(const resource of [...owned])release(resource);videos.clear();crops.clear();cached=null;rawValid=false;status='disposed';}
- };return api;
+  dispose(){if(disposed)return;disposed=true;try{api.__offRetry?.();}catch{}for(const lease of [...leases])lease.release();for(const resource of [...owned])release(resource);videos.clear();crops.clear();cached=null;rawValid=false;status='disposed';}
+ };api.__offRetry=registerGpuRetry(()=>api.retryAfterFailure());return api;
 }

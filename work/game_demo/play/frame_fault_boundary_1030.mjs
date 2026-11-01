@@ -1,4 +1,5 @@
 // Synchronous, one-shot display recovery. No runtime replay, scheduling or DOM.
+import {runGpuRetry} from './lcd_surface/gpu_retry_1101.mjs';
 export function createFrameFaultBoundary({recover,onFault,onRecovered=()=>{}}={}) {
   if(typeof recover!=='function'||typeof onFault!=='function'||typeof onRecovered!=='function')throw TypeError('Frame fault callbacks must be functions');
   const describe=error=>({code:typeof error?.code==='string'?error.code:null,message:String(error?.message??error)});
@@ -47,7 +48,7 @@ export function installLcdRecoveryBoundary(lcd,{onCleared=()=>{},getPhase=null,i
       let ph=null;try{ph=getPhase();}catch{}
       if(ph==='Attract'){
         idleT+=dt;
-        if(idleT>=idleSeconds&&typeof this.clearDisplayRecovery==='function'&&this.clearDisplayRecovery()){idleT=0;idleClears++;try{onCleared();}catch{}try{onEvent.call(this,'attract');}catch{}}
+        if(idleT>=idleSeconds&&typeof this.clearDisplayRecovery==='function'&&this.clearDisplayRecovery()){idleT=0;idleClears++;try{onCleared();}catch{}try{runGpuRetry();}catch{}try{onEvent.call(this,'attract');}catch{}}
       }else idleT=0;
     }else idleT=0;
     if(this.displayRecoveryActive)return this.renderRecoveredFrame(dt);
@@ -61,6 +62,7 @@ export function installLcdRecoveryBoundary(lcd,{onCleared=()=>{},getPhase=null,i
       if((args[0]==='attract'||IDLE_CLEAR&&(args[0]==='ticket'||args[0]==='howto'))&&typeof this.clearDisplayRecovery==='function'&&this.clearDisplayRecovery()){try{onCleared();}catch{}}
       else return;
     }
+    if(args[0]==='attract'){try{runGpuRetry();}catch{}}   // 11/1 待機に戻ったら GPU 画像（palace/choice）の failed を戻して再挑戦（?gpuretry=0 で無し）
     return onEvent.apply(this,args);
   };
   lcd.prepare=function(...args){if(this.displayRecoveryActive)return Promise.resolve();return prepare.apply(this,args);};

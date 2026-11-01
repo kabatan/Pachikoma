@@ -1,6 +1,7 @@
 // Native palace image backend; model/events/video playback stay with the caller.
 import {createPalaceGpuProducer,PANEL,withRendererState} from './palace_gpu_producer_1029.mjs';
 import {createPalaceBoundaryImage} from './palace_boundary_1030.mjs';
+import {registerGpuRetry} from './gpu_retry_1101.mjs';
 import {createContinuousRyuguBg} from './palace_gpu_fallback_1029.mjs';
 
 // Pure boundary cache: at most one read attempt per immutable producer revision.
@@ -50,6 +51,7 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
   const sentinel={width:PANEL.w,height:PANEL.h,readyState:4,gpuPalaceImage:null};
   const api={
    hidden(){producer.hidden();},
+   retryAfterFailure(){if(disposed||!failed)return false;failed=false;if(legacy){try{legacy.dispose();}catch{}legacy=null;}boundary.clear();stats.retries=(stats.retries??0)+1;return true;},   // 11/1 待機に戻ったら failed を戻して GPU 経路へ再挑戦（?gpuretry=0 で戻さない）
    palaceBoundary,get boundaryAvailable(){return !!palaceBoundary&&!failed&&!legacyMode&&producer.surface.revision>0;},
    render(input){if(disposed)throw Error('Palace live image disposed');lastInput={...input};
     if(failed||legacyMode)return fallbackImage();
@@ -97,8 +99,8 @@ export async function createPalaceGpuImage({THREE,renderer,background,base,cente
     }
    },
    diagnostics(){return {...stats,failures:stats.failures.map(f=>({...f,...(f.video?{video:{...f.video}}:{})})),failed,legacyMode,manual,boundary:boundary.stats(),producer:producer.diagnostics(),palaceBoundary:palaceBoundary?.diagnostics()??null,extraContexts:legacy?1:0};},
-   dispose(){if(disposed)return;disposed=true;palaceBoundary?.dispose();producer.dispose();legacy?.dispose();output.dispose();material.dispose();geometry.dispose();dummy.dispose();hudTexture?.dispose();for(const image of images)image.close();images.length=0;boundary.clear();rawPanel=rawVisible=null;}
+   dispose(){if(disposed)return;disposed=true;try{api.__offRetry?.();}catch{}palaceBoundary?.dispose();producer.dispose();legacy?.dispose();output.dispose();material.dispose();geometry.dispose();dummy.dispose();hudTexture?.dispose();for(const image of images)image.close();images.length=0;boundary.clear();rawPanel=rawVisible=null;}
   };
-  sentinel.gpuPalaceImage=api;return api;
+  sentinel.gpuPalaceImage=api;api.__offRetry=registerGpuRetry(()=>api.retryAfterFailure());return api;
  }catch(error){palaceBoundary?.dispose();producer?.dispose();for(const image of images)image.close();throw error;}
 }
