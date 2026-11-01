@@ -123,10 +123,17 @@ function splitBounds(layers) {
   x0 = Math.max(0, Math.floor(x0) - 2); y0 = Math.max(0, Math.floor(y0) - 2); x1 = Math.min(CANVAS_W, Math.ceil(x1) + 2); y1 = Math.min(CANVAS_H, Math.ceil(y1) + 2);
   return (x1 > x0 && y1 > y0) ? [x0, y0, x1 - x0, y1 - y0] : null;
 }
-const SPLIT_FIT = splitParam('splitfit') !== '0';
-function fitLayers(layers) {   // 先頭（基底の層）は残す。加算(add)の層を後ろから外して SPLIT_N 枚に収める。足りなければ後ろから切る
-  const x = layers.slice();
-  for (let i = x.length - 1; i >= 1 && x.length > SPLIT_N; i--) if (x[i].add) x.splice(i, 1);
+const SPLIT_FIT = splitParam('splitfit') !== '0', SPLIT_FIT_OLD = splitParam('splitfit') === '1';
+function fitLayers(layers) {   // 先頭（基底の層）は残して SPLIT_N 枚に収める。外す順：①見えない層（不透明度 0.02 以下）②加算(add)の光で不透明度の低い順（同じなら後ろ）③それでも足りなければ通常の層で不透明度の低い順。
+  const x = layers.slice();                                          // 11/1 旧（?splitfit=1）は「加算を後ろから外す」だけで、拍の終わりの輪・火花・火の粉など目に見える光が先に消えていた。
+  if (SPLIT_FIT_OLD) { for (let i = x.length - 1; i >= 1 && x.length > SPLIT_N; i--) if (x[i].add) x.splice(i, 1); }
+  else {
+    const c = [];
+    for (let i = 1; i < x.length; i++) { const a = x[i].alpha ?? 1; c.push({ i, k: a > 0.02 ? (x[i].add ? 0 : 10) + a : -1 }); }
+    c.sort((p, q) => p.k - q.k || q.i - p.i);
+    const drop = new Set(c.slice(0, x.length - SPLIT_N).map((e) => e.i));
+    for (let i = x.length - 1; i >= 1; i--) if (drop.has(i)) x.splice(i, 1);
+  }
   if (typeof window !== 'undefined') window.__splitFitCount = (window.__splitFitCount ?? 0) + 1;
   return x;
 }
