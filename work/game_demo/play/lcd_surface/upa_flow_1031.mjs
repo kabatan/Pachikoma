@@ -7,6 +7,7 @@
 //   ルーレットの結果は止まるまで読まない（rouletteStatus.award は止まったあとだけ使う）。液晶へは層で重ねる（lcd.jpHud.splitLayers。2D・GPU どちらの経路でも出る）。
 import * as THREE from '../../web/vendor/three/three.module.js';
 import { layerTexture } from './lcd_split_1030.mjs';
+import { registerPress } from '../../ui/choice_gate_1031.mjs';
 import { HOLE_X } from './tutorial_jp_overlay_1030.mjs';
 import { chainWhyFacts, chainWhyLineId, chainWhyOn } from './choice_why_1101.mjs';   // 11/01 継続の選択の台詞（ch16_*：成功で届く賞／ぜったい+30こ、失敗したとき残るもの）。?chainwhy=0 で旧
 
@@ -21,6 +22,12 @@ const SHOWPIECE = /^(roulette_|reward_|chain_success|chain_jp_land|jp_rush|jp_br
 const CHOICE_LINE_AT = 1.6;   // 選択画面の入りの映像が終わってから台詞
 const CHAIN_EXPLAIN = new URLSearchParams(globalThis.location?.search ?? '').get('chainexplain') !== '0';   // 11/01 継続と追加の説明を順に（?chainexplain=0 で旧：1吹き出し）
 const CHAIN_AUTO = new URLSearchParams(globalThis.location?.search ?? '').get('chainauto') !== '0';   // 11/01 監督：時計が残る最初の継続（チケット不要）は選択画面なしで直接継続チャンスへ（規則の ChainFirstAuto）。?chainauto=0 で選択画面。チケットが要る選択を自動で決めることはしない（規則が出す）
+const Q = new URLSearchParams(globalThis.location?.search ?? '');
+const ADD_TEMPO = Q.get('addtempo') !== '0';   // 11/01 監督：時間切れの追加の解説が長い。出るまでの間を詰め（1.0→0.4秒）、表示は 文字数×0.1秒＋0.5秒。?addtempo=0 で旧（1秒後・flow.json の秒）
+const ADD_DUR = { add_a1: 2.6, add_a1nb: 2.2, add_a2: 2.2, add_a3: 2.5, add_a4: 2.0 };   // 旧 3.2 / 2.8 / 2.6 / 3.2 / 2.8
+const ADD_START = ADD_TEMPO ? 0.4 : 1;
+const ADD_DIM_FIX = Q.get('adddim') !== '0';   // 11/01 解説の吹き出しが消えたあとも暗幕が残っていた（最後の1文の後〜促しまで、促しの間も）。吹き出しがある間だけ暗幕。?adddim=0 で旧
+const ADD_SKIP = Q.get('addskip') !== '0';   // 11/01 監督：追加の解説はボタンで送れる。解説が出ている間の押しは選択にせず（誤って追加にならない）、解説をまとめて消す。次の押しから選択。?addskip=0 で旧
 const ADD_NUDGE_AT = 8;   // 追加画面で残りが少なくなったら促す（秒。追加の秒数そのものは増やさない）
 const CH_TOP = 377, CH_BUBBLE_TOP = 392;   // 継続の説明の吹き出しの上端（映像側のうぱの真下に固定。吹き出しの行数が変わってもうぱが二重にならず、PUSH の下半分より下へ）
 const FIRST_CHOICE = true;   // 10/31 監督訂正：33%/67%の告知は本編から外す（旧は ?upahost=0 だけ）
@@ -147,6 +154,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
       }
       if (/^ask_/.test(id)) { F.ask = { sc: { ask_jp: 'jp', ask_chain: 'chain' }[id], at: F.t }; F.cur.dur = ASK_SEC; }
     }
+    if (ADD_TEMPO && F.ch?.add && ADD_DUR[id] && F.cur) F.cur.dur = ADD_DUR[id];
     sfx?.pop?.(LINE_EXPR[id] === 'surprise' ? 520 : 760, 0.25);
     F.log.push({ t: +F.t.toFixed(2), id, clock: +game().secondsLeft.toFixed(2), stage: m?.stage ?? null, text: id }); if (F.log.length > 200) F.log.shift(); log('upa:flow', { id });
   };
@@ -250,7 +258,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
     // ---- 時間切れの100円追加の画面：1セリフ。選ぶのは客、受付の秒と誤選択防止はそのまま ----
     F.addAge = g.phase === 'Continue' && lcd.timeupSurface?.active && (g.offerLeft ?? 0) > 0 ? (F.addAge ?? 0) + dt : 0;
     if (!F.addAge) F.addSaid = false;
-    else if (F.addAge >= 1 && !F.addSaid && !F.ch && !F.seq) { F.addSaid = true; F.ch = { t: 0, add: true }; F.tutAt = F.t; if (CHAIN_EXPLAIN && R.meta.lines.add_a1) { F.ch.hold = true; startSeq(addSeq()); } else startSeq([(g.extraLoanBallsNow ?? 1) > 0 ? 'add_offer' : 'add_offer_nb']); }
+    else if (F.addAge >= ADD_START && !F.addSaid && !F.ch && !F.seq) { F.addSaid = true; F.ch = { t: 0, add: true, dim: 0 }; F.tutAt = F.t; if (CHAIN_EXPLAIN && R.meta.lines.add_a1) { F.ch.hold = true; startSeq(addSeq()); } else startSeq([(g.extraLoanBallsNow ?? 1) > 0 ? 'add_offer' : 'add_offer_nb']); }
     if (F.ch) {
       F.ch.t += dt;
       if (g.phase !== (F.ch.add ? 'Continue' : 'ChainChoice') || !F.seq) { F.ch = null; F.seq = null; F.cur = null; F.ask = null; }
@@ -262,6 +270,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
         } else if (F.cur && F.cur.t >= F.cur.dur) seqNext();
       }
     }
+    if (F.ch && ADD_DIM_FIX) F.ch.dim = clamp((F.ch.dim ?? 0) + ((!F.ch.add || (F.cur && !F.ch.nudged)) ? dt : -dt) / 0.2, 0, 1);   // 追加画面の暗幕は吹き出し（解説）がある間だけ。促しは暗幕なし
     if (!FIRST_CHOICE && g.chainAnnouncing) {   // ?firstchoice=0：旧の告知の映像の間
       const key = `${g._chainSerial ?? 0}:${g.jackpotChain?.stage ?? 0}`;
       if (F.annKey !== key) { F.annKey = key; say('ch13_a', true); }
@@ -281,7 +290,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
     if (!R.ready) return null;
     const c = F.cur, p = place(), out = [];
     if (F.ch) {   // 選択画面の説明：背景を沈める。時計は吹き出しの下に隠れるので札で出す
-      out.push({ tex: T.dim, w: W, h: 1268, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 0.42 * clamp(F.ch.t / 0.2, 0, 1), add: false });
+      out.push({ tex: T.dim, w: W, h: 1268, ax: 0, ay: 0, x: PX, y: PY, rot: 0, sc: 1, alpha: 0.42 * (ADD_DIM_FIX && F.ch.dim !== undefined ? F.ch.dim : clamp(F.ch.t / 0.2, 0, 1)), add: false });
     }
     if (p && R.comp) {
       const e = expr(), lively = e !== 'idle', fr = lively ? Math.floor(F.t * 5) % 2 : (F.t % 3.2 < 0.14 ? 2 : 0), tex = T.comp[`${e}${fr}`];
@@ -314,7 +323,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
     get busy() { return !!F.cur || !!F.pendTime; },
     timeStart() { F.pendTime = true; },
     get asking() { return !!F.ask; },
-    get holding() { return false; },
+    get holding() { return ADD_SKIP && !!F.ch?.add && !!F.ch.hold && !F.ch.nudged && !!F.cur && !!F.seq; },   // 追加の解説の吹き出しが出ている間（促しと、消えたあとは選択できる）
     begin({ repeat = false } = {}) { Object.assign(F, { on: true, repeat, heard: { jp: false, chain: false, choice: false, add: false }, asked: { jp: 0, chain: 0, choice: 0 }, ch: null, chKey: null, cutNext: null, cutKey: null, ux: null, uy: null, ask: null, react: [], annFirst: !repeat, rlFirst: !repeat, mid: null, seq: null, cur: null, pendFail: false, rl: null, annKey: null, seqDone: false }); },
     reset() { Object.assign(F, { pendTime: false, on: false, ch: null, cutNext: null, ask: null, mid: null, seq: null, cur: null, pendFail: false, rl: null }); },
     /** 問いの答え。選択画面と同じゲート：出てから1.5秒は受けない＋連打が0.4秒止まるまで受けない */
@@ -326,6 +335,7 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
     },
     press() {
       F.prevPress = F.lastPress; const gap = F.t - F.lastPress; F.lastPress = F.t;
+      if (ADD_SKIP && F.ch?.add) { registerPress(controller); if (F.seq && F.ch.hold && !F.ch.nudged && F.cur && F.t - F.tutAt >= 0.5 && gap >= SKIP_GAP) { F.i = F.seq.length - 1; F.cur = null; F.log.push({ t: +F.t.toFixed(2), id: 'add-skip', clock: +game().secondsLeft.toFixed(2) }); } return; }   // 追加の解説：押しは連打として数え（直後の選択を誤って受けない）、止まってからの押しでまとめて消す
       const m = game()?.meterStatus; if (!F.seq || (m?.stage !== 'tutorial' && !F.ch) || F.t - F.tutAt < SKIP_AGE || gap < SKIP_GAP) return;   // 連打のまま流れ込んだ押しでは飛ばさない（手を止めてから押すと飛ばす）
       const last = F.seq.length - 1;
       const how = F.seq.findIndex((id) => /^(jp8_hole|ch15_how)$/.test(id));

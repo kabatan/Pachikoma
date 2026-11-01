@@ -259,7 +259,7 @@ export async function attachUpaHost(lcd, { controller, log = () => {} } = {}) {
     if (preHide) return false;
     const btn = ['fire', 'challenge', 'chainContinue', 'chainStop'].includes(action);
     if (FL?.asking && btn) { FL.answerPress(action === 'challenge' || action === 'chainContinue' ? 'R' : 'L'); return false; }   // JP・継続の問いの間は左右を選択に使う
-    if (FL?.holding && btn) { FL.press(); return false; }   // 選択画面の説明の間は選ばせない（押すと飛ばす）。説明が終わると選択の秒も誤選択防止も頭から
+    if (FL?.holding && (btn || ['finish', 'add', 'requestExtra'].includes(action))) { FL.press(); return false; }   // 選択画面の説明の間は選ばせない（押すと飛ばす）。説明が終わると選択の秒も誤選択防止も頭から
     if (action === 'fire' && clockHold && !sceneQuiet()) clockStart('fire');
     if (!U.active && (action === 'fire' || action === 'challenge')) FL?.press();
     if (U.active && !U.released && U.branch === 'listen' && (action === 'fire' || action === 'challenge')) { skipLine(); return false; }
