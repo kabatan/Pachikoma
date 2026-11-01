@@ -19,7 +19,7 @@ export const TUNE1031_OLD=Object.freeze({"PrizeThresholds":[0,45,85,150,400],"In
 export function tune1031Old(search=globalThis.location?.search??''){return new URLSearchParams(search).get('tune1031')==='0';}
 // 11/01 時間の調整・案C（監督承認「案Cをひとまず入れていいよ。ただ、チャンスは最小でも5秒」。work/game_tuning/clock_1101）: 持ち時間46秒、JPチャンスの秒・個数を JP開始時の残り時計に合わせる、
 //   継続成功で時計が3秒以下なら0、自動継続の開始で時計を18秒までに。?clocktune=0 で全部もとに戻す（50秒・表の固定値）。H の規則だけ（G には入らない）。?tune1031=0・?timeplan=old のときも入れない。
-export const CLOCK_TUNE=Object.freeze({InitialSeconds:46,ClockTune:Object.freeze({JpMinSeconds:5,JpMaxSeconds:20,JpMarginSeconds:3,Exponent:0.8,ThresholdMin:2,ThresholdMax:7,ChainSuccessZeroBelow:3,AutoChainCapSeconds:18})});
+export const CLOCK_TUNE=Object.freeze({InitialSeconds:46,ClockTune:Object.freeze({JpMinSeconds:7,JpMaxSeconds:15,JpMarginSeconds:3,Exponent:0.9,ThresholdMin:2,ThresholdMax:7,ChainSuccessZeroBelow:3,AutoChainCapSeconds:18})});
 export function clockTuneEnabled(search=globalThis.location?.search??''){return new URLSearchParams(search).get('clocktune')!=='0';}
 export async function loadPlayRules(path,readText){
  const text=await readText(path);let raw;
