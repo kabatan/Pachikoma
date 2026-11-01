@@ -16,6 +16,7 @@ const DOCS = resolve(ROOT, '../docs');
 await prepareRelease(resolve(ROOT,'..'));
 const PORT = Number(process.argv[2] ?? 8792);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.js': 'text/javascript', '.json': 'application/json', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.ttf': 'font/ttf', '.png': 'image/png', '.mp4': 'video/mp4', '.webm': 'video/webm', '.wasm': 'application/wasm', '.obj': 'text/plain; charset=utf-8', '.npy': 'application/octet-stream' };
+const MP4CAP = Number(process.env.MP4_RANGE_CAP ?? 0);   // 実験用（既定は無効）：0より大きいとmp4の終端なし範囲要求をこのバイト数で区切る
 const mp4Pacer=createMp4Pacer({audit:process.env.MP4_PACING_AUDIT==='1'});
 process.on('message',async m=>{if(m?.kind==='pacing-snapshot')process.send?.({kind:'pacing-snapshot',id:m.id,snapshot:mp4Pacer.snapshot()});if(m?.kind==='pacing-close')process.send?.({kind:'pacing-close',id:m.id,snapshot:await mp4Pacer.close()});});
 const server = createServer(async (req, res) => {
@@ -73,6 +74,8 @@ const server = createServer(async (req, res) => {
     let start = 0, end = info.size - 1;
     if (range) {
       start = Number(range[1]); end = range[2] ? Math.min(info.size - 1, Number(range[2])) : info.size - 1;
+      // 実験（既定は無効、効果なし：ブラウザが続きを連続で要求し読むバイトは減らない）。MP4_RANGE_CAP=バイト数 で有効
+      if (MP4CAP > 0 && !range[2] && extname(path) === '.mp4' && !/[?&]mp4cap=0(&|$)/.test(req.headers.referer ?? '')) end = Math.min(end, start + MP4CAP - 1);
       if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= info.size) { res.writeHead(416, { 'content-range': `bytes */${info.size}` }).end(); return; }
       res.writeHead(206, { ...headers, 'content-range': `bytes ${start}-${end}/${info.size}`, 'content-length': end - start + 1 });
     } else {

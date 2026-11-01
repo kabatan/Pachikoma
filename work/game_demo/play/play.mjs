@@ -1,5 +1,6 @@
 // 通しプレイ: 規則+480Hz Rapier+光層+DOM UI。
 // ?seed=N &manual &nolog &quiet &debug &pack=<manifest URLまたはディレクトリ>
+import './boot_media_lazy_1101.mjs';   // 11/1 起動中は読み込み済みの止まった映像の先読みを止め、準備完了後に裏で再開（?bootlazy=0 で従来）
 import RAPIER from '../physics/node_modules/@dimforge/rapier3d-compat/dist/rapier.mjs';
 import { installRigidSyncGuard } from '../physics/rigid_sync_guard.mjs';
 import { PhysicsAdapter, RAPID_SUPPLY } from '../physics/adapter.mjs';
