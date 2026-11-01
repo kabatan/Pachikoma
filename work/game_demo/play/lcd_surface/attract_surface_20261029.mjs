@@ -9,17 +9,19 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   v.muted=true;v.playsInline=true;v.loop=true;v.preload='auto';
   const error=()=>{const message=`attract video: ${v.error?.message??'unavailable'}`;errors.push(message);console.error(message);};
   // 10/31 復旧（?attractretry=0 で無し）: PIPELINE_ERROR_DECODE 等で動画が止まったら src を読み直して再生を再開する（最大3回。成功して5秒再生できたら回数を戻す）
-  const retryOn=new URLSearchParams(globalThis.location?.search??'').get('attractretry')!=='0';
+  const retryOn=new URLSearchParams(globalThis.location?.search??'').get('attractretry')!=='0',coolOn=new URLSearchParams(globalThis.location?.search??'').get('attractcool')!=='0';
   const recovery={tries:0,max:3,recovered:0,failed:false,pending:false};let recoverReset=0;
   const recover=()=>{
     if(!retryOn||recovery.pending||disposedEarly)return;
-    if(recovery.tries>=recovery.max){recovery.failed=true;return;}
+    // 11/1 追加：3回読み直しても error のままだと failed が二度と戻らない。10秒おいてもう一度3回試す（?attractcool=0 で従来）
+    if(recovery.failed&&coolOn&&recovery.coolAt&&performance.now()>=recovery.coolAt){recovery.tries=0;recovery.failed=false;recovery.coolAt=0;recovery.cooldowns=(recovery.cooldowns??0)+1;}
+    if(recovery.tries>=recovery.max){recovery.failed=true;if(coolOn&&!recovery.coolAt)recovery.coolAt=performance.now()+10000;return;}
     recovery.tries++;recovery.pending=true;
     setTimeout(()=>{
       recovery.pending=false;if(disposedEarly)return;
       const resume=Math.min(v.currentTime||0,Math.max(0,(man.duration||1)-.1));
       try{heldFrameDrop?.();}catch{}
-      const ok=()=>{v.removeEventListener('loadeddata',ok);recovery.recovered++;try{v.currentTime=active&&!manual?0:resume;}catch{}if(active&&!manual)v.play().catch(()=>{});};
+      const ok=()=>{v.removeEventListener('loadeddata',ok);recovery.recovered++;recovery.failed=false;recovery.coolAt=0;try{v.currentTime=active&&!manual?0:resume;}catch{}if(active&&!manual)v.play().catch(()=>{});};
       v.addEventListener('loadeddata',ok,{once:true});
       v.removeAttribute('src');v.load();v.src=new URL(man.file,base).href;v.load();
     },150*recovery.tries);
@@ -68,7 +70,7 @@ export async function attachAttractSurface(lcd,{getState,manifestUrl=new URL('..
   const wanted=()=>{const s=getState();return !lcd.displayRecoveryActive&&s.phase==='Attract'&&!s.howto;};
   const original={frame:lcd.frame.bind(lcd),onEvent:lcd.onEvent.bind(lcd),prepare:lcd.prepare.bind(lcd),setManual:lcd.setManual.bind(lcd),applyLights:lcd.applyLights.bind(lcd),dispose:lcd.dispose.bind(lcd)};
   const revision=Object.getOwnPropertyDescriptor(lcd,'uploadRevision')?.get;
-  const sync=()=>{const next=wanted();if(next!==active){if(active&&published)materialize();active=next;if(active){time=0;v.currentTime=0;}else v.pause();}if(active&&!manual&&v.paused)v.play().catch(()=>{});};
+  const sync=()=>{const next=wanted();if(next!==active){if(active&&published)materialize();active=next;if(active){time=0;v.currentTime=0;}else v.pause();}if(active&&!manual&&v.paused)v.play().catch(()=>{});if(coolOn&&active&&v.error)recover();};
   lcd.frame=(dt,F)=>{
     sync();
     // Only these fully covered title modes use the simple normal Canvas path.
