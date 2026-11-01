@@ -298,9 +298,10 @@ export function createUpaFlow(lcd, { controller, base, labels, btn = null, liveV
   const hook = () => {
     if (hooked || !lcd.jpHud?.splitLayers) return;
     const o = lcd.jpHud.splitLayers.bind(lcd.jpHud);
-    lcd.jpHud.splitLayers = () => { const a = o(), b = layers(); return a && b ? [...a, ...b] : (a ?? b); };
+    const fit = (a, b) => { if (a.length + b.length <= 12) return [...a, ...b]; const x = [...a]; for (let i = x.length - 1; i >= 0 && x.length + b.length > 12; i--) if (x[i].add) x.splice(i, 1); return [...x, ...b]; };   // 11/1 液晶の層は12枚まで。超えると後ろの吹き出しとうぱが落ちて点滅した：加算の光を先に外す
+    lcd.jpHud.splitLayers = () => { const a = o(), b = layers(); return a && b ? fit(a, b) : (a ?? b); };
     hooked = true;
-    if (lcd.splitSources) lcd.splitSources = lcd.splitSources.map((f) => () => { const a = f(); if (!a || !F.ch?.add) return a; const b = layers(); return b ? [...a, ...b] : a; });   // 追加の画面は全面の層が先に返る
+    if (lcd.splitSources) lcd.splitSources = lcd.splitSources.map((f) => () => { const a = f(); if (!a || !F.ch?.add) return a; const b = layers(); return b ? fit(a, b) : a; });   // 追加の画面は全面の層が先に返る
     const M = lcd.jp?.model;
     if (FIRST_CHOICE && M?.man?.scenes?.[CUT]) {   // 継続を選んだら、盤面の前に継続チャンスのカットイン。chain_seal／jp_seal の差し替えより外側（カットインのあとで元の場面名を渡す）
       const st = M.start.bind(M), sp = M.stop.bind(M);
