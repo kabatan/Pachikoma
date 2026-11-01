@@ -73,7 +73,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const stats = { lifecycle: [], frames: 0, played: [], errors: [], switches: 0, maxDrawMs: 0, placeholders: [] };
   const fail = (message) => { stats.errors.push(message); console.error('[normal1026]', message); };
   // One exclusive normal/plain-JP backend. Existing players keep media ownership.
-  let videoBackend=null,videoFailed=false,ringCanvas=null,ringCtx=null;
+  let videoBackend=null,videoFailed=false,videoRecovered=false,ringCanvas=null,ringCtx=null;
   const videoStats={requested:!!videoImageFactory,mode:'legacy',frames:0,fallbacks:0,failures:[]};
   if(videoImageFactory)try{
     videoBackend=await videoImageFactory({width:canvas.width,height:canvas.height,visible:{x:PX,y:PY,w:W,h:H}});
@@ -107,6 +107,10 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
   const TIMEUP_COVER = new URLSearchParams(globalThis.location?.search ?? '').get('timeupcover') !== '0'; let coverKey = null;
   // 11/1 最適化：最終結果(stage_common)が全面を覆っている間は、下の通常映像のデコードを止める(出て0.3秒後から。覆いが外れれば clip_player が再開)。?finalpause=0 で従来
   const FINAL_PAUSE = new URLSearchParams(globalThis.location?.search ?? '').get('finalpause') !== '0'; let finalAt = -1;
+  // 11/1 不具合修正：配当の映像が読めるまでの間／映像が止まった(video_error)後に、旧い仮カード「大当り！ ◯玉」が出る。仮カードを出さず、映像が読めるまでは直前の画面を保持する（最大1.5秒）、映像が終わった・止まったら mode 'jp' を残さない。?jpoldcard=1 で旧（仮カードを出す）、?jpholdunready=0 で保持なし
+  const JP_OLDCARD = new URLSearchParams(globalThis.location?.search ?? '').get('jpoldcard') === '1', JP_HOLD_UNREADY = new URLSearchParams(globalThis.location?.search ?? '').get('jpholdunready') !== '0'; let jpHoldT = 0;
+  // 11/1 不具合修正：videoFailed（GPUの映像経路の一方通行の旗）が以後ずっと立ち、重くなる。待機に戻ったら戻して再挑戦する（復旧モードで立てた分は戻さない）。?videoretry=0 で従来
+  const VIDEO_RETRY = new URLSearchParams(globalThis.location?.search ?? '').get('videoretry') !== '0';
   const attractPause = new URLSearchParams(globalThis.location?.search ?? '').get('attractpause') !== '0';
   let clock = 0, manual = false, shotOn = false, jpOwns = false, lastEvent = null;
   let mode = { id: 'attract', p: {}, at: 0, until: Infinity }, guard = null;
@@ -161,7 +165,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
         card('JPチャンス！', ['光っていない穴へ！', 'ボタンで 玉をうつ'], '#ffda69'); break;
       case 'challenge_flight': card(p.chain ? '連チャンの挑戦！' : '入れぇ！！', ['光っていない穴に 入れば成功！'], '#ffca78'); break;
       case 'jp':
-        card('大当り！', [p.chain ? '積み増し！ 確定まで大切に' : '最初の配当は もう確定！'], '#ffe093', `${p.payout ?? p.award ?? 0}玉`); break;
+        if (JP_OLDCARD) card('大当り！', [p.chain ? '積み増し！ 確定まで大切に' : '最初の配当は もう確定！'], '#ffe093', `${p.payout ?? p.award ?? 0}玉`); break;
       case 'chain_announce':   // JP後の継続の告知（差し込み口。専用の映像ができるまでの仮カード）。first=最初の継続（選択なしで自動継続）／2回目以降は選択画面の前に出る
         if (p.first) card('継続チャンス!!!', ['2/3でJP継続', 'もう一度ルーレット'], '#ffe093');
         else card('継続チャンス!!!', ['継続で得た', `${p.atRisk ?? 0}玉を失う可能性あり`], '#ff9fb8', `${p.atRisk ?? 0}玉`); break;
@@ -222,6 +226,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     if (id === 'start') { if(mode)bridge();mode = null; shotOn = false; return; }
     if (['attract','title','howto','ticket','timeup','timeup_call','finish_count','result','add100','challenge_wait','challenge_declare','challenge_flight','jp','chain_choice','chain_announce','chain_continue','chain_stop','fail'].includes(id)) {
       if (id === 'attract' || id === 'ticket') { variants = {}; normalN = 0; guard = null; }
+      if (id === 'attract' && VIDEO_RETRY && videoFailed && !videoRecovered && !displayRecovery.active) { videoFailed = false; videoStats.retries = (videoStats.retries ?? 0) + 1; try { videoBackend?.retryAfterFailure?.(); } catch {} }
       const ttl = id === 'jp' ? Math.max(.5, p.duration ?? 6.3) : id === 'fail' ? Math.max(1.35, p.duration ?? 0) : id === 'chain_stop' ? 1.8 : id === 'chain_announce' ? Math.max(.5, p.seconds ?? 2.5) : id === 'add100' ? (cards?.ttl?.('add100') ?? 1.5) : id === 'timeup_call' ? Math.max(.6, p.duration ?? 1.4) : id === 'ticket' ? (cards?.ttl?.('ticket') ?? Infinity) : Infinity;
       temporary(id, p, ttl);
     }
@@ -275,6 +280,8 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
         jp.palace?.imageBackend?.setLegacyMode(choiceWrites(this));
         let v=jp.frame(dt);
         if(!jp.active&&lastJpSerial>=0){bridge();lastJpSerial=-1;}
+        // 11/1 配当の映像が claimed なのにまだ読めていない間は、通常の背景＋旧カードに落とさず直前の画面を保持（最大1.5秒。映像が error なら jp_surface が stop して claimed が外れる）。?jpholdunready=0 で従来
+        if(!jp.active)jpHoldT=0;else if(jpOwns||v?.readyState>=2)jpHoldT=0;else if(JP_HOLD_UNREADY&&!JP_OLDCARD&&(jpHoldT+=dt)<1.5){stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;}
         // 映像の最初のコマがまだ読めていない間は、前の映像の最後(失敗の灰色＋扉など)を出さず、通常の画面のままにする。
         if (jp.active && (jpOwns || v?.readyState>=2)) {
           if(jp.where()?.serial!==lastJpSerial){if(!jp.layered)bridge();lastJpSerial=jp.where()?.serial;}if(jp.layered){fadeLeft=0;fullPrevious?.abandon();releaseChoiceBridge();if(palaceBoundary?.ownsFrame){if(gpuFrame?.backend===palaceBoundary)gpuFrame=null;palaceBoundary.abandon();}}if(resultHistory?.active){resultHistory.fallback('jp-serial-bridge',{includeBridge:false});gpuFrame=null;}
@@ -322,6 +329,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
           ctx.restore();blend(dt);if(cacheable){paintedResult={canvas:v,key};resultUploadRevision++;stableResult=true;}stats.frames++;stats.maxDrawMs=Math.max(stats.maxDrawMs,performance.now()-t0);return;
         }
       }
+      if(!JP_OLDCARD&&mode?.id==='jp'&&!jp?.claimed&&(jpOwns||clock-mode.at>1)){bridge();mode=null;}   // 11/1 映像が終わった／止まったのに mode 'jp' が寿命まで残る（旧カードが出る・GPUの映像経路が使えない）のを防ぐ
       if(resultHistory?.active)gpuFrame=null;else if(gpuFrame?.owner!=='normal')materializeGpu('normal-return');invalidateResult();jpOwns=false;
       normalN = clamp(s.lit ?? normalN, 0, 6);
       if (mode && clock >= mode.until) {bridge();mode = null;}
@@ -390,7 +398,7 @@ export async function createProductionLcd({ manifestUrl, man, getState, jpManife
     const clean=fn=>{try{fn();}catch(e){displayRecovery.cleanupErrors.push(String(e?.message??e));}};
     clean(()=>resultHistory?.dispose());resultHistory=null;
     clean(()=>fullPrevious?.abandon());clean(()=>palaceBoundary?.abandon());releaseChoiceBridge();
-    gpuFrame=null;invalidateResult();fadeLeft=0;lastJpSerial=-1;jpOwns=false;videoFailed=true;
+    gpuFrame=null;invalidateResult();fadeLeft=0;lastJpSerial=-1;jpOwns=false;videoFailed=true;videoRecovered=true;
     mode=null;guard=null;shotOn=false;launchPulses=[];clips.suspend();
     hold.setTransform(1,0,0,1,0,0);hold.globalAlpha=1;hold.globalCompositeOperation='source-over';hold.filter='none';
     hold.fillStyle='#052a57';hold.fillRect(0,0,W,H);

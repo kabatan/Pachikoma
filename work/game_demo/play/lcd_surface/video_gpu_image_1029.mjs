@@ -60,6 +60,7 @@ export function createVideoGpuImage({THREE:T,renderer:r,width=PW,height=PH,visib
 
  return {
   surface,
+  retryAfterFailure(){if(disposed||!failed)return false;failed=false;status=rawValid?'ready':'initial';reason=rawValid?null:'no-completed-body';outputValid=false;stats.retries=(stats.retries??0)+1;return true;},
   setEnabled(on){assertLive();enabled=!!on;if(!enabled){status='disabled';reason='explicit-gate';}else if(!failed){status=rawValid?'ready':'initial';reason=rawValid?null:'no-completed-body';}return enabled;},
   render(snapshot){assertLive();stats.renderRequests++;const requested=Array.isArray(snapshot?.layers)?snapshot.layers.filter(l=>l?.drawable!==false):null;if(requested?.every(l=>l?.video&&(typeof l.video==='object'||typeof l.video==='function')))lastRequest=stamp(snapshot,requested);if(!enabled){status='disabled';reason='explicit-gate';stats.disabledFrames++;return null;}if(failed)return null;
    if(!snapshot||!['normal','jp-plain'].includes(snapshot.owner)||!Array.isArray(snapshot.layers))return unsupported('snapshot-owner-or-layout');

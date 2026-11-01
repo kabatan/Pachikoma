@@ -179,14 +179,25 @@ export async function attachJpStart(lcd, { controller, log = () => {} } = {}) {
 
   // 揃いの映像（通常時の lamp6：6つ目の灯が点く閃き）。手元の <video> を層に使う（GPU の映像経路は変えない）
   let vid = null, vidTex = null, vidOk = false;
-  try {
-    const r = await fetch(new URL('./ryugu1028/lamp6.mp4', import.meta.url));
-    if (r.ok) {
-      vid = document.createElement('video'); vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.loop = false; vid.src = URL.createObjectURL(await r.blob());
-      await new Promise((res) => { const done = () => res(); vid.addEventListener('loadeddata', done, { once: true }); vid.addEventListener('error', done, { once: true }); setTimeout(done, 3000); vid.load(); });
-      vidOk = vid.readyState >= 2; if (vidOk) vidTex = layerTexture(THREE, vid);
-    }
-  } catch (e) { console.warn('[jpstart] lamp6', e); }
+  // 11/1 不具合修正：起動時の3秒で読めないと vidOk=false のまま以後ずっと「揃い」の映像が出なかった（遅い機種）。読めるまで間をあけて最大4回やり直す（?lampretry=0 で従来＝1回だけ）
+  const LAMP_RETRY = qs.get('lampretry') !== '0';
+  let lampBusy = false, lampTries = 0;
+  const loadLamp6 = async () => {
+    if (lampBusy || vidOk) return; lampBusy = true; lampTries++;
+    try {
+      if (!vid) {
+        const r = await fetch(new URL('./ryugu1028/lamp6.mp4', import.meta.url));
+        if (r.ok) { vid = document.createElement('video'); vid.muted = true; vid.playsInline = true; vid.preload = 'auto'; vid.loop = false; vid.src = URL.createObjectURL(await r.blob()); }
+      }
+      if (vid) {
+        if (vid.readyState < 2) await new Promise((res) => { const done = () => res(); vid.addEventListener('loadeddata', done, { once: true }); vid.addEventListener('error', done, { once: true }); setTimeout(done, 3000); vid.load(); });
+        vidOk = vid.readyState >= 2; if (vidOk && !vidTex) vidTex = layerTexture(THREE, vid);
+      }
+    } catch (e) { console.warn('[jpstart] lamp6', e); }
+    lampBusy = false;
+    if (!vidOk && LAMP_RETRY && lampTries < 4) setTimeout(loadLamp6, 4000 * lampTries);
+  };
+  await loadLamp6();
   note('lamp6video', { ok: vidOk });
   (lcd.splitWarmers ??= []).push({ name: 'jpstart', done: false, step(r) { for (const t of [...Object.values(T), vidTex].filter(Boolean)) { try { r.initTexture(t); } catch {} } return (this.done = true); } });
 
