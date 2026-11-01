@@ -254,7 +254,16 @@ export async function attachRulesH(lcd, { controller, style = 'gundam_tetsuya', 
   // ---- 映像のイベント（lcd.onEvent を包む）----
   const baseOn = lcd.onEvent.bind(lcd); baseOnRef = baseOn;
   let heldChoice = null;   // 告知中に届いた chain_choice（告知が終わって選択になるときに流す。最初の自動継続では捨てる）
+  // 11/1 不具合修正：途中の客が打ち切られた(リセット・時間切れ・映像の失敗)とき、S.plan(満タン後の jp_rush の予約)・S.roulette・S.press・保留中の告知/選択・RouletteSlideSeconds の書き換えが次の客へ残る。
+  //   残った plan は次の客の最初の JP 映像(model.active)で即 jp_rush に飛ばす(導入の飛び)、書き換えた滑り秒数は規則に残る。待機(attract)・新しい客(ticket)で空に戻す。?rhreset=0 で従来
+  const RH_RESET = new URLSearchParams(globalThis.location?.search ?? '').get('rhreset') !== '0';
+  const carryReset = () => {
+    S.plan = null; S.roulette = null; S.press = null; S.jpResume = null; S.announceOn = false; heldAnnounce = null; heldChoice = null;
+    if (S.slideBase != null && controller.game?.rules) { controller.game.rules.RouletteSlideSeconds = S.slideBase; S.slideBase = null; }
+    S.carryResets = (S.carryResets ?? 0) + 1;
+  };
   lcd.onEvent = (id, p = {}) => {
+    if (RH_RESET && (id === 'attract' || id === 'ticket')) { try { carryReset(); } catch (e) { console.warn('[rules-h] carryReset', e); } }
     if (id === 'chain_choice' && controller.game.chainAnnouncing) { heldChoice = p; return true; }
     if (id === 'start') { mash?.reset(); S.normalT = 0; S.presses = 0; }   // プレイの始まり：うぱの促しの判定を最初から
     if (id === 'lamp6') {
